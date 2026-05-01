@@ -18,6 +18,7 @@
     <RepositoryRoot>$(MSBuildThisFileDirectory)</RepositoryRoot>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <IsPackable>false</IsPackable>
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <PropertyGroup>
