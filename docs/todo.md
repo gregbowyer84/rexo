@@ -86,7 +86,7 @@ Legend:
 - [x] MinVer provider (shells out to `dotnet minver`, registered as `minver`)
 - [x] NBGV provider (shells out to `nbgv get-version -f json`, registered as `nbgv`)
 - [x] Basic git provider (`git` key — parses most recent git tag as SemVer)
-- [~] Version contract fields from scope are partially present
+- [x] Version contract fields from scope (all required fields present; optional `weightedPreReleaseNumber` computed from pre-release label)
 - [x] Full output contract fields (build metadata, branch, assembly/file/nuget/docker versions, informationalVersion, commitsSinceVersionSource)
 
 ## 8) Artifacts
