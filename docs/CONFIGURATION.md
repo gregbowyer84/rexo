@@ -282,3 +282,67 @@ Use as `uses: builtin:<name>` in a step:
 | `--quiet` / `-q` | Suppress all non-error console output |
 
 For full functional requirements see [scope.md](scope.md).
+
+---
+
+## Version Provider Output Contract
+
+Every version provider returns a `VersionResult` with the following fields:
+
+**Required fields:**
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `semver` | `string` | Full SemVer 2.0 string (e.g. `1.2.3-beta.1`) |
+| `major` | `int` | Major version number |
+| `minor` | `int` | Minor version number |
+| `patch` | `int` | Patch version number |
+| `preRelease` | `string?` | Pre-release identifier (e.g. `beta.1`) |
+| `buildMetadata` | `string?` | Build metadata (the part after `+` in SemVer 2.0) |
+| `branch` | `string?` | Repository branch at resolution time |
+| `commitSha` | `string` | Full commit SHA |
+| `shortSha` | `string` | Abbreviated commit SHA |
+| `isPreRelease` | `bool` | True if `preRelease` is non-empty |
+| `isStable` | `bool` | True if `isPreRelease` is false |
+
+**Optional / derived fields:**
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `assemblyVersion` | `string` | `Major.Minor.Patch.0` format |
+| `fileVersion` | `string` | `Major.Minor.Patch.0` format |
+| `informationalVersion` | `string` | `semver+buildMetadata` (or just `semver`) |
+| `nugetVersion` | `string?` | NuGet-compatible version (dots instead of hyphens) |
+| `dockerVersion` | `string?` | Docker tag–safe version (alphanumeric, dots, hyphens) |
+| `commitsSinceVersionSource` | `int?` | Commits since the version source tag |
+| `weightedPreReleaseNumber` | `int?` | Sort weight: alpha=1, beta=2, rc=3, preview=4, other=0 |
+
+These fields are all available in templates as `{{version.<field>}}` after `builtin:resolve-version` runs.
+
+---
+
+## Known Limitations and Unresolved Features
+
+The following features are defined in the product scope but not yet implemented:
+
+### Policy Sources
+- Only **local file** policy sources are supported (`policy.json` alongside `repo.json`, or files in `.repo/`).
+- **Remote policy sources** (HTTP, Git, NuGet package) are not yet implemented.
+- **Policy caching, version pinning, and trust models** are not yet implemented.
+
+### Parallel Step Execution
+- Basic parallel step execution works via the `parallel: true` flag on steps, with a `maxParallel` concurrency cap.
+- **Advanced fan-in and dependency declarations** between parallel groups are not yet implemented.
+
+### Run Manifest
+- The run manifest (written via `--json-file`) includes steps, version, CI context, git context, and errors.
+- **Push decisions and artifact entries** are not yet propagated from step execution into the run manifest (the artifact manifest file `artifacts/manifest.json` is still written separately by `builtin:push-artifacts`).
+
+### Config Inspection Commands
+- `rx config resolved` and `rx config sources` are registered but display basic output only.
+- `rx config materialize` writes provider config files (e.g. `GitVersion.yml`) but does not yet have a rich interactive UI.
+
+### UI and Interactive Features
+- No TUI (terminal user interface) project picker or interactive workflow is implemented yet.
+- The rich command picker (`rx` with no arguments) shows a list but does not support keyboard navigation.
+

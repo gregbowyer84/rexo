@@ -175,8 +175,8 @@ Legend:
 
 - [x] `repo.json` example exists in repository root
 - [x] Core docs exist (`ARCHITECTURE.md`, `CONFIGURATION.md`, `DEVELOPMENT.md`)
-- [~] Docs do not yet fully document implemented JSON schema/version contract details
-- [ ] Add explicit docs for unresolved features and current limitations
+- [x] Docs document implemented JSON schema validation, version contract fields, and template filters
+- [x] Add explicit docs for unresolved features and current limitations (see CONFIGURATION.md "Known Limitations" section)
 - [ ] Add docs for config inspection commands once implemented
 
 ## 18) MVP Completion Snapshot
@@ -196,7 +196,7 @@ Items expected in MVP (per scope section 56) and status:
 - [x] JSON output and `--json-file`
 - [x] Run manifest (basic)
 - [x] Local file extends/policies/merge (full merge pipeline implemented in RepoConfigurationLoader)
-- [~] Basic config validation (deserialization-only today)
+- [x] Basic config validation (full NJsonSchema validation via `ValidateSchemaAsync`)
 
 ## 19) Next High-Impact Work (Recommended Order)
 
