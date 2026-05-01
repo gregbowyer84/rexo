@@ -162,6 +162,12 @@
         },
         "continueOnError": {
           "type": "boolean"
+        },
+        "dependsOn": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "anyOf": [

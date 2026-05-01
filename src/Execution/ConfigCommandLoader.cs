@@ -485,48 +485,26 @@ public sealed class ConfigCommandLoader
 
         foreach (var group in stepGroups)
         {
-            List<StepResult> groupResults;
+            List<(RepoStepConfig Config, StepResult Result)> executed;
 
             if (group.Count == 1)
             {
                 var stepConfig = group[0];
                 var stepDef = BuildStepDefinition(stepConfig);
                 var stepResult = await stepExecutor.ExecuteAsync(stepDef, currentContext, cancellationToken);
-                groupResults = [stepResult];
+                executed = [(stepConfig, stepResult)];
             }
             else
             {
-                // Run parallel group concurrently — all steps share a snapshot of currentContext
-                // Honour maxParallel if set on the command (0 / null = no cap)
-                var snapshot = currentContext;
-                var maxParallel = commandConfig.MaxParallel;
-
-                if (maxParallel is > 0)
-                {
-                    using var semaphore = new SemaphoreSlim(maxParallel.Value, maxParallel.Value);
-                    var tasks = group.Select(async sc =>
-                    {
-                        await semaphore.WaitAsync(cancellationToken);
-                        try
-                        {
-                            return await stepExecutor.ExecuteAsync(BuildStepDefinition(sc), snapshot, cancellationToken);
-                        }
-                        finally
-                        {
-                            semaphore.Release();
-                        }
-                    });
-                    groupResults = [.. await Task.WhenAll(tasks)];
-                }
-                else
-                {
-                    var tasks = group.Select(sc =>
-                        stepExecutor.ExecuteAsync(BuildStepDefinition(sc), snapshot, cancellationToken));
-                    groupResults = [.. await Task.WhenAll(tasks)];
-                }
+                executed = await ExecuteParallelGroupAsync(
+                    group,
+                    stepExecutor,
+                    currentContext,
+                    commandConfig.MaxParallel,
+                    cancellationToken);
             }
 
-            foreach (var stepResult in groupResults)
+            foreach (var (_, stepResult) in executed)
             {
                 stepResults.Add(stepResult);
                 currentContext = currentContext.WithStep(stepResult);
@@ -551,8 +529,7 @@ public sealed class ConfigCommandLoader
             }
 
             // Fail fast if any step failed and it doesn't have continueOnError
-            var failed = groupResults
-                .Zip(group, (r, c) => (Result: r, Config: c))
+            var failed = executed
                 .FirstOrDefault(t => !t.Result.Success && t.Config.ContinueOnError != true);
 
             if (failed.Result is not null)
@@ -725,5 +702,166 @@ public sealed class ConfigCommandLoader
         }
 
         return groups;
+    }
+
+    private static async Task<List<(RepoStepConfig Config, StepResult Result)>> ExecuteParallelGroupAsync(
+        IReadOnlyList<RepoStepConfig> group,
+        StepExecutor stepExecutor,
+        ExecutionContext snapshot,
+        int? maxParallel,
+        CancellationToken cancellationToken)
+    {
+        var pending = group
+            .Select(sc => (Config: sc, Definition: BuildStepDefinition(sc)))
+            .ToList();
+
+        var results = new List<(RepoStepConfig Config, StepResult Result)>();
+        var completedInGroup = new Dictionary<string, StepResult>(StringComparer.OrdinalIgnoreCase);
+        var knownGroupStepIds = pending
+            .Select(p => p.Definition.Id)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Cast<string>()
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // Validate missing dependency references before execution starts.
+        foreach (var step in pending)
+        {
+            foreach (var dependencyId in GetDependencies(step.Config))
+            {
+                var foundInGroup = knownGroupStepIds.Contains(dependencyId);
+                var foundInCompleted = snapshot.CompletedSteps.ContainsKey(dependencyId);
+                if (foundInGroup || foundInCompleted)
+                {
+                    continue;
+                }
+
+                var stepId = step.Definition.Id ?? step.Config.Id ?? "parallel-step";
+                var failed = new StepResult(
+                    stepId,
+                    false,
+                    1,
+                    TimeSpan.Zero,
+                    new Dictionary<string, object?>
+                    {
+                        ["error"] = $"Step dependency '{dependencyId}' was not found for step '{stepId}'.",
+                    });
+
+                results.Add((step.Config, failed));
+                return results;
+            }
+        }
+
+        while (pending.Count > 0)
+        {
+            var ready = pending
+                .Where(step => DependenciesSatisfied(step.Config, snapshot.CompletedSteps, completedInGroup))
+                .ToList();
+
+            if (ready.Count == 0)
+            {
+                var unresolved = pending
+                    .Select(p => p.Definition.Id ?? p.Config.Id ?? "<unnamed>")
+                    .ToArray();
+                var first = pending[0];
+                var stepId = first.Definition.Id ?? first.Config.Id ?? "parallel-step";
+                var failed = new StepResult(
+                    stepId,
+                    false,
+                    1,
+                    TimeSpan.Zero,
+                    new Dictionary<string, object?>
+                    {
+                        ["error"] =
+                            $"Parallel dependency deadlock/cycle detected. Unresolved steps: {string.Join(", ", unresolved)}.",
+                    });
+
+                results.Add((first.Config, failed));
+                return results;
+            }
+
+            var stageContext = BuildStageContext(snapshot, completedInGroup.Values);
+
+            List<(RepoStepConfig Config, StepResult Result)> stageResults;
+            if (maxParallel is > 0)
+            {
+                using var semaphore = new SemaphoreSlim(maxParallel.Value, maxParallel.Value);
+                var tasks = ready.Select(async step =>
+                {
+                    await semaphore.WaitAsync(cancellationToken);
+                    try
+                    {
+                        var result = await stepExecutor.ExecuteAsync(step.Definition, stageContext, cancellationToken);
+                        return (step.Config, result);
+                    }
+                    finally
+                    {
+                        semaphore.Release();
+                    }
+                });
+                stageResults = [.. await Task.WhenAll(tasks)];
+            }
+            else
+            {
+                var tasks = ready.Select(async step =>
+                {
+                    var result = await stepExecutor.ExecuteAsync(step.Definition, stageContext, cancellationToken);
+                    return (step.Config, result);
+                });
+                stageResults = [.. await Task.WhenAll(tasks)];
+            }
+
+            foreach (var stageResult in stageResults)
+            {
+                results.Add(stageResult);
+                completedInGroup[stageResult.Result.StepId] = stageResult.Result;
+            }
+
+            foreach (var readyStep in ready)
+            {
+                pending.Remove(readyStep);
+            }
+        }
+
+        return results;
+    }
+
+    private static IEnumerable<string> GetDependencies(RepoStepConfig step) =>
+        step.DependsOn is not { Length: > 0 }
+            ? []
+            : step.DependsOn
+                .Where(d => !string.IsNullOrWhiteSpace(d))
+                .Select(d => d.Trim());
+
+    private static bool DependenciesSatisfied(
+        RepoStepConfig step,
+        IReadOnlyDictionary<string, StepResult> previouslyCompleted,
+        IReadOnlyDictionary<string, StepResult> completedInGroup)
+    {
+        foreach (var dependencyId in GetDependencies(step))
+        {
+            if (!previouslyCompleted.ContainsKey(dependencyId) && !completedInGroup.ContainsKey(dependencyId))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static ExecutionContext BuildStageContext(
+        ExecutionContext snapshot,
+        IEnumerable<StepResult> completedInGroup)
+    {
+        var context = snapshot;
+        foreach (var stepResult in completedInGroup)
+        {
+            context = context.WithStep(stepResult);
+            if (stepResult.Outputs.TryGetValue("__version", out var versionObj) && versionObj is VersionResult version)
+            {
+                context = context.WithVersion(version);
+            }
+        }
+
+        return context;
     }
 }

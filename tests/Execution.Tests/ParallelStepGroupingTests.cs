@@ -37,4 +37,12 @@ public sealed class ParallelStepGroupingTests
         Assert.Equal(@"(?<greeting>\w+)", step.OutputPattern);
         Assert.Equal("out.txt", step.OutputFile);
     }
+
+    [Fact]
+    public void StepConfigDependsOnCanBeSet()
+    {
+        var step = new RepoStepConfig(Run: "echo later", DependsOn: ["build", "test"]);
+        Assert.NotNull(step.DependsOn);
+        Assert.Equal(["build", "test"], step.DependsOn);
+    }
 }

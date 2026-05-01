@@ -59,6 +59,7 @@ public sealed record RepoStepConfig(
     string? Description = null,
     bool? ContinueOnError = null,
     bool? Parallel = null,
+    string[]? DependsOn = null,
     string? OutputPattern = null,
     string? OutputFile = null);
 

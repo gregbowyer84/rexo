@@ -54,7 +54,7 @@ Legend:
 - [x] `parallel` step groups (consecutive parallel steps batched via Task.WhenAll)
 - [x] Output capture via `outputPattern` (regex named groups) and `outputFile` (write stdout to file)
 - [x] Command-level parallel settings (`parallel`, `maxParallel`) — SemaphoreSlim concurrency cap
-- [ ] Advanced dependency and fan-in behavior for parallel groups
+- [x] Advanced dependency and fan-in behavior for parallel groups
 
 ## 5) Templating
 
@@ -178,7 +178,7 @@ Legend:
 - [x] Core docs exist (`ARCHITECTURE.md`, `CONFIGURATION.md`, `DEVELOPMENT.md`)
 - [x] Docs document implemented JSON schema validation, version contract fields, and template filters
 - [x] Add explicit docs for unresolved features and current limitations (see CONFIGURATION.md "Known Limitations" section)
-- [ ] Add docs for config inspection commands once implemented
+- [x] Add docs for config inspection commands once implemented
 
 ## 18) MVP Completion Snapshot
 
