@@ -17,11 +17,6 @@ using Rexo.Versioning;
 public static class Program
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
-    private static readonly JsonSerializerOptions LenientJsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        ReadCommentHandling = JsonCommentHandling.Skip,
-    };
 
     public static Task<int> Main(string[] args) => ExecuteAsync(args, CancellationToken.None);
 
@@ -70,16 +65,8 @@ public static class Program
         if (debug) Console.WriteLine($"[debug] Loading configuration from {workingDir}");
         // Try load config — check multiple candidate locations in priority order
         RepoConfig? config = null;
-        var configCandidates = new[]
-        {
-            Path.Combine(workingDir, "repo.json"),
-            Path.Combine(workingDir, "repo.yaml"),
-            Path.Combine(workingDir, "repo.yml"),
-            Path.Combine(workingDir, ".repo", "repo.json"),
-            Path.Combine(workingDir, ".repo", "repo.yaml"),
-            Path.Combine(workingDir, ".repo", "repo.yml"),
-        };
-        var configPath = configCandidates.FirstOrDefault(File.Exists) ?? Path.Combine(workingDir, "repo.json");
+        var configPath = ConfigFileLocator.FindConfigPath(workingDir)
+            ?? ConfigFileLocator.GetDefaultConfigPath(workingDir);
         if (File.Exists(configPath))
         {
             try
@@ -117,21 +104,12 @@ public static class Program
 
             // Load policy from workingDir if present — check policy.json and policy.yaml
             // Policy commands have lower priority than repo.json commands.
-            var policyCandidates = new[]
-            {
-                Path.Combine(workingDir, "policy.json"),
-                Path.Combine(workingDir, "policy.yaml"),
-                Path.Combine(workingDir, "policy.yml"),
-                Path.Combine(workingDir, ".repo", "policy.json"),
-                Path.Combine(workingDir, ".repo", "policy.yaml"),
-            };
-            var policyPath = policyCandidates.FirstOrDefault(File.Exists);
+            var policyPath = ConfigFileLocator.FindPolicyPath(workingDir);
             if (policyPath is not null)
             {
                 try
                 {
-                    var policyJson = await File.ReadAllTextAsync(policyPath, cancellationToken);
-                    var policyConfig = JsonSerializer.Deserialize<PolicyConfig>(policyJson, LenientJsonOptions);
+                    var policyConfig = await RepoConfigurationLoader.LoadPolicyAsync(policyPath, cancellationToken);
                     if (policyConfig is not null)
                     {
                         configLoader.LoadPolicyCommandsInto(registry, policyConfig, config, workingDir, executor);

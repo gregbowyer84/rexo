@@ -1,8 +1,10 @@
 namespace Rexo.Configuration;
 
+using System.Collections;
 using System.Text.Json;
 using NJsonSchema;
 using Rexo.Configuration.Models;
+using YamlDotNet.Serialization;
 
 public sealed class RepoConfigurationLoader
 {
@@ -17,6 +19,9 @@ public sealed class RepoConfigurationLoader
         ReadCommentHandling = JsonCommentHandling.Skip,
     };
 
+    private static readonly IDeserializer YamlDeserializer =
+        new DeserializerBuilder().Build();
+
     public static async Task<RepoConfig> LoadAsync(string configPath, CancellationToken cancellationToken)
     {
         if (!File.Exists(configPath))
@@ -24,7 +29,7 @@ public sealed class RepoConfigurationLoader
             throw new FileNotFoundException("Configuration file was not found.", configPath);
         }
 
-        var jsonText = await File.ReadAllTextAsync(configPath, cancellationToken);
+        var jsonText = await ReadAsJsonAsync(configPath, cancellationToken);
         ValidateMetadata(configPath, jsonText);
         await ValidateSchemaAsync(configPath, jsonText, cancellationToken);
 
@@ -52,7 +57,7 @@ public sealed class RepoConfigurationLoader
 
             if (File.Exists(overlayPath))
             {
-                var overlayJson = await File.ReadAllTextAsync(overlayPath, cancellationToken);
+                var overlayJson = await ReadAsJsonAsync(overlayPath, cancellationToken);
                 var overlayConfig = JsonSerializer.Deserialize<RepoConfig>(overlayJson, JsonOptions);
                 if (overlayConfig is not null)
                 {
@@ -93,7 +98,7 @@ public sealed class RepoConfigurationLoader
                     $"Extended config file not found: '{basePath}'.", basePath);
             }
 
-            var baseJsonText = await File.ReadAllTextAsync(basePath, cancellationToken);
+            var baseJsonText = await ReadAsJsonAsync(basePath, cancellationToken);
             ValidateMetadata(basePath, baseJsonText);
             var baseConfig = JsonSerializer.Deserialize<RepoConfig>(baseJsonText, JsonOptions)
                 ?? throw new InvalidOperationException($"Extended config '{basePath}' is empty or invalid.");
@@ -108,6 +113,17 @@ public sealed class RepoConfigurationLoader
 
         // Child config takes priority over merged base
         return merged is null ? config : MergeConfigs(merged, config);
+    }
+
+    public static async Task<PolicyConfig?> LoadPolicyAsync(string policyPath, CancellationToken cancellationToken)
+    {
+        if (!File.Exists(policyPath))
+        {
+            throw new FileNotFoundException("Policy file was not found.", policyPath);
+        }
+
+        var policyJson = await ReadAsJsonAsync(policyPath, cancellationToken);
+        return JsonSerializer.Deserialize<PolicyConfig>(policyJson, JsonOptions);
     }
 
     /// <summary>
@@ -245,6 +261,59 @@ public sealed class RepoConfigurationLoader
                 "Configuration does not match the declared schema. Validation errors:" +
                 Environment.NewLine +
                 details);
+        }
+    }
+
+    private static async Task<string> ReadAsJsonAsync(string path, CancellationToken cancellationToken)
+    {
+        var text = await File.ReadAllTextAsync(path, cancellationToken);
+        if (!IsYamlPath(path))
+        {
+            return text;
+        }
+
+        using var reader = new StringReader(text);
+        var yamlObject = YamlDeserializer.Deserialize(reader);
+        var normalized = NormalizeYamlObject(yamlObject);
+        return JsonSerializer.Serialize(normalized, JsonOptions);
+    }
+
+    private static bool IsYamlPath(string path) =>
+        path.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase) ||
+        path.EndsWith(".yml", StringComparison.OrdinalIgnoreCase);
+
+    private static object? NormalizeYamlObject(object? value)
+    {
+        switch (value)
+        {
+            case null:
+                return null;
+            case string or bool or byte or sbyte or short or ushort or int or uint or long or ulong or
+                float or double or decimal:
+                return value;
+            case IDictionary dictionary:
+            {
+                var result = new Dictionary<string, object?>(StringComparer.Ordinal);
+                foreach (DictionaryEntry entry in dictionary)
+                {
+                    var key = entry.Key?.ToString() ?? string.Empty;
+                    result[key] = NormalizeYamlObject(entry.Value);
+                }
+
+                return result;
+            }
+            case IEnumerable enumerable when value is not string:
+            {
+                var list = new List<object?>();
+                foreach (var item in enumerable)
+                {
+                    list.Add(NormalizeYamlObject(item));
+                }
+
+                return list;
+            }
+            default:
+                return value.ToString();
         }
     }
 }

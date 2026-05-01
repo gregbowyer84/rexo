@@ -2,6 +2,7 @@ namespace Rexo.Configuration.Tests;
 
 using Rexo.Configuration;
 
+[Collection("EnvironmentVariableSensitive")]
 public sealed class RepoConfigurationLoaderTests
 {
     [Fact]

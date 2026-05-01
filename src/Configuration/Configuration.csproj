@@ -6,5 +6,6 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="NJsonSchema" />
+    <PackageReference Include="YamlDotNet" />
   </ItemGroup>
 </Project>

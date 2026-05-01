@@ -1,0 +1,74 @@
+namespace Rexo.Configuration.Tests;
+
+using Rexo.Configuration;
+
+public sealed class ConfigFileLocatorTests
+{
+    [Fact]
+    public void FindConfigPathPrefersRexoOverRepo()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"rexo-locator-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var repoPath = Path.Combine(dir, "repo.json");
+            var rexoPath = Path.Combine(dir, "rexo.json");
+            File.WriteAllText(repoPath, "{}");
+            File.WriteAllText(rexoPath, "{}");
+
+            var found = ConfigFileLocator.FindConfigPath(dir);
+
+            Assert.Equal(rexoPath, found);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public void FindConfigPathFindsDotRexoLocation()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"rexo-locator-{Guid.NewGuid():N}");
+        var hiddenDir = Path.Combine(dir, ".rexo");
+        Directory.CreateDirectory(hiddenDir);
+        try
+        {
+            var rexoPath = Path.Combine(hiddenDir, "rexo.json");
+            File.WriteAllText(rexoPath, "{}");
+
+            var found = ConfigFileLocator.FindConfigPath(dir);
+
+            Assert.Equal(rexoPath, found);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public void FindPolicyPathPrefersDotRexoThenDotRepoFallback()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"rexo-policy-locator-{Guid.NewGuid():N}");
+        var dotRexo = Path.Combine(dir, ".rexo");
+        var dotRepo = Path.Combine(dir, ".repo");
+        Directory.CreateDirectory(dotRexo);
+        Directory.CreateDirectory(dotRepo);
+        try
+        {
+            var dotRepoPolicy = Path.Combine(dotRepo, "policy.json");
+            var dotRexoPolicy = Path.Combine(dotRexo, "policy.json");
+            File.WriteAllText(dotRepoPolicy, "{}");
+            File.WriteAllText(dotRexoPolicy, "{}");
+
+            var found = ConfigFileLocator.FindPolicyPath(dir);
+
+            Assert.Equal(dotRexoPolicy, found);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+}

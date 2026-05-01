@@ -1,6 +1,7 @@
 namespace Rexo.Execution;
 
 using System.Text.Json;
+using Rexo.Configuration;
 using Rexo.Ci;
 using Rexo.Configuration.Models;
 using Rexo.Core.Models;
@@ -74,9 +75,12 @@ public static class BuiltinCommandRegistration
             checks.Add(("docker", dockerOk.ok, dockerOk.version));
         }
 
-        // repo.json
-        var configPath = Path.Combine(invocation.WorkingDirectory, "repo.json");
-        checks.Add(("repo.json", File.Exists(configPath), File.Exists(configPath) ? "found" : "not found"));
+        // config file
+        var configPath = ConfigFileLocator.FindConfigPath(invocation.WorkingDirectory);
+        checks.Add((
+            "config",
+            configPath is not null,
+            configPath is not null ? $"found ({Path.GetFileName(configPath)})" : "not found (expected rexo.json/rexo.yml in root or .rexo/)"));
 
         // CI context
         var ciInfo = CiDetector.Detect();
@@ -257,7 +261,7 @@ public static class BuiltinCommandRegistration
     {
         if (config is null)
         {
-            return CommandResult.Fail("config resolved", 1, "No repo.json configuration loaded.");
+            return CommandResult.Fail("config resolved", 1, "No rexo configuration loaded.");
         }
 
         var options = IndentedJsonOptions;
@@ -269,12 +273,12 @@ public static class BuiltinCommandRegistration
     {
         var lines = new List<string> { "Configuration sources (in merge order):" };
 
-        var resolvedPath = configPath ?? Path.Combine(invocation.WorkingDirectory, "repo.json");
+        var resolvedPath = configPath ?? ConfigFileLocator.GetDefaultConfigPath(invocation.WorkingDirectory);
         var exists = File.Exists(resolvedPath);
         lines.Add($"  [{(exists ? "loaded" : "not found")}] {resolvedPath}");
 
-        var policyPath = Path.Combine(invocation.WorkingDirectory, "policy.json");
-        if (File.Exists(policyPath))
+        var policyPath = ConfigFileLocator.FindPolicyPath(invocation.WorkingDirectory);
+        if (policyPath is not null)
         {
             lines.Add($"  [policy] {policyPath}");
         }
@@ -295,7 +299,7 @@ public static class BuiltinCommandRegistration
     {
         if (config is null)
         {
-            return CommandResult.Fail("config materialize", 1, "No repo.json configuration loaded.");
+            return CommandResult.Fail("config materialize", 1, "No rexo configuration loaded.");
         }
 
         var materialized = new List<string>();
@@ -331,7 +335,7 @@ public static class BuiltinCommandRegistration
         if (config?.Versioning is null)
         {
             return CommandResult.Ok("explain version",
-                "No versioning configuration found in repo.json.\n" +
+                "No versioning configuration found in rexo configuration.\n" +
                 "Available providers: fixed, env, git, gitversion, minver, nbgv");
         }
 

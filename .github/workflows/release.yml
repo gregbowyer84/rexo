@@ -117,9 +117,11 @@ jobs:
 
       - name: NuGet login (OIDC -> temporary API key)
         id: nuget-login
+        if: ${{ secrets.NUGET_ORG_USER != '' }}
         uses: NuGet/login@v1
         with:
-          user: nrth
+          user: ${{ secrets.NUGET_ORG_USER }}
 
       - name: Push to NuGet.org (trusted publishing)
+        if: ${{ steps.nuget-login.outputs.nuget-api-key != '' }}
         run: dotnet nuget push "artifacts/packages/*.nupkg" --source "https://api.nuget.org/v3/index.json" --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}" --skip-duplicate

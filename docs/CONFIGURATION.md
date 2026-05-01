@@ -1,12 +1,18 @@
 # Configuration Reference
 
-Default repository configuration file: **`repo.json`**
+Default repository configuration file: **`rexo.json`**
+
+Supported config locations (first match wins):
+
+- `rexo.json`, `rexo.yaml`, `rexo.yml` (repo root)
+- `.rexo/rexo.json`, `.rexo/rexo.yaml`, `.rexo/rexo.yml`
+- Backward-compatible fallback: `repo.json|yaml|yml` in root or `.repo/`
 
 ---
 
 ## Schema Contract (required)
 
-Every `repo.json` must begin with:
+Every config file (`rexo.json`/`rexo.yml`) must begin with:
 
 ```json
 {
@@ -34,7 +40,7 @@ deserializing. Missing/unsupported metadata or schema violations cause a hard fa
   "description": "Optional description",
 
   // Inherit from one or more base configs (local paths, resolved relative to this file)
-  "extends": ["./base/repo.json"],
+  "extends": ["./base/rexo.json"],
 
   "commands": { ... },
   "aliases": { ... },
@@ -55,7 +61,7 @@ child properties win over base properties. Commands and aliases are merged (chil
 additions take priority). Circular references are detected and rejected.
 
 ```json
-{ "extends": ["../../shared/repo.json"] }
+{ "extends": ["../../shared/rexo.json"] }
 ```
 
 ---
@@ -268,7 +274,7 @@ Use as `uses: builtin:<name>` in a step:
 | `rx list` | List all available commands |
 | `rx explain <cmd>` | Show command description, args, options, steps |
 | `rx doctor` | Check tool and provider availability |
-| `rx config resolved` | Print the effective merged `repo.json` as JSON |
+| `rx config resolved` | Print the effective merged config (`rexo.json`) as JSON |
 | `rx config sources` | Show config file path and load status |
 
 ### Config Inspection Reference
@@ -350,7 +356,7 @@ The following features are defined in the product scope but not yet implemented:
 
 ### Policy Sources
 
-- Only **local file** policy sources are supported (`policy.json` alongside `repo.json`, or files in `.repo/`).
+- Only **local file** policy sources are supported (`policy.json` alongside `rexo.json`, or files in `.rexo/`; `.repo/` is still accepted for backward compatibility).
 - **Remote policy sources** (HTTP, Git, NuGet package) are not yet implemented.
 - **Policy caching, version pinning, and trust models** are not yet implemented.
 

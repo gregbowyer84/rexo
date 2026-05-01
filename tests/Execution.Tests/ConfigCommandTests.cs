@@ -52,7 +52,7 @@ public sealed class ConfigCommandTests
     [Fact]
     public async Task ConfigSourcesReturnsSuccessWithConfigPath()
     {
-        var configPath = Path.Combine(Path.GetTempPath(), "repo.json");
+        var configPath = Path.Combine(Path.GetTempPath(), "rexo.json");
 
         var registry = BuiltinCommandRegistration.CreateDefault(configPath: configPath);
         var executor = new DefaultCommandExecutor(registry);
@@ -60,7 +60,7 @@ public sealed class ConfigCommandTests
         var result = await executor.ExecuteAsync("config sources", EmptyInvocation(), CancellationToken.None);
 
         Assert.True(result.Success);
-        Assert.Contains("repo.json", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("rexo.json", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
