@@ -139,7 +139,7 @@ the group (they cannot see each other's outputs within the same group).
 ```
 
 | Provider | Tool | Notes |
-|----------|------|-------|
+| --- | --- | --- |
 | `fixed` | — | Returns `settings.version` |
 | `env` | — | Reads `settings.variable` env var; falls back to `settings.fallback` |
 | `gitversion` | `gitversion /output json` | Parses SemVer2 fields from JSON output |
@@ -217,7 +217,7 @@ A JSON string encoding push policy rules enforced by `builtin:push-artifacts`:
 ```
 
 | Rule | Effect |
-|------|--------|
+| --- | --- |
 | `noPushInPullRequest` | Rejects push when the CI environment reports a PR build |
 | `requireCleanWorkingTree` | Rejects push when the git working tree has uncommitted changes |
 
@@ -228,7 +228,7 @@ A JSON string encoding push policy rules enforced by `builtin:push-artifacts`:
 Available in any `run` step string:
 
 | Path | Source |
-|------|--------|
+| --- | --- |
 | `{{args.<name>}}` | Positional/named args from CLI |
 | `{{options.<name>}}` | Option flags from CLI |
 | `{{env.<VAR>}}` | Environment variables |
@@ -246,7 +246,7 @@ Available in any `run` step string:
 Use as `uses: builtin:<name>` in a step:
 
 | Primitive | Purpose |
-|-----------|---------|
+| --- | --- |
 | `builtin:validate` | Validate the loaded config |
 | `builtin:resolve-version` | Run the version provider; populate `context.Version` |
 | `builtin:test` | Run `dotnet test`; enforce coverage threshold if configured |
@@ -263,7 +263,7 @@ Use as `uses: builtin:<name>` in a step:
 ## Built-in CLI Commands
 
 | Command | Purpose |
-|---------|---------|
+| --- | --- |
 | `rx version` | Print tool version |
 | `rx list` | List all available commands |
 | `rx explain <cmd>` | Show command description, args, options, steps |
@@ -274,7 +274,7 @@ Use as `uses: builtin:<name>` in a step:
 ## Global Flags
 
 | Flag | Effect |
-|------|--------|
+| --- | --- |
 | `--json` | Output result as JSON to stdout |
 | `--json-file <path>` | Write JSON result to file |
 | `--verbose` | Print step output and extra detail |

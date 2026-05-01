@@ -8,7 +8,7 @@ execution engine. See [scope.md](scope.md) for the full product specification an
 
 ## Layer Map
 
-```
+```text
 ┌─────────────────────────────────────────────────────┐
 │  CLI  (src/Cli)                                     │
 │  Program.cs — arg parse, multi-word resolve, output │
@@ -60,7 +60,7 @@ Support services consulted at startup:
 
 ## Request Lifecycle
 
-```
+```text
 rx branch feature my-change
         │
         ▼
@@ -131,7 +131,7 @@ invocations: `rx branch feature my-ticket`.
 
 ## Project Dependency Graph
 
-```
+```text
 Cli ──────────────────────────────────────────────────┐
   └→ Configuration, Execution, Artifacts.Docker,       │
      Artifacts.NuGet, Versioning, Ui                   │
@@ -155,7 +155,7 @@ Core ─────────────────────────
 ## Extension Points
 
 | To add… | Implement… | Register in… |
-|---|---|---|
+| --- | --- | --- |
 | A new version provider | `IVersionProvider` | `VersionProviderRegistry.CreateDefault()` |
 | A new artifact type | `IArtifactProvider` | `Program.BuildServicesAsync` |
 | A new built-in primitive | lambda in `ConfigCommandLoader.RegisterBuiltins` | `_builtinRegistry.Register("builtin:name", ...)` |

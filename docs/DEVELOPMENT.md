@@ -34,7 +34,7 @@ dotnet build solution.slnx -c Release && dotnet test solution.slnx -c Release --
 ## Coding Conventions
 
 | Rule | Detail |
-|------|--------|
+| --- | --- |
 | Namespaces | Source files use `Rexo.*` prefix (e.g. `namespace Rexo.Cli;`). Match the namespace already used in the file. |
 | CancellationToken | Thread through every async method — never pass `CancellationToken.None` except at the outermost call site |
 | `int.ToString()` | Always pass `CultureInfo.InvariantCulture` |
@@ -59,6 +59,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full layer diagram and dependency
 ## Adding a New Version Provider
 
 1. Create a class in `src/Versioning/` implementing `IVersionProvider` (from `Core`):
+
    ```csharp
    namespace Rexo.Versioning;
    using Rexo.Core.Abstractions;
@@ -73,10 +74,13 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full layer diagram and dependency
        }
    }
    ```
+
 2. Register it in `VersionProviderRegistry.CreateDefault()`:
+
    ```csharp
    registry.Register("mykey", new MyVersionProvider());
    ```
+
 3. Users set `"provider": "mykey"` in their `repo.json` `versioning` section.
 
 ---
@@ -86,6 +90,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full layer diagram and dependency
 1. Create a class in a new `src/Artifacts.MyType/` project implementing `IArtifactProvider`.
 2. Add a project reference to `src/Cli/Cli.csproj`.
 3. Register in `Program.BuildServicesAsync`:
+
    ```csharp
    artifactProviders.Register("mytype", new MyTypeArtifactProvider());
    ```
@@ -97,6 +102,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full layer diagram and dependency
 Built-in primitives are step types used as `uses: builtin:my-primitive`.
 
 1. In `ConfigCommandLoader.RegisterBuiltins` (or the `LoadInto` method body), call:
+
    ```csharp
    _builtinRegistry.Register("builtin:my-primitive", async (step, ctx, ct) =>
    {
@@ -105,6 +111,7 @@ Built-in primitives are step types used as `uses: builtin:my-primitive`.
            new Dictionary<string, object?> { ["message"] = "Done." });
    });
    ```
+
 2. Document the new primitive in `docs/CONFIGURATION.md`.
 
 ---
@@ -135,7 +142,7 @@ Current version: **1.0** — schema at `schemas/1.0/schema.json`.
 Test projects live in `tests/`:
 
 | Project | What it covers |
-|---------|---------------|
+| --- | --- |
 | `Core.Tests` | Domain model unit tests |
 | `Configuration.Tests` | `RepoConfigurationLoader` — happy path, missing schema, bad version, NJsonSchema failures, `extends` merge, circular detection |
 | `Execution.Tests` | `DefaultCommandExecutor`, `TemplateRenderer` (10 cases), `BuiltinCommandRegistration` (5 cases), config commands, step model |
@@ -162,7 +169,7 @@ The version flows through CI via the `GITVERSION_*` environment variables and
 Workflows in `.github/workflows/`:
 
 | File | Triggers |
-|------|---------|
+| --- | --- |
 | `build.yml` | All pushes and PRs — build + test |
 | `release.yml` | Tags — publish dotnet tool to NuGet |
 | `codeql.yml` | Scheduled — security scanning |
@@ -172,7 +179,7 @@ Workflows in `.github/workflows/`:
 ## Where to look
 
 | Question | File |
-|---|---|
+| --- | --- |
 | Full product design | `docs/scope.md` |
 | What's done vs pending | `docs/todo.md` |
 | Architecture diagram | `docs/ARCHITECTURE.md` |
