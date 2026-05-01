@@ -537,6 +537,11 @@ public static class BuiltinCommandRegistration
                 ? DefaultInstructionsPath
                 : instructionsPathOption;
 
+            // Normalize separators so traversal checks behave consistently on all OSes.
+            relativeInstructionsPath = relativeInstructionsPath
+                .Replace('\\', Path.DirectorySeparatorChar)
+                .Replace('/', Path.DirectorySeparatorChar);
+
             if (Path.IsPathRooted(relativeInstructionsPath))
             {
                 return CommandResult.Fail("init", 1, "Invalid --instructions-path value. Use a repository-relative path.");
