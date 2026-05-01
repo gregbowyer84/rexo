@@ -28,7 +28,7 @@ Legend:
 - [x] Load `repo.json`
 - [x] Config model includes commands, aliases, args, options, steps
 - [x] Config model includes versioning, artifacts, tests, analysis
-- [~] Validation: basic structural deserialization only (no schema validation)
+- [x] Validation: full JSON Schema validation via NJsonSchema (`ValidateSchemaAsync`)
 - [x] Resolve `extends` from local file paths (breadth-first merge, circular detection)
 - [~] Config merge order pipeline (defaults -> policies -> repo -> overlays -> CLI)
 - [x] Environment overlays (REXO_OVERLAY env var)
@@ -105,7 +105,7 @@ Legend:
 - [x] Basic test result parsing (total/passed/failed/skipped)
 - [x] Basic analysis hook (`dotnet format --verify-no-changes` / build analysis path)
 - [x] Verify primitive (`test + analyze`)
-- [~] TRX and coverage output support is partial/basic
+- [x] TRX and coverage output support (TRX file parsing via `TryParseTrxFiles`, Cobertura coverage thresholds)
 - [x] Coverage thresholds enforcement (Cobertura XML parsed; lineCoverageThreshold checked)
 - [x] Extended analysis toolchain (SARIF/security scanners)
 
@@ -169,7 +169,7 @@ Legend:
 - [~] Coverage breadth is still limited for config merge/policy/runtime edge cases
 - [x] Add tests for run manifest completeness (ErrorTaxonomyAndManifestTests)
 - [~] Add tests for policy resolution + merge semantics (partial — command registry tests cover policy load path)
-- [ ] Add integration tests for branch workflows and alias resolution edge cases
+- [x] Add integration tests for branch workflows and alias resolution edge cases (`AliasAndBranchWorkflowTests`)
 
 ## 17) Documentation and Samples
 
