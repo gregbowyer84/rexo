@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <EmbeddedResource Include="..\\..\\schema.json"
+      LogicalName="Rexo.Configuration.schema.1.0.json" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\\Core\\Core.csproj" />
     <ProjectReference Include="..\\Policies\\Policies.csproj" />
     <ProjectReference Include="..\\Templating\\Templating.csproj" />

@@ -30,7 +30,7 @@ public sealed class RepoConfigurationLoaderTests
 
         await File.WriteAllTextAsync(path, """
         {
-          "$schema": "schemas/1.0/schema.json",
+          "$schema": "schema.json",
           "schemaVersion": "1.0",
           "name": "sample",
           "commands": {
@@ -67,7 +67,7 @@ public sealed class RepoConfigurationLoaderTests
         var path = Path.Combine(Path.GetTempPath(), $"repo-{Guid.NewGuid():N}.json");
         await File.WriteAllTextAsync(path, """
         {
-          "$schema": "schemas/1.0/schema.json",
+          "$schema": "schema.json",
           "name": "sample",
           "commands": {
             "release": {
@@ -100,7 +100,7 @@ public sealed class RepoConfigurationLoaderTests
         var path = Path.Combine(Path.GetTempPath(), $"repo-{Guid.NewGuid():N}.json");
         await File.WriteAllTextAsync(path, """
         {
-          "$schema": "schemas/1.0/schema.json",
+          "$schema": "schema.json",
           "schemaVersion": "2.0",
           "name": "sample",
           "commands": {
@@ -167,8 +167,7 @@ public sealed class RepoConfigurationLoaderTests
   {
     var dir = Path.Combine(Path.GetTempPath(), $"rexo-extends-{Guid.NewGuid():N}");
     Directory.CreateDirectory(dir);
-    Directory.CreateDirectory(Path.Combine(dir, "schemas", "1.0"));
-
+    
     var minimalSchema = """
             {
               "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -185,12 +184,12 @@ public sealed class RepoConfigurationLoaderTests
             }
             """;
 
-    await File.WriteAllTextAsync(Path.Combine(dir, "schemas", "1.0", "schema.json"), minimalSchema);
+    await File.WriteAllTextAsync(Path.Combine(dir, "schema.json"), minimalSchema);
 
     var basePath = Path.Combine(dir, "base.json");
     await File.WriteAllTextAsync(basePath, """
             {
-              "$schema": "schemas/1.0/schema.json",
+              "$schema": "schema.json",
               "schemaVersion": "1.0",
               "name": "base",
               "commands": {
@@ -203,7 +202,7 @@ public sealed class RepoConfigurationLoaderTests
     var childPath = Path.Combine(dir, "child.json");
     await File.WriteAllTextAsync(childPath, $$"""
             {
-              "$schema": "schemas/1.0/schema.json",
+              "$schema": "schema.json",
               "schemaVersion": "1.0",
               "name": "child",
               "extends": ["./base.json"],
@@ -233,8 +232,7 @@ public sealed class RepoConfigurationLoaderTests
   {
     var dir = Path.Combine(Path.GetTempPath(), $"rexo-circular-{Guid.NewGuid():N}");
     Directory.CreateDirectory(dir);
-    Directory.CreateDirectory(Path.Combine(dir, "schemas", "1.0"));
-
+    
     var minimalSchema = """
             {
               "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -251,14 +249,14 @@ public sealed class RepoConfigurationLoaderTests
             }
             """;
 
-    await File.WriteAllTextAsync(Path.Combine(dir, "schemas", "1.0", "schema.json"), minimalSchema);
+    await File.WriteAllTextAsync(Path.Combine(dir, "schema.json"), minimalSchema);
 
     var aPath = Path.Combine(dir, "a.json");
     var bPath = Path.Combine(dir, "b.json");
 
     await File.WriteAllTextAsync(aPath, $$"""
             {
-              "$schema": "schemas/1.0/schema.json",
+              "$schema": "schema.json",
               "schemaVersion": "1.0",
               "name": "a",
               "extends": ["./b.json"],
@@ -269,7 +267,7 @@ public sealed class RepoConfigurationLoaderTests
 
     await File.WriteAllTextAsync(bPath, $$"""
             {
-              "$schema": "schemas/1.0/schema.json",
+              "$schema": "schema.json",
               "schemaVersion": "1.0",
               "name": "b",
               "extends": ["./a.json"],
@@ -300,8 +298,7 @@ public sealed class RepoConfigurationLoaderTests
   {
     var dir = Path.Combine(Path.GetTempPath(), $"rexo-overlay-{Guid.NewGuid():N}");
     Directory.CreateDirectory(dir);
-    Directory.CreateDirectory(Path.Combine(dir, "schemas", "1.0"));
-
+    
     var minimalSchema = """
             {
               "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -317,12 +314,12 @@ public sealed class RepoConfigurationLoaderTests
               }
             }
             """;
-    await File.WriteAllTextAsync(Path.Combine(dir, "schemas", "1.0", "schema.json"), minimalSchema);
+    await File.WriteAllTextAsync(Path.Combine(dir, "schema.json"), minimalSchema);
 
     var repoPath = Path.Combine(dir, "repo.json");
     await File.WriteAllTextAsync(repoPath, """
             {
-              "$schema": "schemas/1.0/schema.json",
+              "$schema": "schema.json",
               "schemaVersion": "1.0",
               "name": "base-name",
               "description": "base description",
@@ -334,7 +331,7 @@ public sealed class RepoConfigurationLoaderTests
     var overlayPath = Path.Combine(dir, "overlay.json");
     await File.WriteAllTextAsync(overlayPath, """
             {
-              "$schema": "schemas/1.0/schema.json",
+              "$schema": "schema.json",
               "schemaVersion": "1.0",
               "name": "base-name",
               "description": "overlay description",
@@ -363,8 +360,7 @@ public sealed class RepoConfigurationLoaderTests
   {
     var dir = Path.Combine(Path.GetTempPath(), $"rexo-overlay-missing-{Guid.NewGuid():N}");
     Directory.CreateDirectory(dir);
-    Directory.CreateDirectory(Path.Combine(dir, "schemas", "1.0"));
-
+    
     var minimalSchema = """
             {
               "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -379,12 +375,12 @@ public sealed class RepoConfigurationLoaderTests
               }
             }
             """;
-    await File.WriteAllTextAsync(Path.Combine(dir, "schemas", "1.0", "schema.json"), minimalSchema);
+    await File.WriteAllTextAsync(Path.Combine(dir, "schema.json"), minimalSchema);
 
     var repoPath = Path.Combine(dir, "repo.json");
     await File.WriteAllTextAsync(repoPath, """
             {
-              "$schema": "schemas/1.0/schema.json",
+              "$schema": "schema.json",
               "schemaVersion": "1.0",
               "name": "base-repo",
               "commands": {},
@@ -412,8 +408,7 @@ public sealed class RepoConfigurationLoaderTests
   {
     var dir = Path.Combine(Path.GetTempPath(), $"rexo-cmdmerge-{Guid.NewGuid():N}");
     Directory.CreateDirectory(dir);
-    Directory.CreateDirectory(Path.Combine(dir, "schemas", "1.0"));
-
+    
     var minimalSchema = """
             {
               "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -429,12 +424,12 @@ public sealed class RepoConfigurationLoaderTests
               }
             }
             """;
-    await File.WriteAllTextAsync(Path.Combine(dir, "schemas", "1.0", "schema.json"), minimalSchema);
+    await File.WriteAllTextAsync(Path.Combine(dir, "schema.json"), minimalSchema);
 
     var basePath = Path.Combine(dir, "base.json");
     await File.WriteAllTextAsync(basePath, """
             {
-              "$schema": "schemas/1.0/schema.json",
+              "$schema": "schema.json",
               "schemaVersion": "1.0",
               "name": "base",
               "commands": {
@@ -448,7 +443,7 @@ public sealed class RepoConfigurationLoaderTests
     var childPath = Path.Combine(dir, "child.json");
     await File.WriteAllTextAsync(childPath, $$"""
             {
-              "$schema": "schemas/1.0/schema.json",
+              "$schema": "schema.json",
               "schemaVersion": "1.0",
               "name": "child",
               "extends": ["./base.json"],

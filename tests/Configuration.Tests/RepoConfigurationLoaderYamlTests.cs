@@ -37,7 +37,7 @@ public sealed class RepoConfigurationLoaderYamlTests
         await File.WriteAllTextAsync(
             configPath,
             """
-            $schema: schemas/1.0/schema.json
+            $schema: schema.json
             schemaVersion: "1.0"
             name: yaml-sample
             commands:

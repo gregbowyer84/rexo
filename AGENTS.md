@@ -123,7 +123,7 @@ Every `repo.json` must start with:
 
 ```json
 {
-  "$schema": "schemas/1.0/schema.json",
+  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/schema.json",
   "schemaVersion": "1.0",
   ...
 }
@@ -132,18 +132,19 @@ Every `repo.json` must start with:
 Alternative `$schema` values accepted:
 
 - Remote canonical URL (once the repository is published)
-- `schemas/1.0/schema.json`
-- `./schemas/1.0/schema.json`
+- `https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/schema.json`
+- `schema.json`
+- `./schema.json`
 
 ### Validation flow (`RepoConfigurationLoader`)
 
 1. Check `$schema` is present and matches an allowed URI
 2. Check `schemaVersion` is present and equals `"1.0"`
-3. Validate full JSON against `schemas/1.0/schema.json` via NJsonSchema
+3. Validate full JSON against `schema.json` (embedded in assembly) via NJsonSchema
 4. Deserialize to `RepoConfig`
 
-The schema file is loaded from `<configDirectory>/schemas/1.0/schema.json` at
-validation time, so the schema must be distributed alongside `repo.json`.
+The schema file is embedded in `Rexo.Configuration.dll`; a local `schema.json` at the repo root
+can override it for development.
 
 ---
 

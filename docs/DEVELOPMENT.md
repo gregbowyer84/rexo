@@ -133,7 +133,7 @@ When breaking changes to `repo.json` are needed:
 3. Update `SupportedSchemaUri` / `SupportedSchemaPath` constants or add overloads.
 4. Bump the `$schema` URL in documentation and examples.
 
-Current version: **1.0** — schema at `schemas/1.0/schema.json`.
+Current version: **1.0** — schema at `schema.json` (repo root).
 
 ---
 

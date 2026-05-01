@@ -35,5 +35,15 @@
     <IsPackable>true</IsPackable>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>$(CliToolCommandName)</ToolCommandName>
+    <PackageId>Rexo.Cli</PackageId>
+    <Authors>agile-north</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/agile-north/rexo</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/agile-north/rexo</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>cli;tool;dotnet;automation;build;ci;repository;rexo;rx</PackageTags>
+    <Description>Rexo (rx) — config-driven repository automation CLI. Define build, versioning,
+      artifact, and release workflows in a single rexo.json and run them identically locally and in
+      CI.</Description>
   </PropertyGroup>
 </Project>

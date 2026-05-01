@@ -51,7 +51,7 @@ src/Policies/          Local file policy source
 ## Config model (`repo.json`)
 
 Every `repo.json` must have `$schema` and `schemaVersion: "1.0"`.
-Schema file: `schemas/1.0/schema.json`.
+Schema file: `schema.json` (repo root).
 Loader: `src/Configuration/RepoConfigurationLoader.cs`.
 
 ## What still needs to be built

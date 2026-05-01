@@ -1,5 +1,6 @@
 namespace Rexo.Execution;
 
+using System.Net.Http;
 using System.Text.Json;
 using Rexo.Configuration;
 using Rexo.Ci;
@@ -11,9 +12,12 @@ using Rexo.Policies;
 public static class BuiltinCommandRegistration
 {
     private static readonly JsonSerializerOptions IndentedJsonOptions = new() { WriteIndented = true };
+    private static readonly HttpClient HttpClient = new();
     private static readonly string[] InitLocationChoices = [".rexo", "root"];
     private static readonly string[] InitTemplateChoices = ["auto", "dotnet", "node", "generic"];
     private static readonly string[] InitYesNoChoices = ["yes", "no"];
+    private const string DefaultInstructionsPath = ".github/instructions/rexo.instructions.md";
+    private const string InstructionsTemplateUrl = "https://raw.githubusercontent.com/agile-north/rexo/release/next/docs/rexo.instructions.md";
 
     public static CommandRegistry CreateDefault(RepoConfig? config = null, string? configPath = null)
     {
@@ -421,6 +425,8 @@ public static class BuiltinCommandRegistration
         var template = ReadOption(options, "template") ?? detectedTemplate;
         var withPolicy = IsTrue(options, "with-policy");
         var policyTemplate = ReadOption(options, "policy-template");
+        var instructionsPathOption = ReadOption(options, "instructions-path");
+        var withInstructions = IsTrue(options, "with-instructions") || !string.IsNullOrWhiteSpace(instructionsPathOption);
 
         if (!nonInteractive)
         {
@@ -448,6 +454,12 @@ public static class BuiltinCommandRegistration
                 "yes");
             withPolicy = createPolicyAnswer.Equals("yes", StringComparison.OrdinalIgnoreCase);
 
+            var createInstructionsAnswer = PromptChoice(
+                "Download AI instructions file into this repo?",
+                InitYesNoChoices,
+                "no");
+            withInstructions = createInstructionsAnswer.Equals("yes", StringComparison.OrdinalIgnoreCase);
+
             if (withPolicy)
             {
                 var available = EmbeddedPolicyTemplates.TemplateNames;
@@ -461,6 +473,17 @@ public static class BuiltinCommandRegistration
                     "Choose policy template:",
                     available,
                     defaultPolicyTemplate);
+            }
+
+            if (withInstructions)
+            {
+                instructionsPathOption ??= DefaultInstructionsPath;
+                Console.Write($"Instructions path [{instructionsPathOption}] > ");
+                var inputPath = Console.ReadLine()?.Trim();
+                if (!string.IsNullOrWhiteSpace(inputPath))
+                {
+                    instructionsPathOption = inputPath;
+                }
             }
         }
         else if (template.Equals("auto", StringComparison.OrdinalIgnoreCase))
@@ -507,6 +530,34 @@ public static class BuiltinCommandRegistration
             ? Path.Combine(workingDir, ".rexo")
             : workingDir;
 
+        string? instructionsTargetPath = null;
+        if (withInstructions)
+        {
+            var relativeInstructionsPath = string.IsNullOrWhiteSpace(instructionsPathOption)
+                ? DefaultInstructionsPath
+                : instructionsPathOption;
+
+            if (Path.IsPathRooted(relativeInstructionsPath))
+            {
+                return CommandResult.Fail("init", 1, "Invalid --instructions-path value. Use a repository-relative path.");
+            }
+
+            instructionsTargetPath = Path.GetFullPath(Path.Combine(workingDir, relativeInstructionsPath));
+            var repoRoot = Path.GetFullPath(workingDir + Path.DirectorySeparatorChar);
+            if (!instructionsTargetPath.StartsWith(repoRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                return CommandResult.Fail("init", 1, "Invalid --instructions-path value. Path must remain within the repository.");
+            }
+
+            if (File.Exists(instructionsTargetPath) && !force)
+            {
+                return CommandResult.Fail(
+                    "init",
+                    1,
+                    $"Instructions file already exists at '{instructionsTargetPath}'. Use --force to overwrite.");
+            }
+        }
+
         Directory.CreateDirectory(configDir);
 
         var configPath = Path.Combine(configDir, "rexo.json");
@@ -536,15 +587,38 @@ public static class BuiltinCommandRegistration
             await File.WriteAllTextAsync(policyPath, policyJson, cancellationToken);
         }
 
+        if (withInstructions)
+        {
+            var instructionsDirectory = Path.GetDirectoryName(instructionsTargetPath!);
+            if (!string.IsNullOrWhiteSpace(instructionsDirectory))
+            {
+                Directory.CreateDirectory(instructionsDirectory);
+            }
+
+            string instructionsContent;
+            try
+            {
+                instructionsContent = await HttpClient.GetStringAsync(InstructionsTemplateUrl, cancellationToken);
+            }
+            catch (HttpRequestException ex)
+            {
+                return CommandResult.Fail("init", 1, $"Failed to download instructions template: {ex.Message}");
+            }
+
+            await File.WriteAllTextAsync(instructionsTargetPath!, instructionsContent, cancellationToken);
+        }
+
         var lines = new List<string>
         {
             $"Initialized Rexo config: {configPath}",
             $"Template: {template}",
             withPolicy ? $"Policy template: {policyTemplate}" : "Policy template: none",
             withPolicy ? $"Initialized policy: {policyPath}" : "Policy file: not created",
+            withInstructions ? $"Initialized instructions: {instructionsTargetPath}" : "Instructions file: not created",
             "Next steps:",
             "  1. Review and edit rexo.json for your workflow.",
             "  2. Run 'rx list' and then 'rx build' (or your configured command).",
+            "  Docs: https://github.com/agile-north/rexo/blob/release/next/docs/CONFIGURATION.md",
         };
 
         return CommandResult.Ok("init", string.Join(Environment.NewLine, lines));
@@ -682,7 +756,7 @@ public static class BuiltinCommandRegistration
 
         var doc = new Dictionary<string, object?>
         {
-            ["$schema"] = "schemas/1.0/schema.json",
+            ["$schema"] = "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/schema.json",
             ["schemaVersion"] = "1.0",
             ["name"] = string.IsNullOrWhiteSpace(repoName) ? "my-repo" : repoName,
             ["description"] = "Generated by rx init",

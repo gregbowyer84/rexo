@@ -68,7 +68,7 @@ Program.ExecuteAsync
   1. Parse global flags (--json, --json-file, --verbose, --debug, --quiet/-q)
   2. Load repo.json → RepoConfigurationLoader
        a. Validate $schema + schemaVersion metadata
-       b. NJsonSchema validation against schemas/1.0/schema.json
+       b. NJsonSchema validation against embedded schema (or local `schema.json`)
        c. JsonSerializer.Deserialize<RepoConfig>
        d. Resolve `extends` chain (breadth-first merge, child wins, circular detection)
   3. Build service graph (BuildServicesAsync)

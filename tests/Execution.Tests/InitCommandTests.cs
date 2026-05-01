@@ -139,4 +139,75 @@ public sealed class InitCommandTests
             if (Directory.Exists(dir)) Directory.Delete(dir, true);
         }
     }
+
+    [Fact]
+    public async Task InitFailsWhenInstructionsPathEscapesRepository()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"rexo-init-instructions-path-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+
+        try
+        {
+            var registry = BuiltinCommandRegistration.CreateDefault();
+            var executor = new DefaultCommandExecutor(registry);
+
+            var invocation = new CommandInvocation(
+                new Dictionary<string, string>(),
+                new Dictionary<string, string?>
+                {
+                    ["yes"] = "true",
+                    ["with-instructions"] = "true",
+                    ["instructions-path"] = "..\\outside.instructions.md",
+                },
+                Json: false,
+                JsonFile: null,
+                WorkingDirectory: dir);
+
+            var result = await executor.ExecuteAsync("init", invocation, CancellationToken.None);
+
+            Assert.False(result.Success);
+            Assert.Contains("Path must remain within the repository", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public async Task InitFailsWhenInstructionsFileExistsAndNoForce()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"rexo-init-instructions-exists-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+
+        try
+        {
+            var instructionsPath = Path.Combine(dir, ".github", "instructions", "rexo.instructions.md");
+            Directory.CreateDirectory(Path.GetDirectoryName(instructionsPath)!);
+            await File.WriteAllTextAsync(instructionsPath, "existing");
+
+            var registry = BuiltinCommandRegistration.CreateDefault();
+            var executor = new DefaultCommandExecutor(registry);
+
+            var invocation = new CommandInvocation(
+                new Dictionary<string, string>(),
+                new Dictionary<string, string?>
+                {
+                    ["yes"] = "true",
+                    ["with-instructions"] = "true",
+                },
+                Json: false,
+                JsonFile: null,
+                WorkingDirectory: dir);
+
+            var result = await executor.ExecuteAsync("init", invocation, CancellationToken.None);
+
+            Assert.False(result.Success);
+            Assert.Contains("Instructions file already exists", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
 }

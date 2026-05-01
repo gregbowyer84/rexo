@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/schemas/1.0/schema.json",
+  "$id": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/schema.json",
   "title": "Rexo repository configuration schema",
   "type": "object",
   "additionalProperties": false,
@@ -15,9 +15,10 @@
     "$schema": {
       "type": "string",
       "enum": [
-        "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/schemas/1.0/schema.json",
-        "schemas/1.0/schema.json",
-        "./schemas/1.0/schema.json"
+        "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/schema.json",
+        "schema.json",
+        "./schema.json",
+        "../schema.json"
       ]
     },
     "schemaVersion": {

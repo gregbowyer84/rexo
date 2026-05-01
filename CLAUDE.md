@@ -23,7 +23,7 @@ Build must be clean: **0 errors, 0 warnings**. Tests must all pass before commit
 - **Stack**: .NET 10, C#, xUnit, Spectre.Console, NJsonSchema
 - **Solution**: `solution.slnx` (15 src + 4 test projects)
 - **Config file**: `repo.json` — requires `$schema` + `schemaVersion: "1.0"`
-- **Schema**: `schemas/1.0/schema.json`
+- **Schema**: `schema.json` (repo root)
 
 ---
 
@@ -86,4 +86,4 @@ See `docs/todo.md` for the complete checklist. Working today:
 | `src/Execution/StepExecutor.cs` | Step execution loop |
 | `src/Templating/TemplateRenderer.cs` | Template variable/filter engine |
 | `src/Configuration/RepoConfigurationLoader.cs` | Config load + schema validation |
-| `schemas/1.0/schema.json` | JSON Schema for `repo.json` |
+| `schema.json` | JSON Schema for `repo.json` |

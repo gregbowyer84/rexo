@@ -44,11 +44,23 @@ Non-interactive example with policy template:
 rx init --yes --location .rexo --template auto --with-policy --policy-template dotnet
 ```
 
+Non-interactive example that also downloads AI instructions into the repo:
+
+```bash
+rx init --yes --with-instructions
+```
+
+Custom destination for instructions file:
+
+```bash
+rx init --yes --with-instructions --instructions-path .github/instructions/rexo.instructions.md
+```
+
 Minimal example:
 
 ```json
 {
-  "$schema": "schemas/1.0/schema.json",
+  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/schema.json",
   "schemaVersion": "1.0",
   "name": "my-repo",
   "commands": {
@@ -95,3 +107,18 @@ Policy files are discovered in root, `.rexo/`, and legacy `.repo/` locations.
 - Use `rx` directly to run configured commands.
 - Use `rx run <command>` if you want explicit run semantics.
 - Use `--json` or `--json-file <path>` for machine-readable output.
+
+## Documentation
+
+| Resource | Link |
+| --- | --- |
+| GitHub repository | <https://github.com/agile-north/rexo> |
+| Configuration reference | <https://github.com/agile-north/rexo/blob/release/next/docs/CONFIGURATION.md> |
+| JSON Schema | <https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/schema.json> |
+| Architecture overview | <https://github.com/agile-north/rexo/blob/release/next/docs/ARCHITECTURE.md> |
+| Contributing / dev guide | <https://github.com/agile-north/rexo/blob/release/next/docs/DEVELOPMENT.md> |
+
+> **AI assistant tip**: `rx init --with-instructions` downloads
+> [`rexo.instructions.md`](https://github.com/agile-north/rexo/blob/release/next/docs/rexo.instructions.md)
+> into `.github/instructions/rexo.instructions.md` by default. Use `--instructions-path` to choose
+> another repo-relative destination.

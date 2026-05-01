@@ -124,7 +124,7 @@ Legend:
 - [x] Run manifest model exists
 - [x] Manifest writing path exists for run invocations
 - [x] Manifest content complete: PushDecisions/Artifacts flowed from step results via __artifacts/__pushDecisions outputs; Branch/CommitSha/RemoteUrl/RepoName/Errors populated
-- [x] Stable versioned JSON schema contract documentation (`schemas/1.0/README.md`)
+- [x] Stable versioned JSON schema contract documentation (`schemas/1.0/README.md`, schema at `schema.json`)
 
 ## 12) Policy and Template Sources
 

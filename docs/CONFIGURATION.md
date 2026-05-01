@@ -16,16 +16,16 @@ Every config file (`rexo.json`/`rexo.yml`) must begin with:
 
 ```json
 {
-  "$schema": "schemas/1.0/schema.json",
+  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/schema.json",
   "schemaVersion": "1.0",
   ...
 }
 ```
 
-- `$schema`: must be `schemas/1.0/schema.json` or `./schemas/1.0/schema.json`
+- `$schema`: the canonical URL `https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/schema.json` (recommended), or the relative `schema.json` / `../schema.json` for local-only use
 - `schemaVersion`: must be `"1.0"`
 
-The loader validates against `schemas/1.0/schema.json` via NJsonSchema before
+The loader validates against the embedded schema (or a local `schema.json`) via NJsonSchema before
 deserializing. Missing/unsupported metadata or schema violations cause a hard failure.
 
 ---
@@ -34,7 +34,7 @@ deserializing. Missing/unsupported metadata or schema violations cause a hard fa
 
 ```jsonc
 {
-  "$schema": "schemas/1.0/schema.json",
+  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/schema.json",
   "schemaVersion": "1.0",
   "name": "my-repo",
   "description": "Optional description",

@@ -103,6 +103,19 @@ jobs:
             git push origin "$TAG_NAME"
           fi
 
+      - name: Publish schema tag (schema/v<major.minor>, idempotent)
+        run: |
+          SCHEMA_VERSION=$(jq -r '.properties.schemaVersion.const' schema.json)
+          SCHEMA_TAG="schema/v${SCHEMA_VERSION}"
+          git fetch --tags
+          if git rev-parse "$SCHEMA_TAG" >/dev/null 2>&1; then
+            echo "Schema tag $SCHEMA_TAG already exists; skipping."
+          else
+            git tag "$SCHEMA_TAG" "$GITHUB_SHA"
+            git push origin "$SCHEMA_TAG"
+            echo "Published schema tag $SCHEMA_TAG"
+          fi
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:

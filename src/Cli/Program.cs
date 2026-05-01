@@ -575,6 +575,8 @@ public static class Program
         Console.WriteLine("      --template       auto|dotnet|node|generic");
         Console.WriteLine("      --with-policy    Also create policy.json from a template");
         Console.WriteLine("      --policy-template standard|dotnet (or any embedded template)");
+        Console.WriteLine("      --with-instructions Download docs/rexo.instructions.md into repo");
+        Console.WriteLine("      --instructions-path  Repo-relative destination (default: .github/instructions/rexo.instructions.md)");
         Console.WriteLine("      --force          Overwrite existing config");
         Console.WriteLine("  run <command>        Run a configured command");
         Console.WriteLine("  ui                   Open the interactive UI");

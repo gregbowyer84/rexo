@@ -9,9 +9,8 @@ using YamlDotNet.Serialization;
 public sealed class RepoConfigurationLoader
 {
     public const string SupportedSchemaVersion = "1.0";
-    // TODO: update SupportedSchemaUri once the remote repository is published
-    public const string SupportedSchemaUri = "https://raw.githubusercontent.com/OWNER/repoOS/main/schemas/1.0/schema.json";
-    public const string SupportedSchemaPath = "schemas/1.0/schema.json";
+    public const string SupportedSchemaUri = "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/schema.json";
+    public const string SupportedSchemaPath = "schema.json";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -208,11 +207,12 @@ public sealed class RepoConfigurationLoader
         }
 
         var schema = schemaProp.GetString();
-        // SupportedSchemaUri will be added once the remote repository is published
         var allowedSchemaValues = new[]
         {
+            SupportedSchemaUri,
             SupportedSchemaPath,
             "./" + SupportedSchemaPath,
+            "../" + SupportedSchemaPath,
         };
 
         if (string.IsNullOrWhiteSpace(schema) || !allowedSchemaValues.Contains(schema, StringComparer.Ordinal))
@@ -239,15 +239,30 @@ public sealed class RepoConfigurationLoader
         var configDirectory = Path.GetDirectoryName(configPath)
             ?? throw new InvalidOperationException("Could not determine config directory.");
 
-        var schemaPath = Path.Combine(configDirectory, "schemas", "1.0", "schema.json");
-        if (!File.Exists(schemaPath))
-        {
-            throw new FileNotFoundException(
-                $"Configuration schema file was not found at '{schemaPath}'.", schemaPath);
-        }
-
         cancellationToken.ThrowIfCancellationRequested();
-        var schema = await JsonSchema.FromFileAsync(schemaPath, CancellationToken.None);
+
+        JsonSchema schema;
+        // Look for schema.json next to the config file, then one level up (handles .rexo/ layout).
+        var schemaPath = Path.Combine(configDirectory, "schema.json");
+        if (!File.Exists(schemaPath))
+            schemaPath = Path.Combine(configDirectory, "..", "schema.json");
+        if (File.Exists(schemaPath))
+        {
+            schema = await JsonSchema.FromFileAsync(schemaPath, CancellationToken.None);
+        }
+        else
+        {
+            // Fall back to the schema embedded in this assembly so the tool works
+            // without a local schemas/ directory (e.g. when installed via dotnet tool install).
+            var asm = typeof(RepoConfigurationLoader).Assembly;
+            const string resourceName = "Rexo.Configuration.schema.1.0.json";
+            using var stream = asm.GetManifestResourceStream(resourceName)
+                ?? throw new InvalidOperationException(
+                    $"Embedded schema resource '{resourceName}' was not found in the assembly.");
+            using var reader = new StreamReader(stream);
+            var schemaJson = await reader.ReadToEndAsync(cancellationToken);
+            schema = await JsonSchema.FromJsonAsync(schemaJson, CancellationToken.None);
+        }
 
         cancellationToken.ThrowIfCancellationRequested();
         var errors = schema.Validate(jsonText);
