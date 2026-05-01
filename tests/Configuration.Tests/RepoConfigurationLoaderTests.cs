@@ -289,4 +289,187 @@ public sealed class RepoConfigurationLoaderTests
       Directory.Delete(dir, true);
     }
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // REXO_OVERLAY environment variable overlay tests
+  // ─────────────────────────────────────────────────────────────────────────
+
+  [Fact]
+  public async Task LoadAsyncAppliesEnvironmentOverlay()
+  {
+    var dir = Path.Combine(Path.GetTempPath(), $"rexo-overlay-{Guid.NewGuid():N}");
+    Directory.CreateDirectory(dir);
+    Directory.CreateDirectory(Path.Combine(dir, "schemas", "1.0"));
+
+    var minimalSchema = """
+            {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "object",
+              "required": ["$schema", "schemaVersion", "name", "commands", "aliases"],
+              "properties": {
+                "$schema": { "type": "string" },
+                "schemaVersion": { "type": "string" },
+                "name": { "type": "string" },
+                "description": { "type": "string" },
+                "commands": { "type": "object" },
+                "aliases": { "type": "object" }
+              }
+            }
+            """;
+    await File.WriteAllTextAsync(Path.Combine(dir, "schemas", "1.0", "schema.json"), minimalSchema);
+
+    var repoPath = Path.Combine(dir, "repo.json");
+    await File.WriteAllTextAsync(repoPath, """
+            {
+              "$schema": "schemas/1.0/schema.json",
+              "schemaVersion": "1.0",
+              "name": "base-name",
+              "description": "base description",
+              "commands": {},
+              "aliases": {}
+            }
+            """);
+
+    var overlayPath = Path.Combine(dir, "overlay.json");
+    await File.WriteAllTextAsync(overlayPath, """
+            {
+              "$schema": "schemas/1.0/schema.json",
+              "schemaVersion": "1.0",
+              "name": "base-name",
+              "description": "overlay description",
+              "commands": {},
+              "aliases": {}
+            }
+            """);
+
+    var previous = Environment.GetEnvironmentVariable("REXO_OVERLAY");
+    try
+    {
+      Environment.SetEnvironmentVariable("REXO_OVERLAY", overlayPath);
+      var config = await RepoConfigurationLoader.LoadAsync(repoPath, CancellationToken.None);
+
+      Assert.Equal("overlay description", config.Description);
+    }
+    finally
+    {
+      Environment.SetEnvironmentVariable("REXO_OVERLAY", previous);
+      Directory.Delete(dir, true);
+    }
+  }
+
+  [Fact]
+  public async Task LoadAsyncIgnoresOverlayWhenFileDoesNotExist()
+  {
+    var dir = Path.Combine(Path.GetTempPath(), $"rexo-overlay-missing-{Guid.NewGuid():N}");
+    Directory.CreateDirectory(dir);
+    Directory.CreateDirectory(Path.Combine(dir, "schemas", "1.0"));
+
+    var minimalSchema = """
+            {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "object",
+              "required": ["$schema", "schemaVersion", "name", "commands", "aliases"],
+              "properties": {
+                "$schema": { "type": "string" },
+                "schemaVersion": { "type": "string" },
+                "name": { "type": "string" },
+                "commands": { "type": "object" },
+                "aliases": { "type": "object" }
+              }
+            }
+            """;
+    await File.WriteAllTextAsync(Path.Combine(dir, "schemas", "1.0", "schema.json"), minimalSchema);
+
+    var repoPath = Path.Combine(dir, "repo.json");
+    await File.WriteAllTextAsync(repoPath, """
+            {
+              "$schema": "schemas/1.0/schema.json",
+              "schemaVersion": "1.0",
+              "name": "base-repo",
+              "commands": {},
+              "aliases": {}
+            }
+            """);
+
+    var previous = Environment.GetEnvironmentVariable("REXO_OVERLAY");
+    try
+    {
+      Environment.SetEnvironmentVariable("REXO_OVERLAY", "/nonexistent/path/overlay.json");
+      var config = await RepoConfigurationLoader.LoadAsync(repoPath, CancellationToken.None);
+
+      Assert.Equal("base-repo", config.Name);
+    }
+    finally
+    {
+      Environment.SetEnvironmentVariable("REXO_OVERLAY", previous);
+      Directory.Delete(dir, true);
+    }
+  }
+
+  [Fact]
+  public async Task LoadAsyncMergesCommandsDictionaryChildWins()
+  {
+    var dir = Path.Combine(Path.GetTempPath(), $"rexo-cmdmerge-{Guid.NewGuid():N}");
+    Directory.CreateDirectory(dir);
+    Directory.CreateDirectory(Path.Combine(dir, "schemas", "1.0"));
+
+    var minimalSchema = """
+            {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "object",
+              "required": ["$schema", "schemaVersion", "name", "commands", "aliases"],
+              "properties": {
+                "$schema": { "type": "string" },
+                "schemaVersion": { "type": "string" },
+                "name": { "type": "string" },
+                "commands": { "type": "object" },
+                "aliases": { "type": "object" },
+                "extends": { "type": "array" }
+              }
+            }
+            """;
+    await File.WriteAllTextAsync(Path.Combine(dir, "schemas", "1.0", "schema.json"), minimalSchema);
+
+    var basePath = Path.Combine(dir, "base.json");
+    await File.WriteAllTextAsync(basePath, """
+            {
+              "$schema": "schemas/1.0/schema.json",
+              "schemaVersion": "1.0",
+              "name": "base",
+              "commands": {
+                "shared": { "description": "from base", "steps": [] },
+                "base-only": { "description": "base exclusive", "steps": [] }
+              },
+              "aliases": {}
+            }
+            """);
+
+    var childPath = Path.Combine(dir, "child.json");
+    await File.WriteAllTextAsync(childPath, $$"""
+            {
+              "$schema": "schemas/1.0/schema.json",
+              "schemaVersion": "1.0",
+              "name": "child",
+              "extends": ["./base.json"],
+              "commands": {
+                "shared": { "description": "from child", "steps": [] },
+                "child-only": { "description": "child exclusive", "steps": [] }
+              },
+              "aliases": {}
+            }
+            """);
+
+    try
+    {
+      var config = await RepoConfigurationLoader.LoadAsync(childPath, CancellationToken.None);
+
+      Assert.Equal("from child", config.Commands["shared"].Description);
+      Assert.True(config.Commands.ContainsKey("base-only"), "base-only should be inherited");
+      Assert.True(config.Commands.ContainsKey("child-only"), "child-only should exist");
+    }
+    finally
+    {
+      Directory.Delete(dir, true);
+    }
+  }
 }

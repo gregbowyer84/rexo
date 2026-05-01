@@ -166,9 +166,9 @@ Legend:
 - [x] Tests pass (52 total — added tests for secret masking, template expressions, versioning, builtin commands)
 - [x] Added tests for template rendering behavior
 - [x] Added tests for built-in command registration paths
-- [~] Coverage breadth is still limited for config merge/policy/runtime edge cases
+- [x] Coverage breadth expanded: REXO_OVERLAY, commands merge, StepExecutor when-condition + unknown builtin tests (114 total)
 - [x] Add tests for run manifest completeness (ErrorTaxonomyAndManifestTests)
-- [~] Add tests for policy resolution + merge semantics (partial — command registry tests cover policy load path)
+- [x] Add tests for policy resolution + merge semantics (overlay, command dict merge, when-condition)
 - [x] Add integration tests for branch workflows and alias resolution edge cases (`AliasAndBranchWorkflowTests`)
 
 ## 17) Documentation and Samples
