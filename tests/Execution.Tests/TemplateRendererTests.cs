@@ -123,4 +123,49 @@ public sealed class TemplateRendererTests
         var result = renderer.Render("{{args.a}} {{args.b}}", ctx);
         Assert.Equal("hello world", result);
     }
+
+    [Fact]
+    public void EqualityExpressionReturnsTrueWhenEqual()
+    {
+        var renderer = new TemplateRenderer();
+        var ctx = MakeContext(version: "1.0.0");
+        var result = renderer.Render("{{version.major == '1'}}", ctx);
+        Assert.Equal("true", result);
+    }
+
+    [Fact]
+    public void EqualityExpressionReturnsFalseWhenNotEqual()
+    {
+        var renderer = new TemplateRenderer();
+        var ctx = MakeContext(version: "2.0.0");
+        var result = renderer.Render("{{version.major == '1'}}", ctx);
+        Assert.Equal("false", result);
+    }
+
+    [Fact]
+    public void InequalityExpressionReturnsTrueWhenNotEqual()
+    {
+        var renderer = new TemplateRenderer();
+        var ctx = MakeContext(options: new Dictionary<string, string?> { ["ci"] = "true" });
+        var result = renderer.Render("{{options.ci != ''}}", ctx);
+        Assert.Equal("true", result);
+    }
+
+    [Fact]
+    public void InequalityExpressionReturnsFalseWhenEqual()
+    {
+        var renderer = new TemplateRenderer();
+        var ctx = MakeContext(options: new Dictionary<string, string?> { ["ci"] = "" });
+        var result = renderer.Render("{{options.ci != ''}}", ctx);
+        Assert.Equal("false", result);
+    }
+
+    [Fact]
+    public void EqualityExpressionComparesLiteralToLiteral()
+    {
+        var renderer = new TemplateRenderer();
+        var ctx = MakeContext();
+        var result = renderer.Render("{{'foo' == 'foo'}}", ctx);
+        Assert.Equal("true", result);
+    }
 }

@@ -73,3 +73,11 @@ public sealed record RepoAnalysisConfig(
     bool FailOnIssues = true,
     string[]? Tools = null,
     string? Configuration = null);
+
+/// <summary>
+/// A partial config document used to inject commands and aliases from a policy file
+/// (e.g. <c>policy.json</c>). Does not require <c>$schema</c> or <c>schemaVersion</c>.
+/// </summary>
+public sealed record PolicyConfig(
+    Dictionary<string, RepoCommandConfig>? Commands = null,
+    Dictionary<string, string>? Aliases = null);

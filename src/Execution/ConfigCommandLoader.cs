@@ -57,6 +57,47 @@ public sealed class ConfigCommandLoader
         }
     }
 
+    /// <summary>
+    /// Loads commands and aliases from a policy definition into the registry.
+    /// Policy commands have lower priority than config commands: a policy command is only
+    /// registered when no command with the same name already exists.
+    /// </summary>
+    public void LoadPolicyCommandsInto(
+        CommandRegistry registry,
+        PolicyConfig policy,
+        RepoConfig config,
+        string repositoryRoot,
+        ICommandExecutor commandExecutor)
+    {
+        if (policy.Commands is { Count: > 0 })
+        {
+            foreach (var (commandName, commandConfig) in policy.Commands)
+            {
+                if (registry.TryResolve(commandName, out _)) continue; // repo.json wins
+
+                var name = commandName;
+                var cmd = commandConfig;
+                registry.Register(name, (invocation, ct) =>
+                    ExecuteConfigCommandAsync(name, cmd, config, invocation, repositoryRoot, commandExecutor, ct));
+            }
+        }
+
+        if (policy.Aliases is { Count: > 0 })
+        {
+            foreach (var (alias, target) in policy.Aliases)
+            {
+                if (registry.TryResolve(alias, out _)) continue; // repo.json wins
+
+                var aliasName = alias;
+                var targetName = target;
+                registry.Register(aliasName, (invocation, ct) =>
+                    registry.TryResolve(targetName, out var handler) && handler is not null
+                        ? handler(invocation, ct)
+                        : Task.FromResult(CommandResult.Fail(aliasName, 8, $"Alias target '{targetName}' not found.")));
+            }
+        }
+    }
+
     private void RegisterBuiltins(RepoConfig config, string repositoryRoot)
     {
         // builtin:resolve-version

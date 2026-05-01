@@ -1,5 +1,6 @@
 namespace Rexo.Execution.Tests;
 
+using Rexo.Configuration.Models;
 using Rexo.Core.Models;
 
 public sealed class BuiltinCommandRegistrationTests
@@ -75,5 +76,65 @@ public sealed class BuiltinCommandRegistrationTests
 
         Assert.NotNull(executor.Registry);
         Assert.True(executor.Registry.TryResolve("version", out _));
+    }
+
+    [Fact]
+    public async Task ConfigResolvedReturnsSuccessWhenConfigProvided()
+    {
+        var config = new RepoConfig(
+            Name: "test",
+            Commands: [],
+            Aliases: [])
+        { SchemaVersion = "1.0" };
+        var registry = BuiltinCommandRegistration.CreateDefault(config, configPath: null);
+        var executor = new DefaultCommandExecutor(registry);
+
+        var result = await executor.ExecuteAsync("config resolved", EmptyInvocation(), CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Contains("schemaVersion", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ConfigResolvedReturnsFailureWhenNoConfigProvided()
+    {
+        var registry = BuiltinCommandRegistration.CreateDefault(config: null, configPath: null);
+        var executor = new DefaultCommandExecutor(registry);
+
+        var result = await executor.ExecuteAsync("config resolved", EmptyInvocation(), CancellationToken.None);
+
+        Assert.False(result.Success);
+    }
+
+    [Fact]
+    public async Task ExplainVersionReturnsProviderInfo()
+    {
+        var config = new RepoConfig(
+            Name: "test",
+            Commands: [],
+            Aliases: [])
+        {
+            SchemaVersion = "1.0",
+            Versioning = new RepoVersioningConfig(Provider: "fixed", Fallback: "1.0.0"),
+        };
+        var registry = BuiltinCommandRegistration.CreateDefault(config, configPath: null);
+        var executor = new DefaultCommandExecutor(registry);
+
+        var result = await executor.ExecuteAsync("explain version", EmptyInvocation(), CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Contains("fixed", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ExplainVersionReturnsMessageWhenNoVersioningConfig()
+    {
+        var registry = BuiltinCommandRegistration.CreateDefault(config: null, configPath: null);
+        var executor = new DefaultCommandExecutor(registry);
+
+        var result = await executor.ExecuteAsync("explain version", EmptyInvocation(), CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Contains("No versioning", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 }

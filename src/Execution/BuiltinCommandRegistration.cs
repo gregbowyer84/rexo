@@ -31,6 +31,12 @@ public static class BuiltinCommandRegistration
         registry.Register("config sources", (invocation, _) =>
             Task.FromResult(RunConfigSources(invocation, configPath)));
 
+        registry.Register("config materialize", async (invocation, ct) =>
+            await RunConfigMaterializeAsync(invocation, config, ct));
+
+        registry.Register("explain version", (_, _) =>
+            Task.FromResult(RunExplainVersion(config)));
+
         return registry;
     }
 
@@ -213,7 +219,89 @@ public static class BuiltinCommandRegistration
         var exists = File.Exists(resolvedPath);
         lines.Add($"  [{(exists ? "loaded" : "not found")}] {resolvedPath}");
 
+        var policyPath = Path.Combine(invocation.WorkingDirectory, "policy.json");
+        if (File.Exists(policyPath))
+        {
+            lines.Add($"  [policy] {policyPath}");
+        }
+
+        var overlayEnvPath = Environment.GetEnvironmentVariable("REXO_OVERLAY");
+        if (!string.IsNullOrEmpty(overlayEnvPath))
+        {
+            lines.Add($"  [overlay] REXO_OVERLAY={overlayEnvPath}");
+        }
+
         return CommandResult.Ok("config sources", string.Join("\n", lines));
+    }
+
+    private static async Task<CommandResult> RunConfigMaterializeAsync(
+        CommandInvocation invocation,
+        RepoConfig? config,
+        CancellationToken cancellationToken)
+    {
+        if (config is null)
+        {
+            return CommandResult.Fail("config materialize", 1, "No repo.json configuration loaded.");
+        }
+
+        var materialized = new List<string>();
+        var workingDir = invocation.WorkingDirectory;
+
+        // If using gitversion provider, write GitVersion.yml if absent
+        if (string.Equals(config.Versioning?.Provider, "gitversion", StringComparison.OrdinalIgnoreCase))
+        {
+            var gvPath = Path.Combine(workingDir, "GitVersion.yml");
+            if (!File.Exists(gvPath))
+            {
+                const string gvContent = """
+                    mode: ContinuousDeployment
+                    branches: {}
+                    ignore:
+                      sha: []
+                    """;
+                await File.WriteAllTextAsync(gvPath, gvContent, cancellationToken);
+                materialized.Add(gvPath);
+                Console.WriteLine($"  Materialized: {gvPath}");
+            }
+        }
+
+        var message = materialized.Count > 0
+            ? $"Materialized {materialized.Count} file(s): {string.Join(", ", materialized)}"
+            : "Nothing to materialize.";
+
+        return CommandResult.Ok("config materialize", message);
+    }
+
+    private static CommandResult RunExplainVersion(RepoConfig? config)
+    {
+        if (config?.Versioning is null)
+        {
+            return CommandResult.Ok("explain version",
+                "No versioning configuration found in repo.json.\n" +
+                "Available providers: fixed, env, git, gitversion, minver, nbgv");
+        }
+
+        var v = config.Versioning;
+        var lines = new List<string>
+        {
+            "Versioning configuration:",
+            $"  Provider:  {v.Provider}",
+        };
+
+        if (!string.IsNullOrEmpty(v.Fallback))
+            lines.Add($"  Fallback:  {v.Fallback}");
+
+        if (v.Settings is { Count: > 0 })
+        {
+            lines.Add("  Settings:");
+            foreach (var (k, val) in v.Settings)
+                lines.Add($"    {k}: {val}");
+        }
+
+        lines.Add(string.Empty);
+        lines.Add("Available providers: fixed, env, git, gitversion, minver, nbgv");
+
+        return CommandResult.Ok("explain version", string.Join("\n", lines));
     }
 
     private static async Task<(bool ok, string? version)> IsToolAvailableAsync(

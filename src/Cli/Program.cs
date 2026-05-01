@@ -15,26 +15,26 @@ using Rexo.Versioning;
 public static class Program
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions LenientJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        ReadCommentHandling = JsonCommentHandling.Skip,
+    };
 
     public static Task<int> Main(string[] args) => ExecuteAsync(args, CancellationToken.None);
 
     public static async Task<int> ExecuteAsync(string[] args, CancellationToken cancellationToken)
     {
-        if (args.Length == 0)
-        {
-            PrintHelp();
-            return 0;
-        }
-
         var workingDir = Environment.CurrentDirectory;
 
         // Parse global flags
         var (cleanArgs, json, jsonFile, verbose, debug, quiet) = ParseGlobalFlags(args);
 
+        // No args (or only global flags) — launch interactive TUI picker
         if (cleanArgs.Count == 0)
         {
-            PrintHelp();
-            return 0;
+            var (_, uiExecutor, uiConfig) = await BuildServicesAsync(workingDir, debug, cancellationToken);
+            return await RunUiAsync(uiExecutor, uiConfig, workingDir, cancellationToken);
         }
 
         var command = cleanArgs[0];
@@ -56,7 +56,7 @@ public static class Program
             "list" => await RunBuiltinAsync(executor, "list", EmptyInvocation(workingDir, json, jsonFile), verbose, quiet, cancellationToken),
             "explain" => await RunExplainAsync(executor, cleanArgs, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
             "config" => await RunConfigSubcommandAsync(cleanArgs, executor, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
-            "ui" => await RunUiAsync(executor, workingDir, cancellationToken),
+            "ui" => await RunUiAsync(executor, config, workingDir, cancellationToken),
             "run" => await RunConfiguredAsync(cleanArgs, executor, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
             _ => await RunDirectAsync(command, cleanArgs, executor, config, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
         };
@@ -103,6 +103,26 @@ public static class Program
                 artifactProviders);
 
             configLoader.LoadInto(registry, config, workingDir, executor);
+
+            // Load policy.json from workingDir if present (policy commands have lower priority)
+            var policyPath = Path.Combine(workingDir, "policy.json");
+            if (File.Exists(policyPath))
+            {
+                try
+                {
+                    var policyJson = await File.ReadAllTextAsync(policyPath, cancellationToken);
+                    var policyConfig = JsonSerializer.Deserialize<PolicyConfig>(policyJson, LenientJsonOptions);
+                    if (policyConfig is not null)
+                    {
+                        configLoader.LoadPolicyCommandsInto(registry, policyConfig, config, workingDir, executor);
+                        if (debug) Console.WriteLine($"[debug] Loaded policy.json");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    if (debug) Console.WriteLine($"[debug] policy.json load skipped: {ex.Message}");
+                }
+            }
         }
 
         return (registry, executor, config);
@@ -162,7 +182,7 @@ public static class Program
         // args[0] == "config", args[1] == sub-command
         if (args.Count < 2)
         {
-            Console.WriteLine("Usage: rx config <resolved|sources>");
+            Console.WriteLine("Usage: rx config <resolved|sources|materialize>");
             return 1;
         }
 
@@ -174,13 +194,27 @@ public static class Program
 
     private static async Task<int> RunUiAsync(
         DefaultCommandExecutor executor,
+        RepoConfig? config,
         string workingDir,
         CancellationToken cancellationToken)
     {
-        // List all available commands for a basic command picker UI
-        var listResult = await executor.ExecuteAsync("list", EmptyInvocation(workingDir, false, null), cancellationToken);
-        ConsoleRenderer.RenderList(listResult);
-        return 0;
+        // Build list of user-facing command names (config-defined commands + aliases)
+        var commandNames = new List<string>();
+        if (config?.Commands is { Count: > 0 })
+            commandNames.AddRange(config.Commands.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase));
+        if (config?.Aliases is { Count: > 0 })
+            commandNames.AddRange(config.Aliases.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase));
+
+        // Fall back to built-in list if no config commands
+        if (commandNames.Count == 0)
+            commandNames.AddRange(["version", "list", "doctor", "config resolved", "config sources"]);
+
+        var selected = ConsoleRenderer.PromptCommandPicker(commandNames);
+        if (selected is null) return 0;
+
+        var invocation = EmptyInvocation(workingDir, false, null);
+        var result = await executor.ExecuteAsync(selected, invocation, cancellationToken);
+        return await WriteResultAsync(result, invocation, false, false, cancellationToken);
     }
 
     private static async Task<int> RunConfiguredAsync(

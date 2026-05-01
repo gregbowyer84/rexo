@@ -21,6 +21,23 @@ public sealed class TemplateRenderer : ITemplateRenderer
 
     private static string EvaluateExpression(string expr, Dictionary<string, object?> root)
     {
+        // Check for equality/inequality expressions before pipe-filter handling
+        if (expr.Contains(" == ", StringComparison.Ordinal))
+        {
+            var idx = expr.IndexOf(" == ", StringComparison.Ordinal);
+            var left = ResolveValue(expr[..idx].Trim(), root);
+            var right = ResolveValue(expr[(idx + 4)..].Trim(), root);
+            return string.Equals(left, right, StringComparison.Ordinal) ? "true" : "false";
+        }
+
+        if (expr.Contains(" != ", StringComparison.Ordinal))
+        {
+            var idx = expr.IndexOf(" != ", StringComparison.Ordinal);
+            var left = ResolveValue(expr[..idx].Trim(), root);
+            var right = ResolveValue(expr[(idx + 4)..].Trim(), root);
+            return !string.Equals(left, right, StringComparison.Ordinal) ? "true" : "false";
+        }
+
         var pipeIndex = expr.IndexOf('|', StringComparison.Ordinal);
         string path;
         string? filter = null;
@@ -85,6 +102,22 @@ public sealed class TemplateRenderer : ITemplateRenderer
         }
 
         return current;
+    }
+
+    /// <summary>
+    /// Resolves a value that may be a quoted string literal (single or double quotes)
+    /// or a context path reference. Returns the string value in either case.
+    /// </summary>
+    private static string ResolveValue(string expr, Dictionary<string, object?> root)
+    {
+        if (expr.Length >= 2 &&
+            ((expr[0] == '\'' && expr[^1] == '\'') ||
+             (expr[0] == '"' && expr[^1] == '"')))
+        {
+            return expr[1..^1];
+        }
+
+        return ResolvePath(expr, root)?.ToString() ?? string.Empty;
     }
 
     private static Dictionary<string, object?> BuildContext(ExecutionContext context)

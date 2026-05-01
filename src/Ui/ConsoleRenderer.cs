@@ -146,4 +146,24 @@ public static class ConsoleRenderer
                     new Dictionary<string, object?>())).ToArray());
         }
     }
+
+    /// <summary>
+    /// Presents an interactive selection prompt and returns the chosen command name,
+    /// or <c>null</c> if the user cancelled or no commands are available.
+    /// </summary>
+    public static string? PromptCommandPicker(IReadOnlyList<string> commandNames)
+    {
+        if (commandNames.Count == 0) return null;
+
+        var choices = new List<string>(commandNames) { "(cancel)" };
+
+        var selection = AnsiConsole.Prompt(
+            new SelectionPrompt<string>()
+                .Title("[bold yellow]Select a command to run:[/]")
+                .PageSize(20)
+                .HighlightStyle(new Style(foreground: Color.Cyan1))
+                .AddChoices(choices));
+
+        return selection == "(cancel)" ? null : selection;
+    }
 }

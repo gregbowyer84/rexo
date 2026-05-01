@@ -81,33 +81,35 @@ public sealed class StepExecutor : IStepExecutor
         CancellationToken cancellationToken)
     {
         var command = _templateRenderer.Render(run, context);
+        var secrets = SecretMasker.CollectSecretValues();
         Console.WriteLine($"  > {command}");
 
         var shellResult = await ShellRunner.RunAsync(
             command,
             context.RepositoryRoot,
-            onStdout: line => Console.WriteLine($"    {line}"),
+            onStdout: line => Console.WriteLine($"    {SecretMasker.Mask(line, secrets)}"),
             cancellationToken: cancellationToken);
 
         sw.Stop();
 
         if (!string.IsNullOrEmpty(shellResult.Stderr))
         {
-            Console.Error.WriteLine(shellResult.Stderr);
+            Console.Error.WriteLine(SecretMasker.Mask(shellResult.Stderr, secrets));
         }
 
+        var maskedStdout = SecretMasker.Mask(shellResult.Stdout, secrets);
         var outputs = new Dictionary<string, object?>
         {
-            ["stdout"] = shellResult.Stdout,
-            ["stderr"] = shellResult.Stderr,
+            ["stdout"] = maskedStdout,
+            ["stderr"] = SecretMasker.Mask(shellResult.Stderr, secrets),
         };
 
         // Extract named groups from stdout via OutputPattern regex
-        if (!string.IsNullOrEmpty(stepDefinition.OutputPattern) && !string.IsNullOrEmpty(shellResult.Stdout))
+        if (!string.IsNullOrEmpty(stepDefinition.OutputPattern) && !string.IsNullOrEmpty(maskedStdout))
         {
             try
             {
-                var match = Regex.Match(shellResult.Stdout, stepDefinition.OutputPattern, RegexOptions.Multiline);
+                var match = Regex.Match(maskedStdout, stepDefinition.OutputPattern, RegexOptions.Multiline);
                 if (match.Success)
                 {
                     foreach (Group group in match.Groups)
@@ -126,14 +128,14 @@ public sealed class StepExecutor : IStepExecutor
         }
 
         // Write stdout to OutputFile if specified
-        if (!string.IsNullOrEmpty(stepDefinition.OutputFile) && !string.IsNullOrEmpty(shellResult.Stdout))
+        if (!string.IsNullOrEmpty(stepDefinition.OutputFile) && !string.IsNullOrEmpty(maskedStdout))
         {
             var outputFilePath = Path.IsPathRooted(stepDefinition.OutputFile)
                 ? stepDefinition.OutputFile
                 : Path.Combine(context.RepositoryRoot, stepDefinition.OutputFile);
             var dir = Path.GetDirectoryName(outputFilePath);
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-            await File.WriteAllTextAsync(outputFilePath, shellResult.Stdout, cancellationToken);
+            await File.WriteAllTextAsync(outputFilePath, maskedStdout, cancellationToken);
             outputs["outputFile"] = outputFilePath;
         }
 

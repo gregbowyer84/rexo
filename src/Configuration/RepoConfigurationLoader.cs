@@ -41,6 +41,26 @@ public sealed class RepoConfigurationLoader
             config = await ResolveExtendsAsync(config, configPath, [], cancellationToken);
         }
 
+        // Apply environment overlay if REXO_OVERLAY is set (overlay wins over everything)
+        var overlayEnvPath = Environment.GetEnvironmentVariable("REXO_OVERLAY");
+        if (!string.IsNullOrEmpty(overlayEnvPath))
+        {
+            var configDir = Path.GetDirectoryName(configPath) ?? Directory.GetCurrentDirectory();
+            var overlayPath = Path.IsPathRooted(overlayEnvPath)
+                ? overlayEnvPath
+                : Path.GetFullPath(Path.Combine(configDir, overlayEnvPath));
+
+            if (File.Exists(overlayPath))
+            {
+                var overlayJson = await File.ReadAllTextAsync(overlayPath, cancellationToken);
+                var overlayConfig = JsonSerializer.Deserialize<RepoConfig>(overlayJson, JsonOptions);
+                if (overlayConfig is not null)
+                {
+                    config = MergeConfigs(config, overlayConfig);
+                }
+            }
+        }
+
         return config;
     }
 

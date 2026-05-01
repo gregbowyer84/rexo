@@ -31,7 +31,7 @@ Legend:
 - [~] Validation: basic structural deserialization only (no schema validation)
 - [x] Resolve `extends` from local file paths (breadth-first merge, circular detection)
 - [~] Config merge order pipeline (defaults -> policies -> repo -> overlays -> CLI)
-- [ ] Environment overlays
+- [x] Environment overlays (REXO_OVERLAY env var)
 - [ ] Merge strategy customization for arrays/objects
 - [ ] Alternative config file names (`repo.yaml`, `.repo/repo.json`, etc.)
 
@@ -40,7 +40,7 @@ Legend:
 - [x] Built-in command match
 - [x] Exact config command match
 - [x] Config alias match
-- [ ] Policy-provided command match
+- [x] Policy-provided command match (loads policy.json alongside repo.json)
 - [~] Not-found suggestions (basic not-found message exists; no suggestion engine)
 
 ## 4) Execution Engine
@@ -61,7 +61,7 @@ Legend:
 - [x] Context references: `args`, `options`, `repo`, `version`, `steps`, `env`
 - [x] Basic filters: `slug`, `default(...)`, `upper`, `lower`
 - [~] Simple conditions via truthy rendered values
-- [ ] Expression operators/comparisons in templates (e.g. `==` expressions)
+- [x] Expression operators/comparisons in templates (`==` and `!=` equality operators)
 - [ ] Path helper functions beyond current filters
 
 ## 6) Built-in Primitives
@@ -85,7 +85,7 @@ Legend:
 - [x] GitVersion provider (basic shell + parse + fallback)
 - [x] MinVer provider (shells out to `dotnet minver`, registered as `minver`)
 - [x] NBGV provider (shells out to `nbgv get-version -f json`, registered as `nbgv`)
-- [ ] Basic git provider (as distinct provider from gitversion/env/fixed)
+- [x] Basic git provider (`git` key — parses most recent git tag as SemVer)
 - [~] Version contract fields from scope are partially present
 - [ ] Full output contract fields (build metadata, branch, assembly/file versions, etc.)
 
@@ -128,7 +128,7 @@ Legend:
 ## 12) Policy and Template Sources
 
 - [x] Local file policy source class exists
-- [ ] Policy source integration in runtime config load path
+- [x] Policy source integration in runtime config load path (policy.json loaded alongside repo.json)
 - [ ] Embedded policy templates
 - [ ] Remote policy sources (HTTP/Git/NuGet/company registry)
 - [ ] Policy caching/version pinning/trust model
@@ -139,8 +139,8 @@ Legend:
 - [x] `explain <command>` includes args/options/steps
 - [x] `repo config resolved`
 - [x] `repo config sources`
-- [ ] `repo config materialize` (builtin:config-materialize exists; standalone CLI sub-command pending)
-- [ ] `repo explain version`
+- [x] `repo config materialize` (CLI sub-command + builtin:config-materialize)
+- [x] `repo explain version`
 - [~] Explain depth is basic (no full step graph/push eligibility/provider config details)
 
 ## 14) Safety and Governance
@@ -148,22 +148,22 @@ Legend:
 - [x] Push rule engine enforced in `builtin:push-artifacts` via `pushRulesJson`
 - [x] Skip push on PR enforcement (noPushInPullRequest rule)
 - [x] Require clean working tree enforcement (requireCleanWorkingTree rule)
-- [ ] Secret masking/redaction in logs and outputs
+- [x] Secret masking/redaction in logs and outputs (auto-masks env vars containing SECRET, TOKEN, PASSWORD, KEY, APIKEY)
 - [ ] Structured error taxonomy with codes/details/suggested fixes
 
 ## 15) UI/TUI
 
 - [x] Spectre.Console renderer exists
 - [x] Basic `repo ui` command path
-- [~] UI currently lists commands; interactive workflows are minimal
-- [ ] Rich command picker and execution dashboard
+- [x] Interactive command picker (Spectre.Console SelectionPrompt, `rx ui` or `rx` with no args)
+- [~] Rich command picker and execution dashboard
 - [ ] Config/policy/resolution browsing UI
 - [ ] TUI project/features (future phase)
 
 ## 16) Testing and Quality Gates
 
 - [x] Build passes (`dotnet build`)
-- [x] Tests pass (33 total — added tests for config merge, parallel steps, config commands)
+- [x] Tests pass (52 total — added tests for secret masking, template expressions, versioning, builtin commands)
 - [x] Added tests for template rendering behavior
 - [x] Added tests for built-in command registration paths
 - [~] Coverage breadth is still limited for config merge/policy/runtime edge cases
@@ -201,9 +201,9 @@ Items expected in MVP (per scope section 56) and status:
 ## 19) Next High-Impact Work (Recommended Order)
 
 - [ ] Wire policy sources into runtime load path (start with local/embedded)
-- [ ] Implement `config materialize` standalone CLI sub-command (builtin exists)
+- [x] Implement `config materialize` standalone CLI sub-command
 - [ ] Command-level parallel settings (`maxParallel`)
 - [ ] Expand run manifest with config hash and full version fields
-- [ ] Secret masking/redaction in logs and outputs
+- [x] Secret masking/redaction in logs and outputs
 - [ ] Not-found command suggestion engine
 - [ ] Add focused tests for merge/policy/parallel/manifest edge cases
