@@ -274,8 +274,17 @@ Use as `uses: builtin:<name>` in a step:
 | `rx list` | List all available commands |
 | `rx explain <cmd>` | Show command description, args, options, steps |
 | `rx doctor` | Check tool and provider availability |
+| `rx init` | Create a starter `rexo.json` (defaults to `.rexo/rexo.json`) |
 | `rx config resolved` | Print the effective merged config (`rexo.json`) as JSON |
 | `rx config sources` | Show config file path and load status |
+
+`rx init` also supports interactive policy setup and these non-interactive flags:
+
+- `--location .rexo|root`
+- `--template auto|dotnet|node|generic`
+- `--with-policy`
+- `--policy-template <name>` (e.g. `standard`, `dotnet`)
+- `--yes` and `--force`
 
 ### Config Inspection Reference
 

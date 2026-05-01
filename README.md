@@ -36,6 +36,13 @@ dotnet test solution.slnx -c Release
 
 The packaged tool command is `rx`.
 
+You can also run Rexo without installing it globally by using `dnx`:
+
+```bash
+dotnet dnx Rexo.Cli -- --help
+dotnet dnx Rexo.Cli -- init --yes --template auto
+```
+
 ## Versioning
 
 Versioning uses GitVersion (mainline) via [GitVersion.yml](GitVersion.yml).

@@ -6,10 +6,15 @@ using Rexo.Ci;
 using Rexo.Configuration.Models;
 using Rexo.Core.Models;
 using Rexo.Git;
+using Rexo.Policies;
 
 public static class BuiltinCommandRegistration
 {
     private static readonly JsonSerializerOptions IndentedJsonOptions = new() { WriteIndented = true };
+    private static readonly string[] InitLocationChoices = [".rexo", "root"];
+    private static readonly string[] InitTemplateChoices = ["auto", "dotnet", "node", "generic"];
+    private static readonly string[] InitYesNoChoices = ["yes", "no"];
+
     public static CommandRegistry CreateDefault(RepoConfig? config = null, string? configPath = null)
     {
         var registry = new CommandRegistry();
@@ -34,6 +39,9 @@ public static class BuiltinCommandRegistration
 
         registry.Register("config materialize", async (invocation, ct) =>
             await RunConfigMaterializeAsync(invocation, config, ct));
+
+        registry.Register("init", async (invocation, ct) =>
+            await RunInitAsync(invocation, ct));
 
         registry.Register("explain version", (_, _) =>
             Task.FromResult(RunExplainVersion(config)));
@@ -108,6 +116,7 @@ public static class BuiltinCommandRegistration
         lines.Add("  list            List all available commands");
         lines.Add("  explain         Explain a command");
         lines.Add("  doctor          Check environment and configuration");
+        lines.Add("  init            Create a starter rexo config");
         lines.Add("  run <command>   Run a config-defined command");
         lines.Add("  help            Show help");
         lines.Add("  ui              Open the interactive UI");
@@ -145,7 +154,7 @@ public static class BuiltinCommandRegistration
         }
 
         // Check built-ins
-        var builtins = new[] { "version", "list", "explain", "doctor", "run", "help", "ui" };
+        var builtins = new[] { "version", "list", "explain", "doctor", "init", "run", "help", "ui" };
         if (builtins.Contains(commandName, StringComparer.OrdinalIgnoreCase))
         {
             return CommandResult.Ok("explain", $"Built-in command: {commandName}\n  This is a built-in command that is always available.");
@@ -386,6 +395,302 @@ public static class BuiltinCommandRegistration
         {
             return (false, "not found");
         }
+    }
+
+    private static async Task<CommandResult> RunInitAsync(
+        CommandInvocation invocation,
+        CancellationToken cancellationToken)
+    {
+        var workingDir = invocation.WorkingDirectory;
+        var options = invocation.Options;
+
+        var force = IsTrue(options, "force");
+        var nonInteractive = IsTrue(options, "yes") || IsTrue(options, "non-interactive");
+
+        var existingConfig = ConfigFileLocator.FindConfigPath(workingDir);
+        if (existingConfig is not null && !force)
+        {
+            return CommandResult.Fail(
+                "init",
+                1,
+                $"Configuration already exists at '{existingConfig}'. Use --force to overwrite.");
+        }
+
+        var detectedTemplate = DetectTemplate(workingDir);
+        var location = ReadOption(options, "location") ?? ".rexo";
+        var template = ReadOption(options, "template") ?? detectedTemplate;
+        var withPolicy = IsTrue(options, "with-policy");
+        var policyTemplate = ReadOption(options, "policy-template");
+
+        if (!nonInteractive)
+        {
+            Console.WriteLine("Rexo init");
+            Console.WriteLine($"Detected repository template: {detectedTemplate}");
+
+            location = PromptChoice(
+                "Where should config be created?",
+                InitLocationChoices,
+                location.Equals("root", StringComparison.OrdinalIgnoreCase) ? "root" : ".rexo");
+
+            template = PromptChoice(
+                "Choose starter template:",
+                InitTemplateChoices,
+                "auto");
+
+            if (template.Equals("auto", StringComparison.OrdinalIgnoreCase))
+            {
+                template = detectedTemplate;
+            }
+
+            var createPolicyAnswer = PromptChoice(
+                "Create a starter policy file?",
+                InitYesNoChoices,
+                "yes");
+            withPolicy = createPolicyAnswer.Equals("yes", StringComparison.OrdinalIgnoreCase);
+
+            if (withPolicy)
+            {
+                var available = EmbeddedPolicyTemplates.TemplateNames;
+                var defaultPolicyTemplate = available.Contains(template, StringComparer.OrdinalIgnoreCase)
+                    ? template
+                    : available.Contains("standard", StringComparer.OrdinalIgnoreCase)
+                        ? "standard"
+                        : available.Count > 0 ? available[0] : "standard";
+
+                policyTemplate = PromptChoice(
+                    "Choose policy template:",
+                    available,
+                    defaultPolicyTemplate);
+            }
+        }
+        else if (template.Equals("auto", StringComparison.OrdinalIgnoreCase))
+        {
+            template = detectedTemplate;
+        }
+
+        if (withPolicy && string.IsNullOrWhiteSpace(policyTemplate))
+        {
+            var available = EmbeddedPolicyTemplates.TemplateNames;
+            policyTemplate = available.Contains(template, StringComparer.OrdinalIgnoreCase)
+                ? template
+                : available.Contains("standard", StringComparer.OrdinalIgnoreCase)
+                    ? "standard"
+                    : available.Count > 0 ? available[0] : null;
+        }
+
+        location = NormalizeLocation(location);
+        if (location is null)
+        {
+            return CommandResult.Fail("init", 1, "Invalid --location value. Use '.rexo' or 'root'.");
+        }
+
+        template = NormalizeTemplate(template);
+        if (template is null)
+        {
+            return CommandResult.Fail("init", 1, "Invalid --template value. Use auto|dotnet|node|generic.");
+        }
+
+        if (withPolicy && string.IsNullOrWhiteSpace(policyTemplate))
+        {
+            return CommandResult.Fail("init", 1, "No policy templates are available to initialize.");
+        }
+
+        if (withPolicy && !EmbeddedPolicyTemplates.TemplateNames.Contains(policyTemplate!, StringComparer.OrdinalIgnoreCase))
+        {
+            return CommandResult.Fail(
+                "init",
+                1,
+                $"Invalid --policy-template value '{policyTemplate}'. Available: {string.Join(", ", EmbeddedPolicyTemplates.TemplateNames)}");
+        }
+
+        var configDir = location == ".rexo"
+            ? Path.Combine(workingDir, ".rexo")
+            : workingDir;
+
+        Directory.CreateDirectory(configDir);
+
+        var configPath = Path.Combine(configDir, "rexo.json");
+        if (File.Exists(configPath) && !force)
+        {
+            return CommandResult.Fail("init", 1, $"Target config already exists at '{configPath}'. Use --force to overwrite.");
+        }
+
+        var repoName = Path.GetFileName(workingDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        var configJson = BuildStarterConfigJson(repoName, template);
+
+        await File.WriteAllTextAsync(configPath, configJson, cancellationToken);
+
+        string? policyPath = null;
+        if (withPolicy)
+        {
+            policyPath = Path.Combine(configDir, "policy.json");
+            if (File.Exists(policyPath) && !force)
+            {
+                return CommandResult.Fail(
+                    "init",
+                    1,
+                    $"Target policy already exists at '{policyPath}'. Use --force to overwrite.");
+            }
+
+            var policyJson = EmbeddedPolicyTemplates.ReadTemplate(policyTemplate!);
+            await File.WriteAllTextAsync(policyPath, policyJson, cancellationToken);
+        }
+
+        var lines = new List<string>
+        {
+            $"Initialized Rexo config: {configPath}",
+            $"Template: {template}",
+            withPolicy ? $"Policy template: {policyTemplate}" : "Policy template: none",
+            withPolicy ? $"Initialized policy: {policyPath}" : "Policy file: not created",
+            "Next steps:",
+            "  1. Review and edit rexo.json for your workflow.",
+            "  2. Run 'rx list' and then 'rx build' (or your configured command).",
+        };
+
+        return CommandResult.Ok("init", string.Join(Environment.NewLine, lines));
+    }
+
+    private static string DetectTemplate(string workingDir)
+    {
+        if (Directory.EnumerateFiles(workingDir, "*.sln", SearchOption.TopDirectoryOnly).Any() ||
+            Directory.EnumerateFiles(workingDir, "*.csproj", SearchOption.AllDirectories).Any())
+        {
+            return "dotnet";
+        }
+
+        if (File.Exists(Path.Combine(workingDir, "package.json")))
+        {
+            return "node";
+        }
+
+        return "generic";
+    }
+
+    private static string? NormalizeLocation(string value)
+    {
+        if (value.Equals(".rexo", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("rexo", StringComparison.OrdinalIgnoreCase))
+        {
+            return ".rexo";
+        }
+
+        if (value.Equals("root", StringComparison.OrdinalIgnoreCase))
+        {
+            return "root";
+        }
+
+        return null;
+    }
+
+    private static string? NormalizeTemplate(string value)
+    {
+        var known = new[] { "dotnet", "node", "generic" };
+        return known.Contains(value, StringComparer.OrdinalIgnoreCase)
+            ? value.ToLowerInvariant()
+            : null;
+    }
+
+    private static bool IsTrue(IReadOnlyDictionary<string, string?> options, string key)
+    {
+        if (!options.TryGetValue(key, out var value)) return false;
+        return string.IsNullOrEmpty(value) ||
+               value.Equals("true", StringComparison.OrdinalIgnoreCase) ||
+               value.Equals("1", StringComparison.OrdinalIgnoreCase) ||
+               value.Equals("yes", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? ReadOption(IReadOnlyDictionary<string, string?> options, string key) =>
+        options.TryGetValue(key, out var value) ? value : null;
+
+    private static string PromptChoice(string prompt, IReadOnlyList<string> choices, string defaultChoice)
+    {
+        Console.WriteLine(prompt);
+        Console.WriteLine($"  Choices: {string.Join(", ", choices)}");
+        Console.Write($"  [{defaultChoice}] > ");
+        var input = Console.ReadLine()?.Trim();
+
+        if (string.IsNullOrEmpty(input))
+        {
+            return defaultChoice;
+        }
+
+        var match = choices.FirstOrDefault(c => c.Equals(input, StringComparison.OrdinalIgnoreCase));
+        return match ?? defaultChoice;
+    }
+
+    private static string BuildStarterConfigJson(string repoName, string template)
+    {
+        object commands = template switch
+        {
+            "dotnet" => new Dictionary<string, object>
+            {
+                ["build"] = new
+                {
+                    description = "Build the solution",
+                    options = new Dictionary<string, object>(),
+                    steps = new object[]
+                    {
+                        new { id = "restore", run = "dotnet restore" },
+                        new { id = "build", run = "dotnet build -c Release --no-restore" },
+                    },
+                },
+                ["test"] = new
+                {
+                    description = "Run tests",
+                    options = new Dictionary<string, object>(),
+                    steps = new object[]
+                    {
+                        new { run = "dotnet test -c Release --no-build" },
+                    },
+                },
+            },
+            "node" => new Dictionary<string, object>
+            {
+                ["build"] = new
+                {
+                    description = "Install and build",
+                    options = new Dictionary<string, object>(),
+                    steps = new object[]
+                    {
+                        new { run = "npm ci" },
+                        new { run = "npm run build" },
+                    },
+                },
+                ["test"] = new
+                {
+                    description = "Run tests",
+                    options = new Dictionary<string, object>(),
+                    steps = new object[]
+                    {
+                        new { run = "npm test" },
+                    },
+                },
+            },
+            _ => new Dictionary<string, object>
+            {
+                ["build"] = new
+                {
+                    description = "Starter build command",
+                    options = new Dictionary<string, object>(),
+                    steps = new object[]
+                    {
+                        new { run = "echo TODO: replace with real build command" },
+                    },
+                },
+            },
+        };
+
+        var doc = new Dictionary<string, object?>
+        {
+            ["$schema"] = "schemas/1.0/schema.json",
+            ["schemaVersion"] = "1.0",
+            ["name"] = string.IsNullOrWhiteSpace(repoName) ? "my-repo" : repoName,
+            ["description"] = "Generated by rx init",
+            ["commands"] = commands,
+            ["aliases"] = new Dictionary<string, string>(),
+        };
+
+        return JsonSerializer.Serialize(doc, IndentedJsonOptions);
     }
 }
 

@@ -208,3 +208,4 @@ Items expected in MVP (per scope section 56) and status:
 - [x] Secret masking/redaction in logs and outputs
 - [x] Not-found command suggestion engine
 - [x] Add focused tests for merge/policy/parallel/manifest edge cases (80 tests total)
+- [ ] Smarter `rx init` repo introspection (language/framework detection, richer templates, policy template recommendations)

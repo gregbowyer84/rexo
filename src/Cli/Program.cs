@@ -50,6 +50,7 @@ public static class Program
         {
             "version" => await RunBuiltinAsync(executor, "version", EmptyInvocation(workingDir, json, jsonFile), verbose, quiet, cancellationToken),
             "doctor" => await RunBuiltinAsync(executor, "doctor", EmptyInvocation(workingDir, json, jsonFile), verbose, quiet, cancellationToken),
+            "init" => await RunInitBuiltinAsync(executor, cleanArgs, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
             "list" => await RunBuiltinAsync(executor, "list", EmptyInvocation(workingDir, json, jsonFile), verbose, quiet, cancellationToken),
             "explain" => await RunExplainAsync(executor, cleanArgs, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
             "config" => await RunConfigSubcommandAsync(cleanArgs, executor, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
@@ -103,7 +104,7 @@ public static class Program
             configLoader.LoadInto(registry, config, workingDir, executor);
 
             // Load policy from workingDir if present — check policy.json and policy.yaml
-            // Policy commands have lower priority than repo.json commands.
+            // Policy commands have lower priority than rexo config commands.
             var policyPath = ConfigFileLocator.FindPolicyPath(workingDir);
             if (policyPath is not null)
             {
@@ -205,7 +206,7 @@ public static class Program
 
         // Fall back to built-in list if no config commands
         if (commandNames.Count == 0)
-            commandNames.AddRange(["version", "list", "doctor", "config resolved", "config sources"]);
+            commandNames.AddRange(["version", "list", "doctor", "init", "config resolved", "config sources"]);
 
         string? selected;
 
@@ -289,6 +290,24 @@ public static class Program
         }
 
         return exitCode;
+    }
+
+    private static async Task<int> RunInitBuiltinAsync(
+        DefaultCommandExecutor executor,
+        IReadOnlyList<string> args,
+        string workingDir,
+        bool json,
+        string? jsonFile,
+        bool verbose,
+        bool quiet,
+        CancellationToken cancellationToken)
+    {
+        var remainingArgs = args.Skip(1).ToList();
+        var (parsedArgs, parsedOptions) = ParseArgsAndOptions(remainingArgs);
+        var invocation = new CommandInvocation(parsedArgs, parsedOptions, json, jsonFile, workingDir);
+
+        var result = await executor.ExecuteAsync("init", invocation, cancellationToken);
+        return await WriteResultAsync(result, invocation, verbose, quiet, cancellationToken);
     }
 
     private static async Task<int> RunDirectAsync(
@@ -404,12 +423,12 @@ public static class Program
         var manifestPath = jsonFile.Replace(".json", "-manifest.json", StringComparison.OrdinalIgnoreCase);
         if (manifestPath == jsonFile) manifestPath = jsonFile + ".manifest.json";
 
-        // Compute SHA-256 of repo.json content for traceability
+        // Compute SHA-256 of resolved config content for traceability
         string? configHash = null;
-        var repoJsonPath = Path.Combine(workingDir, "repo.json");
-        if (File.Exists(repoJsonPath))
+        var configPath = ConfigFileLocator.FindConfigPath(workingDir);
+        if (configPath is not null)
         {
-            var configBytes = await File.ReadAllBytesAsync(repoJsonPath, cancellationToken);
+            var configBytes = await File.ReadAllBytesAsync(configPath, cancellationToken);
             var hashBytes = System.Security.Cryptography.SHA256.HashData(configBytes);
             configHash = Convert.ToHexString(hashBytes).ToLowerInvariant();
         }
@@ -550,6 +569,13 @@ public static class Program
         Console.WriteLine("  list                 List all available commands");
         Console.WriteLine("  explain <command>    Explain a command");
         Console.WriteLine("  doctor               Check environment and configuration");
+        Console.WriteLine("  init                 Create a starter rexo config");
+        Console.WriteLine("      --yes            Non-interactive defaults");
+        Console.WriteLine("      --location       .rexo (default) or root");
+        Console.WriteLine("      --template       auto|dotnet|node|generic");
+        Console.WriteLine("      --with-policy    Also create policy.json from a template");
+        Console.WriteLine("      --policy-template standard|dotnet (or any embedded template)");
+        Console.WriteLine("      --force          Overwrite existing config");
         Console.WriteLine("  run <command>        Run a configured command");
         Console.WriteLine("  ui                   Open the interactive UI");
         Console.WriteLine("  help                 Show this help");

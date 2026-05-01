@@ -30,7 +30,7 @@ public sealed record RunManifest
     public IReadOnlyList<string> Warnings { get; init; } = Array.Empty<string>();
     public IReadOnlyList<string> Errors { get; init; } = Array.Empty<string>();
 
-    /// <summary>SHA-256 hash of the resolved repo.json content at run time.</summary>
+    /// <summary>SHA-256 hash of the resolved rexo config content at run time.</summary>
     public string? ConfigHash { get; init; }
 
     /// <summary>Assembly version derived from the resolved version.</summary>

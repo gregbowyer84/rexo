@@ -113,6 +113,9 @@ jobs:
           files: artifacts/packages/*.nupkg
 
       - name: Publish to GitHub Packages
+        env:
+          NUGET_ORG_USER: ${{ secrets.NUGET_ORG_USER }}
+        if: ${{ env.NUGET_ORG_USER == '' }}
         run: dotnet nuget push "artifacts/packages/*.nupkg" --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" --api-key "${{ secrets.GITHUB_TOKEN }}" --skip-duplicate
 
       - name: NuGet login (OIDC -> temporary API key)

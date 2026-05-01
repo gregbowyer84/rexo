@@ -10,7 +10,11 @@
   </ItemGroup>
   <PropertyGroup>
     <OutputType>Exe</OutputType>
+    <PackageReadmeFile>PACKAGE_README.md</PackageReadmeFile>
   </PropertyGroup>
+  <ItemGroup>
+    <None Include="PACKAGE_README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="System.CommandLine" />
     <PackageReference Include="Spectre.Console" />
