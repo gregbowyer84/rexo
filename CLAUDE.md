@@ -30,9 +30,8 @@ Build must be clean: **0 errors, 0 warnings**. Tests must all pass before commit
 ## Critical conventions
 
 1. **`src/Core/` has zero project references** — never add a `<ProjectReference>` here.
-2. **Namespace prefix in source files is `Orbit.*`** even though the product is named
-   "Rexo" (assembly names are `Rexo.*`). Follow the namespace that already exists in a
-   file when adding new types.
+2. **Namespace prefix in source files is `Rexo.*`** (e.g. `namespace Rexo.Cli;`).
+   Follow the namespace that already exists in a file when adding new types.
 3. **CancellationToken** must be threaded through every async method.
 4. **`int.ToString()`** must always pass `CultureInfo.InvariantCulture`.
 5. **No inline constant arrays** (`new[] { ... }`) inside methods called in a loop —

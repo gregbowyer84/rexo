@@ -35,10 +35,11 @@ dotnet build solution.slnx -c Release && dotnet test solution.slnx -c Release --
 
 | Rule | Detail |
 |------|--------|
-| Namespaces | Source files use `Orbit.*` prefix (e.g. `namespace Orbit.Cli;`) even though assembly names derive as `Rexo.*`. Match the namespace already used in the file. |
+| Namespaces | Source files use `Rexo.*` prefix (e.g. `namespace Rexo.Cli;`). Match the namespace already used in the file. |
 | CancellationToken | Thread through every async method — never pass `CancellationToken.None` except at the outermost call site |
 | `int.ToString()` | Always pass `CultureInfo.InvariantCulture` |
 | Constant arrays | Never `new[] { ... }` inside a method called in a loop — use `static readonly` |
+| `JsonSerializerOptions` | Cache as `static readonly` fields — never instantiate inline in hot paths (CA1869) |
 | `IReadOnlyList<T>` | Use `.Count`, not `.Length` |
 | NuGet packages | Add version to `Directory.Packages.props`; reference in `.csproj` without a version |
 | `Core` project | Never add a `<ProjectReference>` to `src/Core/Core.csproj` — it must have zero project dependencies |
@@ -59,9 +60,9 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full layer diagram and dependency
 
 1. Create a class in `src/Versioning/` implementing `IVersionProvider` (from `Core`):
    ```csharp
-   namespace Orbit.Versioning;
-   using Orbit.Core.Abstractions;
-   using Orbit.Core.Models;
+   namespace Rexo.Versioning;
+   using Rexo.Core.Abstractions;
+   using Rexo.Core.Models;
 
    public sealed class MyVersionProvider : IVersionProvider
    {
@@ -95,12 +96,16 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full layer diagram and dependency
 
 Built-in primitives are step types used as `uses: builtin:my-primitive`.
 
-1. Add a method to `BuiltinRegistry` in `src/Execution/`:
+1. In `ConfigCommandLoader.RegisterBuiltins` (or the `LoadInto` method body), call:
    ```csharp
-   public async Task<StepResult> MyPrimitiveAsync(
-       ExecutionContext context, StepDefinition step, CancellationToken ct) { ... }
+   _builtinRegistry.Register("builtin:my-primitive", async (step, ctx, ct) =>
+   {
+       // implementation
+       return new StepResult(step.Id ?? "my-primitive", true, 0, TimeSpan.Zero,
+           new Dictionary<string, object?> { ["message"] = "Done." });
+   });
    ```
-2. Register in `BuiltinCommandRegistration.CreateDefault` or `BuiltinRegistry.Register`.
+2. Document the new primitive in `docs/CONFIGURATION.md`.
 
 ---
 
@@ -132,8 +137,8 @@ Test projects live in `tests/`:
 | Project | What it covers |
 |---------|---------------|
 | `Core.Tests` | Domain model unit tests |
-| `Configuration.Tests` | `RepoConfigurationLoader` — happy path, missing schema, bad version, NJsonSchema failures |
-| `Execution.Tests` | `DefaultCommandExecutor`, `TemplateRenderer` (10 cases), `BuiltinCommandRegistration` (5 cases) |
+| `Configuration.Tests` | `RepoConfigurationLoader` — happy path, missing schema, bad version, NJsonSchema failures, `extends` merge, circular detection |
+| `Execution.Tests` | `DefaultCommandExecutor`, `TemplateRenderer` (10 cases), `BuiltinCommandRegistration` (5 cases), config commands, step model |
 | `Integration.Tests` | Smoke: `rx version` exits 0 |
 
 Run a specific test project:

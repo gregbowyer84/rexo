@@ -98,11 +98,10 @@ docs/
 - Project folders are **plain names**: `Cli/`, `Core/`, `Configuration/`, etc.
 - `AssemblyName` auto-derives as `Rexo.<FolderName>` (e.g. `Rexo.Cli`)
 - `RootNamespace` auto-derives as `Rexo.<FolderName>` (e.g. `Rexo.Cli`)
-- **IMPORTANT**: Source file namespaces currently use the `Orbit.*` prefix
-  (e.g. `namespace Orbit.Cli;`). This is a known inconsistency — the build property
-  derives to `Rexo.*` but existing code was written before the rename and hasn't been
-  updated. Do not "fix" this without explicit instruction; keep new code consistent with
-  the file it lives in.
+- **IMPORTANT**: Source file namespaces use the `Rexo.*` prefix
+  (e.g. `namespace Rexo.Cli;`), matching the `Rexo.<FolderName>` assembly names
+  derived by `Directory.Build.props`. New files should match the namespace already
+  used in the target project.
 
 ### Test projects
 

@@ -34,8 +34,9 @@ execution engine. See [scope.md](scope.md) for the full product specification an
 ┌────────▼──┐ ┌──────▼──┐ ┌────▼────┐ ┌───▼──────────┐
 │Versioning │ │Artifacts│ │Verific. │ │  Analysis    │
 │fixed/env/ │ │docker/  │ │dotnet   │ │  dotnet fmt  │
-│gitversion │ │nuget    │ │test     │ │  build check │
-└───────────┘ └─────────┘ └─────────┘ └──────────────┘
+│gitversion/│ │nuget    │ │test +   │ │  build check │
+│minver/nbgv│ └─────────┘ │coverage │ └──────────────┘
+└───────────┘             └─────────┘
                      │
 ┌────────────────────▼────────────────────────────────┐
 │  Core  (src/Core)  — zero project references        │
@@ -64,20 +65,25 @@ rx branch feature my-change
         │
         ▼
 Program.ExecuteAsync
-  1. Parse global flags (--json, --json-file, --verbose)
+  1. Parse global flags (--json, --json-file, --verbose, --debug, --quiet/-q)
   2. Load repo.json → RepoConfigurationLoader
        a. Validate $schema + schemaVersion metadata
        b. NJsonSchema validation against schemas/1.0/schema.json
        c. JsonSerializer.Deserialize<RepoConfig>
+       d. Resolve `extends` chain (breadth-first merge, child wins, circular detection)
   3. Build service graph (BuildServicesAsync)
-       a. BuiltinCommandRegistration.CreateDefault(config)
+       a. BuiltinCommandRegistration.CreateDefault(config, configPath)
        b. ConfigCommandLoader.LoadInto(registry, config, ...)
   4. Multi-word resolve: "branch feature" → command, "my-change" → arg
   5. DefaultCommandExecutor.ExecuteAsync("branch feature", invocation)
        a. CommandRegistry lookup → ICommandHandler
-       b. StepExecutor: run each StepDefinition in sequence
+       b. StepExecutor: run step groups (sequential or parallel)
+            - Consecutive `parallel: true` steps run via Task.WhenAll
             - "run" steps: ShellRunner.RunAsync (template-expanded shell cmd)
+              · stdout captured via outputPattern (regex named groups)
+              · stdout written to outputFile if configured
             - "uses" steps: BuiltinRegistry.DispatchAsync
+            - "command" steps: recursive executor dispatch
             - "command" steps: recursive executor dispatch
        c. ExecutionContext accumulates step outputs + VersionResult
   6. CommandResult → ConsoleRenderer (rich or JSON)
@@ -102,11 +108,11 @@ ensuring no circular deps and making the domain model independently testable.
 
 Project folder names are plain (`Cli/`, `Core/`); MSBuild derives full names.
 
-### Namespace inconsistency (known, intentional to fix later)
+### Namespace
 
-Source files use `Orbit.*` namespaces (historical), while assembly/RootNamespace derive
-as `Rexo.*`. Both refer to the same code. New files should match the namespace already
-used in the same project.
+Source files use `Rexo.*` namespaces matching the `Rexo.<FolderName>` assembly names
+derived by `Directory.Build.props`. New files should match the namespace already used in
+the target project.
 
 ### Schema versioning
 
@@ -152,7 +158,8 @@ Core ─────────────────────────
 |---|---|---|
 | A new version provider | `IVersionProvider` | `VersionProviderRegistry.CreateDefault()` |
 | A new artifact type | `IArtifactProvider` | `Program.BuildServicesAsync` |
-| A new built-in primitive | Method in `BuiltinRegistry` | `BuiltinCommandRegistration.CreateDefault` |
+| A new built-in primitive | lambda in `ConfigCommandLoader.RegisterBuiltins` | `_builtinRegistry.Register("builtin:name", ...)` |
+| A new built-in CLI command | method in `BuiltinCommandRegistration` | `registry.Register("name", ...)` |
 | A new policy source | `IPolicySource` | (future — not wired yet) |
 
 See [todo.md](todo.md) for the current implementation backlog.

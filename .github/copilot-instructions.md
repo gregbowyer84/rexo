@@ -18,9 +18,8 @@ dotnet test solution.slnx -c Release --no-build
 ## Key conventions
 
 - **Zero warnings**: `TreatWarningsAsErrors=true` — every CA/CS analyzer warning is an error
-- **Namespace prefix**: Source files use `Orbit.*` namespace prefix (e.g. `namespace Orbit.Cli;`)
-  even though the product is named Rexo and assembly names derive as `Rexo.*`. Keep new
-  files consistent with the file's existing namespace prefix.
+- **Namespace prefix**: Source files use `Rexo.*` namespace prefix (e.g. `namespace Rexo.Cli;`).
+  Keep new files consistent with the file's existing namespace prefix.
 - **Central NuGet versions**: Add new packages to `Directory.Packages.props` without a version
   in the `.csproj` (central package management is enabled)
 - **Core has zero deps**: `src/Core/` must never take a project reference — all abstractions
