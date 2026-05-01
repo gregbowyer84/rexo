@@ -271,6 +271,29 @@ Use as `uses: builtin:<name>` in a step:
 | `rx config resolved` | Print the effective merged `repo.json` as JSON |
 | `rx config sources` | Show config file path and load status |
 
+### Config Inspection Reference
+
+Use these commands to inspect exactly what Rexo loaded and what it will execute:
+
+| Command | What you get |
+| --- | --- |
+| `rx config sources` | Source file path(s) and load status for config resolution |
+| `rx config resolved` | Final merged config JSON after `extends`, policy, and overlays |
+| `rx run config materialize` | Writes provider files like `GitVersion.yml` when missing |
+
+Examples:
+
+```bash
+# Show where configuration came from
+rx config sources
+
+# Inspect final merged configuration
+rx config resolved --json
+
+# Write provider files that are required by configured tooling
+rx run config materialize
+```
+
 ## Global Flags
 
 | Flag | Effect |
