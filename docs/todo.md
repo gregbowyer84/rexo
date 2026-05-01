@@ -123,7 +123,7 @@ Legend:
 - [x] Run manifest model exists
 - [x] Manifest writing path exists for run invocations
 - [~] Manifest content is partial versus scope (PushDecisions/Artifacts not yet flowed from step results; Branch/CommitSha/RemoteUrl/RepoName/Errors now populated)
-- [ ] Stable versioned JSON schema contract documentation
+- [x] Stable versioned JSON schema contract documentation (`schemas/1.0/README.md`)
 
 ## 12) Policy and Template Sources
 
