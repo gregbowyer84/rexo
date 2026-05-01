@@ -326,23 +326,27 @@ These fields are all available in templates as `{{version.<field>}}` after `buil
 The following features are defined in the product scope but not yet implemented:
 
 ### Policy Sources
+
 - Only **local file** policy sources are supported (`policy.json` alongside `repo.json`, or files in `.repo/`).
 - **Remote policy sources** (HTTP, Git, NuGet package) are not yet implemented.
 - **Policy caching, version pinning, and trust models** are not yet implemented.
 
 ### Parallel Step Execution
+
 - Basic parallel step execution works via the `parallel: true` flag on steps, with a `maxParallel` concurrency cap.
 - **Advanced fan-in and dependency declarations** between parallel groups are not yet implemented.
 
 ### Run Manifest
+
 - The run manifest (written via `--json-file`) includes steps, version, CI context, git context, and errors.
 - **Push decisions and artifact entries** are not yet propagated from step execution into the run manifest (the artifact manifest file `artifacts/manifest.json` is still written separately by `builtin:push-artifacts`).
 
 ### Config Inspection Commands
+
 - `rx config resolved` and `rx config sources` are registered but display basic output only.
 - `rx config materialize` writes provider config files (e.g. `GitVersion.yml`) but does not yet have a rich interactive UI.
 
 ### UI and Interactive Features
+
 - No TUI (terminal user interface) project picker or interactive workflow is implemented yet.
 - The rich command picker (`rx` with no arguments) shows a list but does not support keyboard navigation.
-

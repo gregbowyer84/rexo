@@ -176,7 +176,7 @@ branches:
   # Example: feature/auth/login-with2fa -> 1.1.9-f-auth-login-with2fa.1
   feature:
     regex: ^feature\/(?<BranchName>.+)$
-    label: f-{BranchName}
+    label: 'f-{BranchName}'
     increment: Patch
 
   # General work branches.

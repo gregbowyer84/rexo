@@ -5,6 +5,7 @@ Last updated: 2026-05-02
 This checklist maps the current implementation against the project scope in `docs/scope.md`.
 
 Legend:
+
 - [x] Done
 - [ ] Not done
 - [~] Partial / implemented in basic form only

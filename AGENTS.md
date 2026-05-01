@@ -8,7 +8,7 @@ Codex, etc.) to continue work on this repository without re-reading conversation
 ## Project Identity
 
 | Property | Value |
-|----------|-------|
+| ---------- | ------- |
 | Product name | **Rexo** |
 | CLI command | **`rx`** |
 | Repository | `nrth/repoOS` |
@@ -41,7 +41,7 @@ All 23+ tests must pass before any PR can be merged.
 
 ## Repository Layout
 
-```
+```text
 solution.slnx               # Solution file (slnx format)
 Directory.Build.props       # Central build conventions + branding
 Directory.Build.targets     # Shared MSBuild targets
@@ -130,6 +130,7 @@ Every `repo.json` must start with:
 ```
 
 Alternative `$schema` values accepted:
+
 - Remote canonical URL (once the repository is published)
 - `schemas/1.0/schema.json`
 - `./schemas/1.0/schema.json`
@@ -148,7 +149,7 @@ validation time, so the schema must be distributed alongside `repo.json`.
 
 ## Execution Model
 
-```
+```text
 CLI args
   → Program.cs (global flag parse, multi-word command resolve)
   → DefaultCommandExecutor.ExecuteAsync(commandName, invocation)
@@ -174,7 +175,7 @@ Given args `branch feature my-change`, the CLI tries longest prefix first:
 ### Built-in primitives (`uses:` step type)
 
 | Primitive | Purpose |
-|-----------|---------|
+| ----------- | --------- |
 | `builtin:validate` | Config validation |
 | `builtin:resolve-version` | Run version provider, set `context.Version` |
 | `builtin:test` | `dotnet test` via `DotnetTestRunner` |
@@ -189,6 +190,7 @@ Given args `branch feature my-change`, the CLI tries longest prefix first:
 Variables in step `run` strings: `{{context.path}}`
 
 Available context paths:
+
 - `args.<name>` — positional/named args from CLI
 - `options.<name>` — option flags from CLI
 - `env.<VARIABLE>` — environment variables
@@ -204,7 +206,7 @@ Filters (pipe syntax): `{{value | slug}}`, `{{value | upper}}`, `{{value | lower
 ## Version Providers
 
 | Provider key | Class | Notes |
-|---|---|---|
+| --- | --- | --- |
 | `fixed` | `FixedVersionProvider` | Returns static version string from config |
 | `env` | `EnvVersionProvider` | Reads env var, falls back to config fallback |
 | `gitversion` | `GitVersionVersionProvider` | Runs `gitversion /output json`, parses SemVer 2.0 |
@@ -214,7 +216,7 @@ Filters (pipe syntax): `{{value | slug}}`, `{{value | upper}}`, `{{value | lower
 ## Artifact Providers
 
 | Provider key | Class | Notes |
-|---|---|---|
+| --- | --- | --- |
 | `docker` | `DockerArtifactProvider` | `docker build`, `docker tag`, `docker push` |
 | `nuget` | `NuGetArtifactProvider` | `dotnet pack`, `dotnet nuget push` |
 
@@ -264,7 +266,7 @@ See `docs/todo.md` for the full checklist. Key gaps:
 ## Where to Look First
 
 | Question | File |
-|---|---|
+| --- | --- |
 | Full product scope & design decisions | `docs/scope.md` |
 | What's done vs what's pending | `docs/todo.md` |
 | Config model structure | `src/Configuration/Models/` |

@@ -75,7 +75,7 @@ See `docs/todo.md` for the complete checklist. Working today:
 ## Key files
 
 | File | Purpose |
-|------|---------|
+| ------ | --------- |
 | `AGENTS.md` | Full technical reference for AI agents |
 | `docs/scope.md` | Complete product scope (source of truth) |
 | `docs/todo.md` | Implementation checklist |
