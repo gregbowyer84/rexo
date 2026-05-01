@@ -102,6 +102,52 @@ public sealed class InitCommandTests
             Assert.True(File.Exists(policyPath));
             var content = await File.ReadAllTextAsync(policyPath);
             Assert.Contains("dotnet-policy", content, StringComparison.Ordinal);
+            Assert.Contains("\"ci\":", content, StringComparison.Ordinal);
+            Assert.Contains("\"release\":", content, StringComparison.Ordinal);
+            Assert.Contains("\"build\": \"ci\"", content, StringComparison.Ordinal);
+            Assert.Contains("\"publish\": \"release\"", content, StringComparison.Ordinal);
+
+            var configPath = Path.Combine(dir, ".rexo", "rexo.json");
+            var configContent = await File.ReadAllTextAsync(configPath);
+            Assert.DoesNotContain("\"build\":", configContent, StringComparison.Ordinal);
+            Assert.Contains("\"local build\":", configContent, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public async Task InitWithStandardPolicyRenamesCollidingStarterBuildCommand()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"rexo-init-standard-policy-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+
+        try
+        {
+            var registry = BuiltinCommandRegistration.CreateDefault();
+            var executor = new DefaultCommandExecutor(registry);
+
+            var invocation = new CommandInvocation(
+                new Dictionary<string, string>(),
+                new Dictionary<string, string?>
+                {
+                    ["yes"] = "true",
+                    ["with-policy"] = "true",
+                    ["policy-template"] = "standard",
+                },
+                Json: false,
+                JsonFile: null,
+                WorkingDirectory: dir);
+
+            var result = await executor.ExecuteAsync("init", invocation, CancellationToken.None);
+
+            Assert.True(result.Success);
+            var configPath = Path.Combine(dir, ".rexo", "rexo.json");
+            var content = await File.ReadAllTextAsync(configPath);
+            Assert.DoesNotContain("\"build\":", content, StringComparison.Ordinal);
+            Assert.Contains("\"local build\":", content, StringComparison.Ordinal);
         }
         finally
         {
@@ -277,7 +323,7 @@ public sealed class InitCommandTests
             Assert.True(File.Exists(configPath));
             Assert.False(File.Exists(schemaPath));
             var content = await File.ReadAllTextAsync(configPath);
-            Assert.Contains("\"$schema\": \"https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json\"", content, StringComparison.Ordinal);
+            Assert.Contains("\"$schema\": \"https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json\"", content, StringComparison.Ordinal);
         }
         finally
         {

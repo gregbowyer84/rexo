@@ -169,6 +169,151 @@ public sealed class DockerArtifactProviderTests
         Assert.False(result.Success);
     }
 
+    [Fact]
+    public async Task BuildAsyncUsesTargetFromRexoDotEnv()
+    {
+        var repoRoot = Path.Combine(Path.GetTempPath(), $"rexo-docker-env-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(repoRoot, ".rexo"));
+        await File.WriteAllTextAsync(Path.Combine(repoRoot, ".rexo", ".env"),
+            "DOCKER_TARGET_REGISTRY=ghcr.io\nDOCKER_TARGET_REPOSITORY=acme/service\n");
+
+        try
+        {
+            var invocations = new List<DockerInvocation>();
+            var provider = new DockerArtifactProvider(
+                runDockerAsync: (args, workingDirectory, envOverrides, standardInput, cancellationToken) =>
+                {
+                    invocations.Add(new DockerInvocation(args.ToArray(), envOverrides, standardInput));
+                    return Task.FromResult((0, string.Empty));
+                },
+                isBuildxAvailableAsync: (_, _, _) => Task.FromResult(true));
+
+            var artifact = new ArtifactConfig(
+                "docker",
+                "fallback-name",
+                JsonSerializer.Deserialize<Dictionary<string, JsonElement>>("{}")!);
+
+            var context = ExecutionContext.Empty(repoRoot) with
+            {
+                Version = new VersionResult("1.2.3", 1, 2, 3, null, "abcdef123456", "abcdef", false, true)
+                {
+                    DockerVersion = "1.2.3",
+                },
+            };
+
+            var result = await provider.BuildAsync(artifact, context, CancellationToken.None);
+
+            Assert.True(result.Success);
+            Assert.Single(invocations);
+            Assert.Contains("ghcr.io/acme/service:1.2.3", invocations[0].Arguments);
+        }
+        finally
+        {
+            if (Directory.Exists(repoRoot))
+            {
+                Directory.Delete(repoRoot, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task TagAsyncUsesTargetFromRexoDotEnv()
+    {
+        var repoRoot = Path.Combine(Path.GetTempPath(), $"rexo-docker-tag-env-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(repoRoot, ".rexo"));
+        await File.WriteAllTextAsync(Path.Combine(repoRoot, ".rexo", ".env"),
+            "DOCKER_TARGET_REGISTRY=ghcr.io\nDOCKER_TARGET_REPOSITORY=acme/service\n");
+
+        try
+        {
+            var invocations = new List<DockerInvocation>();
+            var provider = new DockerArtifactProvider(
+                runDockerAsync: (args, workingDirectory, envOverrides, standardInput, cancellationToken) =>
+                {
+                    invocations.Add(new DockerInvocation(args.ToArray(), envOverrides, standardInput));
+                    return Task.FromResult((0, string.Empty));
+                },
+                isBuildxAvailableAsync: (_, _, _) => Task.FromResult(true));
+
+            var artifact = new ArtifactConfig(
+                "docker",
+                "fallback-name",
+                JsonSerializer.Deserialize<Dictionary<string, JsonElement>>("{}")!);
+
+            var context = ExecutionContext.Empty(repoRoot) with
+            {
+                Version = new VersionResult("1.2.3", 1, 2, 3, null, "abcdef123456", "abcdef", false, true)
+                {
+                    DockerVersion = "1.2.3",
+                },
+            };
+
+            var result = await provider.TagAsync(artifact, context, CancellationToken.None);
+
+            Assert.True(result.Success);
+            Assert.Equal(2, invocations.Count);
+            Assert.All(invocations, invocation => Assert.Equal("tag", invocation.Arguments[0]));
+            Assert.All(invocations, invocation => Assert.Equal("ghcr.io/acme/service:1.2.3", invocation.Arguments[1]));
+            Assert.Contains(invocations, invocation => invocation.Arguments[2] == "ghcr.io/acme/service:1.2");
+            Assert.Contains(invocations, invocation => invocation.Arguments[2] == "ghcr.io/acme/service:1");
+        }
+        finally
+        {
+            if (Directory.Exists(repoRoot))
+            {
+                Directory.Delete(repoRoot, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task BuildAsyncNormalizesTargetRegistryWithScheme()
+    {
+        var repoRoot = Path.Combine(Path.GetTempPath(), $"rexo-docker-env-scheme-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(repoRoot, ".rexo"));
+        await File.WriteAllTextAsync(Path.Combine(repoRoot, ".rexo", ".env"),
+            "DOCKER_TARGET_REGISTRY=https://ghcr.io\nDOCKER_TARGET_REPOSITORY=acme/service\n");
+
+        try
+        {
+            var invocations = new List<DockerInvocation>();
+            var provider = new DockerArtifactProvider(
+                runDockerAsync: (args, workingDirectory, envOverrides, standardInput, cancellationToken) =>
+                {
+                    invocations.Add(new DockerInvocation(args.ToArray(), envOverrides, standardInput));
+                    return Task.FromResult((0, string.Empty));
+                },
+                isBuildxAvailableAsync: (_, _, _) => Task.FromResult(true));
+
+            var artifact = new ArtifactConfig(
+                "docker",
+                "fallback-name",
+                JsonSerializer.Deserialize<Dictionary<string, JsonElement>>("{}")!);
+
+            var context = ExecutionContext.Empty(repoRoot) with
+            {
+                Version = new VersionResult("1.2.3", 1, 2, 3, null, "abcdef123456", "abcdef", false, true)
+                {
+                    DockerVersion = "1.2.3",
+                },
+            };
+
+            var result = await provider.BuildAsync(artifact, context, CancellationToken.None);
+
+            Assert.True(result.Success);
+            Assert.Single(invocations);
+            Assert.Contains("ghcr.io/acme/service:1.2.3", invocations[0].Arguments);
+            Assert.DoesNotContain("https://ghcr.io/acme/service:1.2.3", invocations[0].Arguments);
+        }
+        finally
+        {
+            if (Directory.Exists(repoRoot))
+            {
+                Directory.Delete(repoRoot, true);
+            }
+        }
+    }
+
     private sealed record DockerInvocation(
         IReadOnlyList<string> Arguments,
         IReadOnlyDictionary<string, string?>? Environment,

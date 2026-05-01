@@ -66,6 +66,7 @@ public static class Program
         if (debug) Console.WriteLine($"[debug] Loading configuration from {workingDir}");
         // Try load config — check multiple candidate locations in priority order
         RepoConfig? config = null;
+        PolicyConfig? policyConfig = null;
         var configPath = ConfigFileLocator.FindConfigPath(workingDir)
             ?? ConfigFileLocator.GetDefaultConfigPath(workingDir);
         if (File.Exists(configPath))
@@ -81,8 +82,27 @@ public static class Program
             }
         }
 
+        if (config is not null)
+        {
+            var policyPath = ConfigFileLocator.FindPolicyPath(workingDir);
+            if (policyPath is not null)
+            {
+                try
+                {
+                    policyConfig = await RepoConfigurationLoader.LoadPolicyAsync(policyPath, cancellationToken);
+                    if (debug && policyConfig is not null) Console.WriteLine($"[debug] Loaded policy: {policyPath}");
+                }
+                catch (Exception ex)
+                {
+                    if (debug) Console.WriteLine($"[debug] Policy load skipped ({policyPath}): {ex.Message}");
+                }
+            }
+        }
+
+        var effectiveConfig = MergePolicyIntoEffectiveConfig(config, policyConfig);
+
         // Build registry
-        var registry = BuiltinCommandRegistration.CreateDefault(config, File.Exists(configPath) ? configPath : null);
+        var registry = BuiltinCommandRegistration.CreateDefault(effectiveConfig, File.Exists(configPath) ? configPath : null);
         var executor = new DefaultCommandExecutor(registry);
 
         if (config is not null)
@@ -103,29 +123,71 @@ public static class Program
 
             configLoader.LoadInto(registry, config, workingDir, executor);
 
-            // Load policy from workingDir if present — check policy.json and policy.yaml
-            // Policy commands have lower priority than rexo config commands.
-            var policyPath = ConfigFileLocator.FindPolicyPath(workingDir);
-            if (policyPath is not null)
+            if (policyConfig is not null)
             {
-                try
-                {
-                    var policyConfig = await RepoConfigurationLoader.LoadPolicyAsync(policyPath, cancellationToken);
-                    if (policyConfig is not null)
-                    {
-                        configLoader.LoadPolicyCommandsInto(registry, policyConfig, config, workingDir, executor);
-                        if (debug) Console.WriteLine($"[debug] Loaded policy: {policyPath}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    if (debug) Console.WriteLine($"[debug] Policy load skipped ({policyPath}): {ex.Message}");
-                }
+                configLoader.LoadPolicyCommandsInto(registry, policyConfig, config, workingDir, executor);
             }
         }
 
-        return (registry, executor, config);
+        return (registry, executor, effectiveConfig);
     }
+
+    private static RepoConfig? MergePolicyIntoEffectiveConfig(RepoConfig? config, PolicyConfig? policy)
+    {
+        if (config is null)
+        {
+            return null;
+        }
+
+        if (policy is null)
+        {
+            return config;
+        }
+
+        var commands = new Dictionary<string, RepoCommandConfig>(StringComparer.OrdinalIgnoreCase);
+        if (policy.Commands is not null)
+        {
+            foreach (var (name, command) in policy.Commands)
+            {
+                commands[name] = NormalizeCommandConfig(command);
+            }
+        }
+
+        foreach (var (name, command) in config.Commands)
+        {
+            commands[name] = NormalizeCommandConfig(command);
+        }
+
+        var aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (policy.Aliases is not null)
+        {
+            foreach (var (alias, target) in policy.Aliases)
+            {
+                aliases[alias] = target;
+            }
+        }
+
+        foreach (var (alias, target) in config.Aliases)
+        {
+            aliases[alias] = target;
+        }
+
+        return config with
+        {
+            Commands = commands,
+            Aliases = aliases,
+        };
+    }
+
+    private static RepoCommandConfig NormalizeCommandConfig(RepoCommandConfig command) =>
+        new(
+            command.Description,
+            command.Options ?? [],
+            command.Steps ?? [])
+        {
+            Args = command.Args ?? [],
+            MaxParallel = command.MaxParallel,
+        };
 
     private static async Task<int> RunBuiltinAsync(
         DefaultCommandExecutor executor,

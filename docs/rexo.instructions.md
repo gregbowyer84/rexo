@@ -18,8 +18,8 @@ single config file and run identically locally and in CI.
 ## Documentation
 
 - **Full configuration reference**: https://github.com/agile-north/rexo/blob/release/next/docs/CONFIGURATION.md
-- **Rexo schema** (all valid config fields with types): https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json
-- **Policy schema** (all valid policy fields with types): https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/policy.schema.json
+- **Rexo schema** (all valid config fields with types): https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json
+- **Policy schema** (all valid policy fields with types): https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json
 - **Architecture overview**: https://github.com/agile-north/rexo/blob/release/next/docs/ARCHITECTURE.md
 
 ## Quick reference
@@ -28,7 +28,7 @@ single config file and run identically locally and in CI.
 
 ```jsonc
 {
-  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
+  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
   "schemaVersion": "1.0",
   "name": "my-repo",
   "extends": ["./base/rexo.json"],       // optional: inherit from other configs

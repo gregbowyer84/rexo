@@ -72,7 +72,7 @@ Minimal example:
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
+  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
   "schemaVersion": "1.0",
   "name": "my-repo",
   "commands": {
@@ -126,8 +126,8 @@ Policy files are discovered in root, `.rexo/`, and legacy `.repo/` locations.
 | --- | --- |
 | GitHub repository | <https://github.com/agile-north/rexo> |
 | Configuration reference | <https://github.com/agile-north/rexo/blob/release/next/docs/CONFIGURATION.md> |
-| Rexo config schema | <https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json> |
-| Policy schema | <https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/policy.schema.json> |
+| Rexo config schema | <https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json> |
+| Policy schema | <https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json> |
 | Architecture overview | <https://github.com/agile-north/rexo/blob/release/next/docs/ARCHITECTURE.md> |
 | Contributing / dev guide | <https://github.com/agile-north/rexo/blob/release/next/docs/DEVELOPMENT.md> |
 

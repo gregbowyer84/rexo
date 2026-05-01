@@ -16,13 +16,13 @@ Every config file (`rexo.json`/`rexo.yml`) must begin with:
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
+  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
   "schemaVersion": "1.0",
   ...
 }
 ```
 
-- `$schema`: the canonical URL `https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json` (recommended), or the relative `rexo.schema.json` / `../rexo.schema.json` for local-only use
+- `$schema`: the canonical URL `https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json` (recommended), or the relative `rexo.schema.json` / `../rexo.schema.json` for local-only use
 - `schemaVersion`: must be `"1.0"`
 
 The loader validates against the embedded schema (or a local `rexo.schema.json`) via NJsonSchema before
@@ -30,7 +30,7 @@ deserializing. Missing/unsupported metadata or schema violations cause a hard fa
 
 Policy files (`policy.json`/`policy.yml`) follow the same contract, using:
 
-- `$schema`: `https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/policy.schema.json` (recommended), or `policy.schema.json` / `../policy.schema.json`
+- `$schema`: `https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json` (recommended), or `policy.schema.json` / `../policy.schema.json`
 - `schemaVersion`: must be `"1.0"`
 
 When `rx init --schema-source local --with-policy` is used, both schema files are written to `.rexo/`:
@@ -44,7 +44,7 @@ When `rx init --schema-source local --with-policy` is used, both schema files ar
 
 ```jsonc
 {
-  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
+  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
   "schemaVersion": "1.0",
   "name": "my-repo",
   "description": "Optional description",
@@ -238,6 +238,65 @@ The schema now validates Docker settings explicitly. Supported keys:
 | `stages` | `object` | Named stage definitions |
 | `stageFallback` | `bool` | Fallback behavior for stage requests |
 
+### Docker environment variable overrides
+
+The Docker provider supports environment-driven configuration so repositories can keep
+artifact settings minimal.
+
+Resolution order:
+
+1. Process environment variables.
+2. `.rexo/.env` values.
+3. `.env` values in repository root.
+4. Artifact settings from `artifacts[].settings`.
+5. Provider defaults.
+
+Important scope note:
+
+- Docker environment variables are global for the process. If you have multiple Docker
+  artifacts in one run, the same environment values are applied while resolving each
+  artifact.
+
+Image target resolution behavior:
+
+- If `settings.image` is provided, it is used directly.
+- Otherwise image is composed from registry and repository (`DOCKER_TARGET_REGISTRY` +
+  `DOCKER_TARGET_REPOSITORY`, then settings fallbacks).
+
+Supported Docker environment variables:
+
+| Environment variable | Purpose | Overrides / interacts with |
+| --- | --- | --- |
+| `DOCKER_TARGET_REGISTRY` | Target registry host | `settings.target.registry`, `settings.registry` |
+| `DOCKER_TARGET_REPOSITORY` | Target repository name/path | `settings.target.repository`, `settings.repository` |
+| `DOCKERFILE_PATH` | Dockerfile path | `settings.dockerfile`, `settings.file` |
+| `DOCKER_CONTEXT` | Docker build context | `settings.context` |
+| `DOCKER_RUNNER` | Build runner (`build`, `buildx`, `auto`) | `settings.runner` |
+| `DOCKER_PLATFORM` | Build platform value | `settings.platform` |
+| `DOCKER_BUILD_TARGET` | Build target/stage | `settings.buildTarget` |
+| `DOCKER_BUILD_OUTPUT` | Build output flags | `settings.buildOutput` |
+| `DOCKER_BUILD_ARGS` | Build args (string/object syntax) | `settings.buildArgs` |
+| `DOCKER_BUILD_ARGS_FILE` | Path to JSON file containing build args object | `settings.buildArgs` |
+| `DOCKER_SECRETS` | JSON object for BuildKit secrets | `settings.secrets` |
+| `DOCKER_SECRET_<ID>` | Secret env shortcut, one var per secret id | Merged with `DOCKER_SECRETS`/`settings.secrets` |
+| `DOCKER_PUSH_ENABLED` | Enable/disable push (`true`/`false`) | `settings.push.enabled`, `settings.pushEnabled` |
+| `DOCKER_PUSH_BRANCHES` | Delimited branch patterns for push eligibility | `settings.push.branches`, `settings.pushBranches`, `settings.push.branchesShortcut` |
+| `DOCKER_CLEANUP_LOCAL` | Cleanup mode (`true`, `false`, `auto`) | `settings.cleanup.local`, `settings.cleanupLocal` |
+| `DOCKER_TAG_LATEST` | Add `latest` tag (`true`/`false`) | `settings.tags.latest`, `settings.latest` |
+| `DOCKER_LOGIN_USERNAME` | Registry login username | Falls back to `DOCKER_AUTH_USERNAME` |
+| `DOCKER_LOGIN_PASSWORD` | Registry login password/token | Falls back to `DOCKER_AUTH_PASSWORD` |
+| `DOCKER_LOGIN_REGISTRY` | Registry host for login | Falls back to `DOCKER_AUTH_REGISTRY`, then settings/inferred image registry |
+| `DOCKER_AUTH_USERNAME` | Legacy alias for login username | Used if `DOCKER_LOGIN_USERNAME` not set |
+| `DOCKER_AUTH_PASSWORD` | Legacy alias for login password/token | Used if `DOCKER_LOGIN_PASSWORD` not set |
+| `DOCKER_AUTH_REGISTRY` | Legacy alias for login registry | Used if `DOCKER_LOGIN_REGISTRY` not set |
+
+Login behavior:
+
+- Login is attempted when username or password env values are provided.
+- Both username and password must be set together.
+- Login registry is resolved from login env vars, then `settings.loginRegistry`, then
+  inferred from image.
+
 `secrets` shape:
 
 ```jsonc
@@ -367,6 +426,14 @@ A JSON string encoding push policy rules enforced by `builtin:push-artifacts`:
 ---
 
 ## Template Variables
+
+Environment variable source behavior:
+
+- Rexo resolves environment values from process environment first.
+- If a value is not present in process env, Rexo falls back to repository env files:
+  - `.rexo/.env` (higher file precedence)
+  - `.env` (root)
+- This applies to template `{{env.<VAR>}}` lookups and provider environment-driven behavior.
 
 Available in any `run` step string:
 

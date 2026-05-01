@@ -103,10 +103,10 @@ jobs:
             git push origin "$TAG_NAME"
           fi
 
-      - name: Publish schema tag (schema/v<major.minor>, idempotent)
+      - name: Publish schema tag (schema-v<major.minor>, idempotent)
         run: |
           SCHEMA_VERSION=$(jq -r '.properties.schemaVersion.const' rexo.schema.json)
-          SCHEMA_TAG="schema/v${SCHEMA_VERSION}"
+          SCHEMA_TAG="schema-v${SCHEMA_VERSION}"
           git fetch --tags
           if git rev-parse "$SCHEMA_TAG" >/dev/null 2>&1; then
             echo "Schema tag $SCHEMA_TAG already exists; skipping."

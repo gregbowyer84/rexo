@@ -1,5 +1,7 @@
 namespace Rexo.Core.Models;
 
+using Rexo.Core.Environment;
+
 public sealed record ExecutionContext(
     string RepositoryRoot,
     string? Branch,
@@ -20,11 +22,15 @@ public sealed record ExecutionContext(
     public string? CiBuildUrl { get; init; }
     public IReadOnlyDictionary<string, string> Args { get; init; } = new Dictionary<string, string>();
     public IReadOnlyDictionary<string, string?> Options { get; init; } = new Dictionary<string, string?>();
+    public IReadOnlyDictionary<string, string> FileEnvironment { get; init; } = new Dictionary<string, string>(StringComparer.Ordinal);
     public VersionResult? Version { get; init; }
     public IReadOnlyDictionary<string, StepResult> CompletedSteps { get; init; } = new Dictionary<string, StepResult>();
 
     public static ExecutionContext Empty(string repositoryRoot) =>
-        new(repositoryRoot, null, null, new Dictionary<string, object?>());
+        new(repositoryRoot, null, null, new Dictionary<string, object?>())
+        {
+            FileEnvironment = RepositoryEnvironmentFiles.Load(repositoryRoot),
+        };
 
     public ExecutionContext WithStep(StepResult result) =>
         string.IsNullOrEmpty(result.StepId)
@@ -36,5 +42,9 @@ public sealed record ExecutionContext(
 
     public ExecutionContext WithVersion(VersionResult version) =>
         this with { Version = version };
+
+    public string? GetEnvironmentValue(string name) =>
+        System.Environment.GetEnvironmentVariable(name)
+        ?? (FileEnvironment.TryGetValue(name, out var value) ? value : null);
 }
 

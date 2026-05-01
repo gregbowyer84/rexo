@@ -220,6 +220,25 @@ public sealed class StepExecutorWhenConditionTests
             StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task BuiltinStepWithoutExplicitIdUsesGeneratedIdSafely()
+    {
+        var registry = TrackingRegistry(out _);
+        var executor = CreateExecutor(registry);
+
+        var step = new StepDefinition(
+            Id: null,
+            Run: null,
+            Uses: "builtin:noop",
+            Command: null,
+            When: null);
+
+        var result = await executor.ExecuteAsync(step, EmptyContext(), CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal("uses-noop", result.StepId);
+    }
+
     // ──────────────────────────────────────────────────────────────────────────
     // Step with no run/uses/command → failure result
     // ──────────────────────────────────────────────────────────────────────────

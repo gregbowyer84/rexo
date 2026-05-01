@@ -51,6 +51,40 @@ public sealed class VersioningTests
     }
 
     [Fact]
+    public async Task EnvVersionProviderReadsValueFromRexoDotEnv()
+    {
+        const string envVar = "REXO_VERSION_FROM_FILE";
+        var original = Environment.GetEnvironmentVariable(envVar);
+        Environment.SetEnvironmentVariable(envVar, null);
+
+        var dir = Path.Combine(Path.GetTempPath(), $"rexo-version-env-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(dir, ".rexo"));
+
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(dir, ".rexo", ".env"), $"{envVar}=9.8.7\n");
+
+            var provider = new EnvVersionProvider();
+            var config = new VersioningConfig(
+                Provider: "env",
+                Fallback: "0.1.0",
+                Settings: new Dictionary<string, string> { ["variable"] = envVar });
+
+            var result = await provider.ResolveAsync(config, ExecutionContext.Empty(dir), CancellationToken.None);
+
+            Assert.Equal("9.8.7", result.SemVer);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(envVar, original);
+            if (Directory.Exists(dir))
+            {
+                Directory.Delete(dir, true);
+            }
+        }
+    }
+
+    [Fact]
     public void VersionProviderRegistryContainsGitProvider()
     {
         var registry = VersionProviderRegistry.CreateDefault();

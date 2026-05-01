@@ -1,9 +1,75 @@
 {
-  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/policy.schema.json",
+  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json",
   "schemaVersion": "1.0",
   "name": "dotnet-policy",
-  "description": "Policy template for .NET repositories. Adds dotnet-specific commands.",
+  "description": "Policy template for .NET repositories. Adds dotnet-specific commands plus generic artifact lifecycle commands.",
   "commands": {
+    "ci": {
+      "description": "Run the full CI pipeline: validate, test, analyze, and build configured artifacts.",
+      "options": {},
+      "steps": [
+        {
+          "uses": "builtin:validate",
+          "description": "Validate repo.json"
+        },
+        {
+          "uses": "builtin:resolve-version",
+          "description": "Resolve version"
+        },
+        {
+          "uses": "builtin:test",
+          "description": "Run tests"
+        },
+        {
+          "uses": "builtin:analyze",
+          "description": "Run analysis"
+        },
+        {
+          "uses": "builtin:build-artifacts",
+          "description": "Build configured artifacts"
+        }
+      ]
+    },
+    "release": {
+      "description": "Run CI then tag and optionally push configured artifacts.",
+      "options": {
+        "push": {
+          "type": "bool",
+          "default": "false"
+        }
+      },
+      "steps": [
+        {
+          "uses": "builtin:validate",
+          "description": "Validate repo.json"
+        },
+        {
+          "uses": "builtin:resolve-version",
+          "description": "Resolve version"
+        },
+        {
+          "uses": "builtin:test",
+          "description": "Run tests"
+        },
+        {
+          "uses": "builtin:analyze",
+          "description": "Run analysis"
+        },
+        {
+          "uses": "builtin:build-artifacts",
+          "description": "Build configured artifacts"
+        },
+        {
+          "uses": "builtin:tag-artifacts",
+          "description": "Tag artifacts"
+        },
+        {
+          "uses": "builtin:push-artifacts",
+          "description": "Push artifacts",
+          "when": "{{options.push}} == true"
+        }
+      ]
+    },
     "restore": {
       "description": "Restore NuGet packages.",
       "options": {},
@@ -41,6 +107,8 @@
     }
   },
   "aliases": {
+    "build": "ci",
+    "publish": "release",
     "r": "restore",
     "f": "format"
   }

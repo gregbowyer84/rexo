@@ -122,7 +122,7 @@ Every `repo.json` must start with:
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
+  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
   "schemaVersion": "1.0",
   ...
 }
@@ -131,7 +131,7 @@ Every `repo.json` must start with:
 Alternative `$schema` values accepted:
 
 - Remote canonical URL (once the repository is published)
-- `https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json`
+- `https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json`
 - `rexo.schema.json`
 - `./rexo.schema.json`
 

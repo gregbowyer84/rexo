@@ -16,25 +16,25 @@ public sealed class TemplateRenderer : ITemplateRenderer
     {
         var root = BuildContext(context);
         return ExpressionPattern.Replace(templateText, match =>
-            EvaluateExpression(match.Groups[1].Value.Trim(), root));
+            EvaluateExpression(match.Groups[1].Value.Trim(), root, context));
     }
 
-    private static string EvaluateExpression(string expr, Dictionary<string, object?> root)
+    private static string EvaluateExpression(string expr, Dictionary<string, object?> root, ExecutionContext context)
     {
         // Check for equality/inequality expressions before pipe-filter handling
         if (expr.Contains(" == ", StringComparison.Ordinal))
         {
             var idx = expr.IndexOf(" == ", StringComparison.Ordinal);
-            var left = ResolveValue(expr[..idx].Trim(), root);
-            var right = ResolveValue(expr[(idx + 4)..].Trim(), root);
+            var left = ResolveValue(expr[..idx].Trim(), root, context);
+            var right = ResolveValue(expr[(idx + 4)..].Trim(), root, context);
             return string.Equals(left, right, StringComparison.Ordinal) ? "true" : "false";
         }
 
         if (expr.Contains(" != ", StringComparison.Ordinal))
         {
             var idx = expr.IndexOf(" != ", StringComparison.Ordinal);
-            var left = ResolveValue(expr[..idx].Trim(), root);
-            var right = ResolveValue(expr[(idx + 4)..].Trim(), root);
+            var left = ResolveValue(expr[..idx].Trim(), root, context);
+            var right = ResolveValue(expr[(idx + 4)..].Trim(), root, context);
             return !string.Equals(left, right, StringComparison.Ordinal) ? "true" : "false";
         }
 
@@ -66,7 +66,7 @@ public sealed class TemplateRenderer : ITemplateRenderer
             path = expr;
         }
 
-        var value = ResolvePath(path, root);
+        var value = ResolvePath(path, root, context);
         var result = value?.ToString() ?? string.Empty;
 
         return filter?.Trim() switch
@@ -91,11 +91,11 @@ public sealed class TemplateRenderer : ITemplateRenderer
         };
     }
 
-    private static object? ResolvePath(string path, Dictionary<string, object?> root)
+    private static object? ResolvePath(string path, Dictionary<string, object?> root, ExecutionContext context)
     {
         if (path.StartsWith("env.", StringComparison.OrdinalIgnoreCase))
         {
-            return Environment.GetEnvironmentVariable(path[4..]);
+            return context.GetEnvironmentValue(path[4..]);
         }
 
         var parts = path.Split('.');
@@ -120,7 +120,7 @@ public sealed class TemplateRenderer : ITemplateRenderer
     /// Resolves a value that may be a quoted string literal (single or double quotes)
     /// or a context path reference. Returns the string value in either case.
     /// </summary>
-    private static string ResolveValue(string expr, Dictionary<string, object?> root)
+    private static string ResolveValue(string expr, Dictionary<string, object?> root, ExecutionContext context)
     {
         if (expr.Length >= 2 &&
             ((expr[0] == '\'' && expr[^1] == '\'') ||
@@ -129,7 +129,7 @@ public sealed class TemplateRenderer : ITemplateRenderer
             return expr[1..^1];
         }
 
-        return ResolvePath(expr, root)?.ToString() ?? string.Empty;
+        return ResolvePath(expr, root, context)?.ToString() ?? string.Empty;
     }
 
     private static Dictionary<string, object?> BuildContext(ExecutionContext context)

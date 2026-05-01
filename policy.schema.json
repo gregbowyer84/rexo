@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/policy.schema.json",
+  "$id": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json",
   "title": "Rexo policy configuration schema",
   "type": "object",
   "additionalProperties": false,
@@ -15,6 +15,8 @@
     "$schema": {
       "type": "string",
       "enum": [
+        "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json",
+        "https://raw.githubusercontent.com/agile-north/rexo/release/next/policy.schema.json",
         "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/policy.schema.json",
         "policy.schema.json",
         "./policy.schema.json",

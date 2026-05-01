@@ -70,7 +70,7 @@ public sealed class RepoConfigurationLoaderYamlTests
         await File.WriteAllTextAsync(
             policyPath,
             """
-            $schema: https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/policy.schema.json
+            $schema: https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json
             schemaVersion: "1.0"
             name: yaml-policy
             commands:

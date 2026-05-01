@@ -603,7 +603,7 @@ public static class BuiltinCommandRegistration
         var schemaValue = schemaSource.Equals("local", StringComparison.OrdinalIgnoreCase)
             ? RepoConfigurationLoader.SupportedRexoSchemaPath
             : RepoConfigurationLoader.SupportedRexoSchemaUri;
-        var configJson = BuildStarterConfigJson(repoName, template, schemaValue);
+        var configJson = BuildStarterConfigJson(repoName, template, schemaValue, withPolicy ? policyTemplate : null);
 
         string? rexoSchemaPath = null;
         string? policySchemaPath = null;
@@ -746,9 +746,9 @@ public static class BuiltinCommandRegistration
         return match ?? defaultChoice;
     }
 
-    private static string BuildStarterConfigJson(string repoName, string template, string schemaValue)
+    private static string BuildStarterConfigJson(string repoName, string template, string schemaValue, string? policyTemplate)
     {
-        object commands = template switch
+        var commands = template switch
         {
             "dotnet" => new Dictionary<string, object>
             {
@@ -808,6 +808,11 @@ public static class BuiltinCommandRegistration
             },
         };
 
+        if (!string.IsNullOrWhiteSpace(policyTemplate))
+        {
+            commands = RenameCollidingStarterCommands(commands, policyTemplate);
+        }
+
         var doc = new Dictionary<string, object?>
         {
             ["$schema"] = schemaValue,
@@ -819,6 +824,90 @@ public static class BuiltinCommandRegistration
         };
 
         return JsonSerializer.Serialize(doc, IndentedJsonOptions);
+    }
+
+    private static Dictionary<string, object> RenameCollidingStarterCommands(
+        Dictionary<string, object> starterCommands,
+        string policyTemplate)
+    {
+        var reservedNames = GetPolicyReservedNames(policyTemplate);
+        if (reservedNames.Count == 0)
+        {
+            return starterCommands;
+        }
+
+        var result = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (commandName, commandDefinition) in starterCommands)
+        {
+            var effectiveName = commandName;
+            if (reservedNames.Contains(commandName))
+            {
+                effectiveName = GenerateNonConflictingStarterCommandName(commandName, reservedNames, result.Keys);
+            }
+
+            result[effectiveName] = commandDefinition;
+        }
+
+        return result;
+    }
+
+    private static HashSet<string> GetPolicyReservedNames(string policyTemplate)
+    {
+        var reserved = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using var document = JsonDocument.Parse(EmbeddedPolicyTemplates.ReadTemplate(policyTemplate));
+        var root = document.RootElement;
+
+        if (root.TryGetProperty("commands", out var commandsElement) && commandsElement.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in commandsElement.EnumerateObject())
+            {
+                _ = reserved.Add(property.Name);
+            }
+        }
+
+        if (root.TryGetProperty("aliases", out var aliasesElement) && aliasesElement.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in aliasesElement.EnumerateObject())
+            {
+                _ = reserved.Add(property.Name);
+            }
+        }
+
+        return reserved;
+    }
+
+    private static string GenerateNonConflictingStarterCommandName(
+        string commandName,
+        HashSet<string> reservedNames,
+        IEnumerable<string> existingNames)
+    {
+        var existing = new HashSet<string>(existingNames, StringComparer.OrdinalIgnoreCase);
+        var candidates = new[]
+        {
+            $"local {commandName}",
+            $"starter {commandName}",
+            $"repo {commandName}",
+        };
+
+        foreach (var candidate in candidates)
+        {
+            if (!reservedNames.Contains(candidate) && !existing.Contains(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        var suffix = 2;
+        while (true)
+        {
+            var candidate = $"local {commandName} {suffix}";
+            if (!reservedNames.Contains(candidate) && !existing.Contains(candidate))
+            {
+                return candidate;
+            }
+
+            suffix++;
+        }
     }
 
     private static string ApplySchemaMetadata(string jsonText, string schemaValue)

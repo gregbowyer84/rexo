@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using Rexo.Ci;
 using Rexo.Configuration.Models;
 using Rexo.Core.Abstractions;
+using Rexo.Core.Environment;
 using Rexo.Core.Models;
 using Rexo.Versioning;
 
@@ -623,6 +624,7 @@ public sealed class ConfigCommandLoader
         ICommandExecutor commandExecutor,
         CancellationToken cancellationToken)
     {
+        var normalizedCommandConfig = NormalizeCommandConfig(commandConfig);
         var gitInfo = await Git.GitDetector.DetectAsync(repositoryRoot, cancellationToken);
         var ciInfo = CiDetector.Detect();
 
@@ -645,7 +647,8 @@ public sealed class ConfigCommandLoader
             CiTag = ciInfo.Tag,
             CiBuildUrl = ciInfo.BuildUrl,
             Args = invocation.Args,
-            Options = BuildOptionsWithDefaults(invocation.Options, commandConfig),
+            Options = BuildOptionsWithDefaults(invocation.Options, normalizedCommandConfig),
+            FileEnvironment = RepositoryEnvironmentFiles.Load(repositoryRoot),
         };
 
         var stepExecutor = new StepExecutor(commandExecutor, _templateRenderer, _builtinRegistry);
@@ -655,7 +658,7 @@ public sealed class ConfigCommandLoader
         var pushDecisionEntries = new List<Core.Models.PushDecision>();
 
         // Group consecutive parallel steps; sequential steps are singleton groups
-        var stepGroups = GroupSteps(commandConfig.Steps);
+        var stepGroups = GroupSteps(normalizedCommandConfig.Steps);
 
         foreach (var group in stepGroups)
         {
@@ -674,7 +677,7 @@ public sealed class ConfigCommandLoader
                     group,
                     stepExecutor,
                     currentContext,
-                    commandConfig.MaxParallel,
+                    normalizedCommandConfig.MaxParallel,
                     cancellationToken);
             }
 
@@ -1005,7 +1008,7 @@ public sealed class ConfigCommandLoader
     {
         var result = new Dictionary<string, string?>(provided, StringComparer.OrdinalIgnoreCase);
 
-        foreach (var (optName, optConfig) in commandConfig.Options)
+        foreach (var (optName, optConfig) in commandConfig.Options ?? [])
         {
             if (!result.ContainsKey(optName) && optConfig.Default is not null)
             {
@@ -1015,6 +1018,16 @@ public sealed class ConfigCommandLoader
 
         return result;
     }
+
+    private static RepoCommandConfig NormalizeCommandConfig(RepoCommandConfig commandConfig) =>
+        new(
+            commandConfig.Description,
+            commandConfig.Options ?? [],
+            commandConfig.Steps ?? [])
+        {
+            Args = commandConfig.Args ?? [],
+            MaxParallel = commandConfig.MaxParallel,
+        };
 
     private static async Task WriteArtifactManifestAsync(
         string repositoryRoot,

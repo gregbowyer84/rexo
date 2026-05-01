@@ -14,7 +14,7 @@ public sealed class EnvVersionProvider : IVersionProvider
             ? v ?? "VERSION"
             : "VERSION";
 
-        var version = Environment.GetEnvironmentVariable(envVar)
+        var version = context.GetEnvironmentValue(envVar)
             ?? config.Fallback
             ?? "0.1.0-local";
 

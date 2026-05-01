@@ -9,15 +9,21 @@ using YamlDotNet.Serialization;
 public sealed class RepoConfigurationLoader
 {
     public const string SupportedSchemaVersion = "1.0";
-    public const string SupportedRexoSchemaUri = "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json";
+    public const string SupportedRexoSchemaUri = "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json";
+    public const string DeprecatedRexoSchemaUriReleaseBranch = "https://raw.githubusercontent.com/agile-north/rexo/release/next/rexo.schema.json";
+    public const string DeprecatedRexoSchemaUri = "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json";
     public const string SupportedRexoSchemaPath = "rexo.schema.json";
     public const string SupportedRexoSchemaPathInRexoFolder = ".rexo/rexo.schema.json";
-    public const string SupportedPolicySchemaUri = "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/policy.schema.json";
+    public const string SupportedPolicySchemaUri = "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json";
+    public const string DeprecatedPolicySchemaUriReleaseBranch = "https://raw.githubusercontent.com/agile-north/rexo/release/next/policy.schema.json";
+    public const string DeprecatedPolicySchemaUri = "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/policy.schema.json";
     public const string SupportedPolicySchemaPath = "policy.schema.json";
     public const string SupportedPolicySchemaPathInRexoFolder = ".rexo/policy.schema.json";
 
     // Legacy values kept for backward compatibility.
-    public const string LegacySchemaUri = "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/schema.json";
+    public const string LegacySchemaUri = "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/schemas/1.0/schema.json";
+    public const string DeprecatedLegacySchemaUriReleaseBranch = "https://raw.githubusercontent.com/agile-north/rexo/release/next/schemas/1.0/schema.json";
+    public const string DeprecatedLegacySchemaUri = "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/schema.json";
     public const string LegacySchemaPath = "schema.json";
     public const string LegacySchemaPathInRexoFolder = ".rexo/schema.json";
 
@@ -244,11 +250,15 @@ public sealed class RepoConfigurationLoader
         var allowedSchemaValues = new[]
         {
             SupportedRexoSchemaUri,
+            DeprecatedRexoSchemaUriReleaseBranch,
+            DeprecatedRexoSchemaUri,
             SupportedRexoSchemaPath,
             "./" + SupportedRexoSchemaPath,
             "../" + SupportedRexoSchemaPath,
             SupportedRexoSchemaPathInRexoFolder,
             LegacySchemaUri,
+            DeprecatedLegacySchemaUriReleaseBranch,
+            DeprecatedLegacySchemaUri,
             LegacySchemaPath,
             "./" + LegacySchemaPath,
             "../" + LegacySchemaPath,
@@ -325,6 +335,8 @@ public sealed class RepoConfigurationLoader
         var allowedSchemaValues = new[]
         {
             SupportedPolicySchemaUri,
+            DeprecatedPolicySchemaUriReleaseBranch,
+            DeprecatedPolicySchemaUri,
             SupportedPolicySchemaPath,
             "./" + SupportedPolicySchemaPath,
             "../" + SupportedPolicySchemaPath,

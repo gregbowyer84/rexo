@@ -1,7 +1,7 @@
 # Rexo Schema Version 1.0
 
 **Schema file:** `rexo.schema.json` (repo root)
-**Schema ID:** `https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json`
+**Schema ID:** `https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json`
 **JSON Schema draft:** 2020-12
 
 ---
@@ -22,7 +22,7 @@ Every `repo.json` must declare:
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
+  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
   "schemaVersion": "1.0",
   "name": "my-repo",
   "commands": {},

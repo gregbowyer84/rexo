@@ -213,10 +213,19 @@ public sealed class StepExecutor : IStepExecutor
         return Guid.NewGuid().ToString("N")[..8];
     }
 
-    private static string Sanitize(string value) =>
-        System.Text.RegularExpressions.Regex.Replace(
-            value.ToLowerInvariant().Replace("builtin:", ""),
-            @"[^a-z0-9]+",
-            "-")
-        .Trim('-')[..Math.Min(20, value.Length)];
+    private static string Sanitize(string value)
+    {
+        var sanitized = System.Text.RegularExpressions.Regex.Replace(
+                value.ToLowerInvariant().Replace("builtin:", ""),
+                @"[^a-z0-9]+",
+                "-")
+            .Trim('-');
+
+        if (sanitized.Length == 0)
+        {
+            return "step";
+        }
+
+        return sanitized[..Math.Min(20, sanitized.Length)];
+    }
 }

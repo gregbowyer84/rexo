@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Rexo.Core.Abstractions;
+using Rexo.Core.Environment;
 using Rexo.Core.Models;
 
 public sealed class DockerArtifactProvider : IArtifactProvider
@@ -32,7 +33,7 @@ public sealed class DockerArtifactProvider : IArtifactProvider
     {
         try
         {
-            var dotEnv = LoadDotEnv(context.RepositoryRoot);
+            var dotEnv = RepositoryEnvironmentFiles.Load(context.RepositoryRoot);
             var settings = ResolveBuildSettings(artifact, dotEnv, context);
             var tags = BuildTags(settings.Image, artifact, context);
             var primaryTag = context.Version is not null
@@ -90,7 +91,9 @@ public sealed class DockerArtifactProvider : IArtifactProvider
         ExecutionContext context,
         CancellationToken cancellationToken)
     {
-        var image = GetSetting(artifact, "image") ?? artifact.Name;
+        var dotEnv = RepositoryEnvironmentFiles.Load(context.RepositoryRoot);
+        var settings = ResolveBuildSettings(artifact, dotEnv, context);
+        var image = settings.Image;
         var tags = BuildTags(image, artifact, context);
         var appliedTags = new List<string>();
 
@@ -120,7 +123,7 @@ public sealed class DockerArtifactProvider : IArtifactProvider
     {
         try
         {
-            var dotEnv = LoadDotEnv(context.RepositoryRoot);
+            var dotEnv = RepositoryEnvironmentFiles.Load(context.RepositoryRoot);
             var settings = ResolveBuildSettings(artifact, dotEnv, context);
             var image = settings.Image;
             var tags = BuildTags(image, artifact, context);
@@ -601,10 +604,58 @@ public sealed class DockerArtifactProvider : IArtifactProvider
 
         if (!string.IsNullOrWhiteSpace(registry) && !string.IsNullOrWhiteSpace(repository))
         {
-            return $"{registry.TrimEnd('/')}/{repository.TrimStart('/')}";
+            var normalizedRegistry = NormalizeRegistry(registry);
+            var normalizedRepository = NormalizeRepository(repository);
+            return $"{normalizedRegistry}/{normalizedRepository}";
         }
 
         return artifact.Name;
+    }
+
+    private static string NormalizeRegistry(string value)
+    {
+        var normalized = value.Trim();
+        if (normalized.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = normalized["https://".Length..];
+        }
+        else if (normalized.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = normalized["http://".Length..];
+        }
+
+        normalized = normalized.Trim().Trim('/');
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            throw new InvalidOperationException("Docker target registry is empty. Set DOCKER_TARGET_REGISTRY to a registry host such as 'ghcr.io'.");
+        }
+
+        if (normalized.Contains('/', StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Docker target registry '{value}' is invalid. Use only a registry host (for example 'ghcr.io' or 'myregistry.example.com:5000').");
+        }
+
+        var looksLikeRegistryHost = normalized.Contains('.', StringComparison.Ordinal)
+            || normalized.Contains(':', StringComparison.Ordinal)
+            || string.Equals(normalized, "localhost", StringComparison.OrdinalIgnoreCase);
+
+        if (!looksLikeRegistryHost)
+        {
+            throw new InvalidOperationException($"Docker target registry '{value}' is not a valid registry host. Docker would treat it as a Docker Hub namespace (docker.io/{normalized}/...). Use a host like 'ghcr.io' or 'myregistry.example.com'.");
+        }
+
+        return normalized;
+    }
+
+    private static string NormalizeRepository(string value)
+    {
+        var normalized = value.Trim().Trim('/');
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            throw new InvalidOperationException("Docker target repository is empty. Set DOCKER_TARGET_REPOSITORY or settings.target.repository.");
+        }
+
+        return normalized;
     }
 
     private static bool ResolveCleanupLocal(
@@ -918,42 +969,6 @@ public sealed class DockerArtifactProvider : IArtifactProvider
 
         var regex = "^" + Regex.Escape(pattern).Replace("\\*", ".*", StringComparison.Ordinal) + "$";
         return Regex.IsMatch(branch, regex, RegexOptions.CultureInvariant);
-    }
-
-    private static IReadOnlyDictionary<string, string> LoadDotEnv(string repositoryRoot)
-    {
-        var path = Path.Combine(repositoryRoot, ".env");
-        if (!File.Exists(path))
-        {
-            return new Dictionary<string, string>(StringComparer.Ordinal);
-        }
-
-        var result = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var rawLine in File.ReadAllLines(path))
-        {
-            var line = rawLine.Trim();
-            if (string.IsNullOrWhiteSpace(line) || line.StartsWith('#'))
-            {
-                continue;
-            }
-
-            var separator = line.IndexOf('=', StringComparison.Ordinal);
-            if (separator <= 0)
-            {
-                continue;
-            }
-
-            var key = line[..separator].Trim();
-            var value = line[(separator + 1)..].Trim();
-            if ((value.StartsWith('"') && value.EndsWith('"')) || (value.StartsWith('\'') && value.EndsWith('\'')))
-            {
-                value = value[1..^1];
-            }
-
-            result[key] = value;
-        }
-
-        return result;
     }
 
     private static Dictionary<string, string?> BuildEnvironmentOverrides(IReadOnlyDictionary<string, string> dotEnv)

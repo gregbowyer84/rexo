@@ -244,4 +244,34 @@ public sealed class TemplateRendererTests
         Assert.Equal(64, result.Length);
         Assert.Matches("^[0-9a-f]{64}$", result);
     }
+
+    [Fact]
+    public void RenderResolvesEnvFromRexoDotEnvWhenProcessValueMissing()
+    {
+        const string key = "REXO_TEMPLATE_ENV_TEST";
+        var original = Environment.GetEnvironmentVariable(key);
+        Environment.SetEnvironmentVariable(key, null);
+
+        var dir = Path.Combine(Path.GetTempPath(), $"rexo-template-env-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(dir, ".rexo"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, ".rexo", ".env"), $"{key}=from-rexo\n");
+
+            var renderer = new TemplateRenderer();
+            var ctx = ExecutionContext.Empty(dir);
+            var result = renderer.Render($"{{{{env.{key}}}}}", ctx);
+
+            Assert.Equal("from-rexo", result);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(key, original);
+            if (Directory.Exists(dir))
+            {
+                Directory.Delete(dir, true);
+            }
+        }
+    }
 }
