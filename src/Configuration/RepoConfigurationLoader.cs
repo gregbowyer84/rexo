@@ -1,0 +1,107 @@
+namespace Rexo.Configuration;
+
+using System.Text.Json;
+using NJsonSchema;
+using Rexo.Configuration.Models;
+
+public sealed class RepoConfigurationLoader
+{
+    public const string SupportedSchemaVersion = "1.0";
+    // TODO: update SupportedSchemaUri once the remote repository is published
+    public const string SupportedSchemaUri = "https://raw.githubusercontent.com/OWNER/repoOS/main/schemas/1.0/schema.json";
+    public const string SupportedSchemaPath = "schemas/1.0/schema.json";
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        ReadCommentHandling = JsonCommentHandling.Skip,
+    };
+
+    public static async Task<RepoConfig> LoadAsync(string configPath, CancellationToken cancellationToken)
+    {
+        if (!File.Exists(configPath))
+        {
+            throw new FileNotFoundException("Configuration file was not found.", configPath);
+        }
+
+        var jsonText = await File.ReadAllTextAsync(configPath, cancellationToken);
+        ValidateMetadata(configPath, jsonText);
+        await ValidateSchemaAsync(configPath, jsonText, cancellationToken);
+
+        var config = JsonSerializer.Deserialize<RepoConfig>(jsonText, JsonOptions);
+
+        if (config is null)
+        {
+            throw new InvalidOperationException("Configuration file is empty or invalid.");
+        }
+
+        return config;
+    }
+
+    private static void ValidateMetadata(string configPath, string jsonText)
+    {
+        using var doc = JsonDocument.Parse(jsonText);
+        var root = doc.RootElement;
+
+        if (!root.TryGetProperty("$schema", out var schemaProp) || schemaProp.ValueKind != JsonValueKind.String)
+        {
+            throw new InvalidOperationException("Configuration must define a '$schema' string property.");
+        }
+
+        var schema = schemaProp.GetString();
+        // SupportedSchemaUri will be added once the remote repository is published
+        var allowedSchemaValues = new[]
+        {
+            SupportedSchemaPath,
+            "./" + SupportedSchemaPath,
+        };
+
+        if (string.IsNullOrWhiteSpace(schema) || !allowedSchemaValues.Contains(schema, StringComparer.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Unsupported '$schema' value '{schema}'. Expected one of: {string.Join(", ", allowedSchemaValues)}");
+        }
+
+        if (!root.TryGetProperty("schemaVersion", out var versionProp) || versionProp.ValueKind != JsonValueKind.String)
+        {
+            throw new InvalidOperationException("Configuration must define a 'schemaVersion' string property.");
+        }
+
+        var version = versionProp.GetString();
+        if (!string.Equals(version, SupportedSchemaVersion, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Unsupported schemaVersion '{version}'. Supported version is '{SupportedSchemaVersion}'.");
+        }
+    }
+
+    private static async Task ValidateSchemaAsync(string configPath, string jsonText, CancellationToken cancellationToken)
+    {
+        var configDirectory = Path.GetDirectoryName(configPath)
+            ?? throw new InvalidOperationException("Could not determine config directory.");
+
+        var schemaPath = Path.Combine(configDirectory, "schemas", "1.0", "schema.json");
+        if (!File.Exists(schemaPath))
+        {
+            throw new FileNotFoundException(
+                $"Configuration schema file was not found at '{schemaPath}'.", schemaPath);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var schema = await JsonSchema.FromFileAsync(schemaPath, CancellationToken.None);
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var errors = schema.Validate(jsonText);
+        if (errors.Count > 0)
+        {
+            var details = string.Join(
+                Environment.NewLine,
+                errors.Select(e => $"- {e.Path}: {e.Kind} ({e.Property})"));
+
+            throw new InvalidOperationException(
+                "Configuration does not match the declared schema. Validation errors:" +
+                Environment.NewLine +
+                details);
+        }
+    }
+}

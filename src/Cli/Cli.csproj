@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\\Core\\Core.csproj" />
+    <ProjectReference Include="..\\Configuration\\Configuration.csproj" />
+    <ProjectReference Include="..\\Execution\\Execution.csproj" />
+    <ProjectReference Include="..\\Ui\\Ui.csproj" />
+    <ProjectReference Include="..\\Artifacts.Docker\\Artifacts.Docker.csproj" />
+    <ProjectReference Include="..\\Artifacts.NuGet\\Artifacts.NuGet.csproj" />
+    <ProjectReference Include="..\\Versioning\\Versioning.csproj" />
+  </ItemGroup>
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" />
+    <PackageReference Include="Spectre.Console" />
+    <PackageReference Include="Spectre.Console.Cli" />
+  </ItemGroup>
+</Project>

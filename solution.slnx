@@ -1,0 +1,25 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Analysis/Analysis.csproj" />
+    <Project Path="src/Artifacts.Docker/Artifacts.Docker.csproj" />
+    <Project Path="src/Artifacts.NuGet/Artifacts.NuGet.csproj" />
+    <Project Path="src/Artifacts/Artifacts.csproj" />
+    <Project Path="src/Ci/Ci.csproj" />
+    <Project Path="src/Cli/Cli.csproj" />
+    <Project Path="src/Configuration/Configuration.csproj" />
+    <Project Path="src/Core/Core.csproj" />
+    <Project Path="src/Execution/Execution.csproj" />
+    <Project Path="src/Git/Git.csproj" />
+    <Project Path="src/Policies/Policies.csproj" />
+    <Project Path="src/Templating/Templating.csproj" />
+    <Project Path="src/Ui/Ui.csproj" />
+    <Project Path="src/Verification/Verification.csproj" />
+    <Project Path="src/Versioning/Versioning.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Configuration.Tests/Configuration.Tests.csproj" />
+    <Project Path="tests/Core.Tests/Core.Tests.csproj" />
+    <Project Path="tests/Execution.Tests/Execution.Tests.csproj" />
+    <Project Path="tests/Integration.Tests/Integration.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,225 @@
+mode: ContinuousDelivery
+commit-message-incrementing: Enabled
+tag-prefix: '[vV]'
+
+# Branching/versioning quick reference
+#
+# Stable/public lines (no prerelease label):
+#   release/current
+#   release/<x> or release/<x.y>
+#   release/<customer>/current
+#   release/<customer>/<x> or release/<customer>/<x.y>
+#
+# Next line (minor-forward stream):
+#   release/next                -> -next.N
+#   release/next-qa             -> -qa.N
+#   release/next-uat            -> -uat.N
+#   release/next-edge           -> -edge.N
+#
+# Stable line stages (patch-forward stream):
+#   release/current-qa          -> -qa.N
+#   release/current-uat         -> -uat.N
+#   release/current-edge        -> -edge.N
+#   release/1.1-qa              -> -qa.N
+#   release/1.1-uat             -> -uat.N
+#   release/1.1-edge            -> -edge.N
+#
+# Work branch labels:
+#   feature/login-with2fa       -> -f-login-with2fa.N
+#   bugfix/api/null-ref         -> -b-api-null-ref.N
+#   topic/new-dashboard         -> -t-new-dashboard.N
+#   sprint/mobile-polish        -> -s-mobile-polish.N
+#   somethingelse               -> -somethingelse.N
+#
+# Notes:
+# - N is the GitVersion prerelease sequence for the current version source.
+# - GitVersion sanitizes branch-derived labels to SemVer/NuGet-safe tokens.
+# - Major/minor/patch anchors still depend on reachable tags/history.
+
+# Allows versions to be inferred from branch names like:
+#   release/1
+#   release/1.1
+#   release/customer1/1
+#   release/customer1/1.1
+version-in-branch-pattern: '(?<version>[vV]?\d+(?:\.\d+){0,2})'
+
+branches:
+  # Transitional default branch support while migrating away from master/main.
+  # Example: 1.1.9-dev.44
+  master:
+    regex: ^master$
+    label: dev
+    increment: Patch
+    is-main-branch: true
+
+  main:
+    regex: ^main$
+    label: dev
+    increment: Patch
+    is-main-branch: true
+
+  # Public stable branches.
+  #
+  # Matches:
+  #   release/current
+  #   release/customer1/current
+  #
+  # These produce public/stable versions with no prerelease suffix.
+  # Example: 1.1.9
+  release_current:
+    regex: ^release(?:\/(?<Customer>[^\/]+))?\/current$
+    mode: ContinuousDeployment
+    label: ''
+    increment: Patch
+    is-main-branch: true
+    is-release-branch: true
+
+  # Public versioned release branches.
+  #
+  # Matches:
+  #   release/1
+  #   release/1.1
+  #   release/customer1/1
+  #   release/customer1/1.1
+  #
+  # These produce public/stable versions with no prerelease suffix.
+  # Example: 1.1.9
+  release:
+    regex: ^release(?:\/(?<Customer>[^\/]+))?\/(?<version>\d+(?:\.\d+)?)$
+    mode: ContinuousDeployment
+    label: ''
+    increment: Patch
+    is-main-branch: true
+    is-release-branch: true
+
+  # Unsuffixed next branches produce next prerelease labels.
+  # Examples:
+  #   release/next -> 1.2.0-next.9
+  #   release/customer1/next -> 1.2.0-next.9
+  release_next:
+    regex: ^release(?:\/(?<Customer>[^\/]+))?\/next$
+    mode: ContinuousDelivery
+    label: next
+    increment: Minor
+
+  # Stage suffixes for release/current* branches.
+  # Examples:
+  #   release/current-qa -> 1.1.9-qa.9
+  #   release/current-uat -> 1.1.9-uat.9
+  #   release/current-edge -> 1.1.9-edge.9
+  release_current_suffixed:
+    regex: ^release(?:\/(?<Customer>[^\/]+))?\/current-(?<Suffix>[A-Za-z0-9][A-Za-z0-9.-]*)$
+    mode: ContinuousDelivery
+    label: '{Suffix}'
+    increment: Patch
+
+  # Stage suffixes for release/next* branches.
+  # Examples:
+  #   release/next-qa -> 1.2.0-qa.9
+  #   release/next-uat -> 1.2.0-uat.9
+  #   release/next-edge -> 1.2.0-edge.9
+  release_next_suffixed:
+    regex: ^release(?:\/(?<Customer>[^\/]+))?\/next-(?<Suffix>[A-Za-z0-9][A-Za-z0-9.-]*)$
+    mode: ContinuousDelivery
+    label: '{Suffix}'
+    increment: Minor
+
+  # Stage suffixes for release/x[.y]* branches.
+  # Examples:
+  #   release/1.1-qa -> 1.1.9-qa.9
+  #   release/1.1-uat -> 1.1.9-uat.9
+  #   release/1.1-edge -> 1.1.9-edge.9
+  release_version_suffixed:
+    regex: ^release(?:\/(?<Customer>[^\/]+))?\/(?<version>\d+(?:\.\d+)?)-(?<Suffix>[A-Za-z0-9][A-Za-z0-9.-]*)$
+    mode: ContinuousDelivery
+    label: '{Suffix}'
+    increment: Patch
+
+  # Unsuffixed non-public release branches.
+  #
+  # Matches:
+  #   release/next
+  #   release/preview
+  #   release/beta
+  #   release/customer1/next
+  #   release/customer1/preview
+  #
+  # If the group is not a public release alias like current, 1, or 1.1,
+  # then the group itself becomes the suffix.
+  #
+  # Examples:
+  #   release/next              -> next
+  #   release/customer1/next    -> next
+  #   release/preview           -> preview
+  # SemVer examples:
+  #   release/preview -> 1.2.0-preview.9
+  #   release/beta -> 1.2.0-beta.9
+  release_named:
+    regex: ^release(?:\/(?<Customer>[^\/]+))?\/(?<BranchName>(?!current$)(?!next$)(?!\d+(?:\.\d+)?$)[A-Za-z0-9][A-Za-z0-9.-]*)$
+    mode: ContinuousDelivery
+    label: '{BranchName}'
+    increment: Minor
+
+  # Hotfix work.
+  #
+  # Matches:
+  #   hotfix/ATLAS-497
+  #   hotfix/customer1/ATLAS-497
+  # Example: 1.1.9-hotfix.9
+  hotfix:
+    regex: ^hotfix\/(?<BranchName>.+)$
+    label: hotfix
+    increment: Patch
+
+  # Explicitly override GitVersion's built-in feature rule so feature/*
+  # branches keep the BranchType prefix in prerelease labels.
+  # Example: feature/auth/login-with2fa -> 1.1.9-f-auth-login-with2fa.1
+  feature:
+    regex: ^feature\/(?<BranchName>.+)$
+    label: f-{BranchName}
+    increment: Patch
+
+  # General work branches.
+  #
+  # Matches:
+  #   feature/ATLAS-421
+  #   topic/new-dashboard
+  #   sprint/mobile-polish
+  #   feature/auth/login-with2fa
+  #
+  # BranchName allows multiple slash-separated segments. GitVersion will
+  # sanitize invalid prerelease characters for SemVer/NuGet compatibility.
+  # TypeCode captures the first letter of branch type (e.g. b from bugfix,
+  # t from topic, s from sprint) so labels stay compact.
+  # Examples:
+  #   bugfix/atlas-123/fix-null-ref -> 1.1.9-b-atlas-123-fix-null-ref.9
+  #   topic/new-dashboard -> 1.1.9-t-new-dashboard.9
+  #   sprint/mobile-polish -> 1.1.9-s-mobile-polish.9
+  work:
+    regex: ^(?<TypeCode>[A-Za-z])[A-Za-z0-9.-]*\/(?<BranchName>.+)$
+    label: '{TypeCode}-{BranchName}'
+    increment: Patch
+
+  # Single-segment ad-hoc branch names (no slash), excluding reserved names.
+  #
+  # Examples:
+  #   feature
+  #   somethingelse
+  #   sandbox-123
+  # SemVer examples:
+  #   feature -> 1.1.9-feature.9
+  #   sandbox-123 -> 1.1.9-sandbox-123.9
+  single_segment_named:
+    regex: ^(?<BranchName>(?!master$)(?!main$)(?!release$)(?!hotfix$)(?!pull$)(?!pull-requests$)(?!pr$)[A-Za-z0-9][A-Za-z0-9.-]*)$
+    label: '{BranchName}'
+    increment: Patch
+
+  pull_request:
+    regex: ^(pull|pull-requests|pr)[\/-]
+    label: PullRequest
+    increment: Patch
+
+  unknown:
+    regex: (?<BranchName>.+)
+    label: dev
+    increment: Patch

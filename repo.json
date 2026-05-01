@@ -1,0 +1,137 @@
+{
+  "$schema": "schemas/1.0/schema.json",
+  "schemaVersion": "1.0",
+  "name": "my-service",
+  "description": "Example repo.json for a typical .NET service",
+  "version": "1.0.0",
+  "versioning": {
+    "provider": "env",
+    "settings": {
+      "variable": "BUILD_VERSION"
+    },
+    "fallback": "0.1.0-local"
+  },
+  "artifacts": [
+    {
+      "type": "docker",
+      "name": "my-service",
+      "settings": {
+        "repository": "ghcr.io/myorg/my-service",
+        "dockerfile": "src/MyService/Dockerfile",
+        "context": ".",
+        "tags": ["semver", "latest-on-main", "branch", "sha"]
+      }
+    },
+    {
+      "type": "nuget",
+      "name": "MyService.Client",
+      "settings": {
+        "project": "src/MyService.Client/MyService.Client.csproj",
+        "feed": "https://api.nuget.org/v3/index.json",
+        "apiKeyVariable": "NUGET_API_KEY"
+      }
+    }
+  ],
+  "tests": {
+    "projects": ["tests/**/*.Tests.csproj"],
+    "configuration": "Release",
+    "collectCoverage": true,
+    "coverageThreshold": 80
+  },
+  "analysis": {
+    "tools": ["dotnet-format", "dotnet-build"],
+    "configuration": "Release"
+  },
+  "commands": {
+    "build": {
+      "description": "Build the solution",
+      "steps": [
+        {
+          "id": "restore",
+          "run": "dotnet restore",
+          "description": "Restore NuGet packages"
+        },
+        {
+          "id": "compile",
+          "run": "dotnet build --no-restore -c Release",
+          "description": "Compile the solution"
+        }
+      ]
+    },
+    "release": {
+      "description": "Run the full release pipeline: version, test, build, push",
+      "steps": [
+        {
+          "id": "resolve-version",
+          "uses": "builtin:resolve-version",
+          "description": "Resolve the release version"
+        },
+        {
+          "id": "test",
+          "uses": "builtin:test",
+          "description": "Run all tests"
+        },
+        {
+          "id": "analyze",
+          "uses": "builtin:analyze",
+          "description": "Run static analysis and format checks"
+        },
+        {
+          "id": "build-artifacts",
+          "uses": "builtin:build-artifacts",
+          "description": "Build Docker image and NuGet package"
+        },
+        {
+          "id": "push-artifacts",
+          "uses": "builtin:push-artifacts",
+          "description": "Push artifacts to registries"
+        }
+      ]
+    },
+    "branch feature": {
+      "description": "Create a feature branch",
+      "args": {
+        "name": {
+          "description": "Feature branch name (e.g. my-feature)",
+          "required": true
+        }
+      },
+      "steps": [
+        {
+          "id": "git-checkout",
+          "run": "git checkout -b feature/{{args.name | slug}}",
+          "description": "Create and switch to new feature branch"
+        }
+      ]
+    },
+    "branch release": {
+      "description": "Create a release branch from the version",
+      "steps": [
+        {
+          "id": "resolve-version",
+          "uses": "builtin:resolve-version"
+        },
+        {
+          "id": "git-checkout",
+          "run": "git checkout -b release/{{steps.resolve-version.outputs.semver}}",
+          "description": "Create release branch"
+        }
+      ]
+    },
+    "env check": {
+      "description": "Verify required environment variables are set",
+      "steps": [
+        {
+          "id": "check-vars",
+          "run": "echo BUILD_VERSION=${BUILD_VERSION:-not set}",
+          "description": "Show build environment"
+        }
+      ]
+    }
+  },
+  "aliases": {
+    "ci": "release",
+    "bf": "branch feature",
+    "br": "branch release"
+  }
+}

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\\Core\\Core.csproj" />
+    <ProjectReference Include="..\\Configuration\\Configuration.csproj" />
+    <ProjectReference Include="..\\Templating\\Templating.csproj" />
+    <ProjectReference Include="..\\Versioning\\Versioning.csproj" />
+    <ProjectReference Include="..\\Artifacts\\Artifacts.csproj" />
+    <ProjectReference Include="..\\Verification\\Verification.csproj" />
+    <ProjectReference Include="..\\Analysis\\Analysis.csproj" />
+    <ProjectReference Include="..\\Git\\Git.csproj" />
+    <ProjectReference Include="..\\Ci\\Ci.csproj" />
+  </ItemGroup>
+</Project>
