@@ -75,7 +75,7 @@ public static class DotnetTestRunner
         if (!string.IsNullOrWhiteSpace(stdout)) Console.WriteLine(stdout);
         if (!string.IsNullOrWhiteSpace(stderr)) Console.Error.WriteLine(stderr);
 
-        var (total, passed, failed, skipped) = ParseTestOutput(stdout);
+        var (total, passed, failed, skipped) = ParseTestOutput(stdout, Path.Combine(repositoryRoot, outputDir));
 
         // Attempt to read line coverage from Cobertura XML if output was collected
         double? lineCoverage = null;
@@ -136,7 +136,7 @@ public static class DotnetTestRunner
         return null;
     }
 
-    private static (int total, int passed, int failed, int skipped) ParseTestOutput(string output)
+    private static (int total, int passed, int failed, int skipped) ParseTestOutput(string output, string? resultsDir = null)
     {
         // Parse "Test summary: total: 5, failed: 0, succeeded: 5, skipped: 0"
         var totalMatch = System.Text.RegularExpressions.Regex.Match(output, @"total:\s*(\d+)");
@@ -148,6 +148,68 @@ public static class DotnetTestRunner
         var failed = failedMatch.Success ? int.Parse(failedMatch.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) : 0;
         var passed = passedMatch.Success ? int.Parse(passedMatch.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) : total - failed;
         var skipped = skippedMatch.Success ? int.Parse(skippedMatch.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) : 0;
+
+        // Attempt to read more precise counts from TRX files written to the results directory
+        // TRX is authoritative over stdout parsing when available
+        if (total == 0 || failed == 0)
+        {
+            var trxCounts = TryParseTrxFiles(resultsDir);
+            if (trxCounts.Total > 0)
+                return trxCounts;
+        }
+
+        return (total, passed, failed, skipped);
+    }
+
+    /// <summary>
+    /// Parses all .trx files in <paramref name="resultsDir"/> and aggregates test counters.
+    /// Returns zeros when no TRX files are found or parsing fails.
+    /// </summary>
+    internal static (int Total, int Passed, int Failed, int Skipped) TryParseTrxFiles(string? resultsDir)
+    {
+        if (string.IsNullOrEmpty(resultsDir) || !Directory.Exists(resultsDir))
+            return (0, 0, 0, 0);
+
+        var trxFiles = Directory.GetFiles(resultsDir, "*.trx", SearchOption.AllDirectories);
+        if (trxFiles.Length == 0) return (0, 0, 0, 0);
+
+        int total = 0, passed = 0, failed = 0, skipped = 0;
+
+        foreach (var trxFile in trxFiles)
+        {
+            try
+            {
+                using var reader = System.Xml.XmlReader.Create(trxFile);
+                while (reader.Read())
+                {
+                    // <Counters total="5" executed="5" passed="5" failed="0" error="0" .../>
+                    if (reader.NodeType == System.Xml.XmlNodeType.Element &&
+                        reader.Name == "Counters")
+                    {
+                        static int GetAttr(System.Xml.XmlReader r, string name)
+                        {
+                            var val = r.GetAttribute(name);
+                            return val is not null && int.TryParse(
+                                val,
+                                System.Globalization.NumberStyles.Integer,
+                                System.Globalization.CultureInfo.InvariantCulture,
+                                out var n)
+                                ? n : 0;
+                        }
+
+                        total   += GetAttr(reader, "total");
+                        passed  += GetAttr(reader, "passed");
+                        failed  += GetAttr(reader, "failed") + GetAttr(reader, "error");
+                        skipped += GetAttr(reader, "notExecuted") + GetAttr(reader, "aborted");
+                        break;
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // TRX is malformed or locked — skip this file
+            }
+        }
 
         return (total, passed, failed, skipped);
     }
