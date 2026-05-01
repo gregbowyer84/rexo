@@ -155,6 +155,9 @@ public static class BuiltinCommandRegistration
             if (!string.IsNullOrEmpty(cmd.Description))
                 lines.Add($"  Description: {cmd.Description}");
 
+            if (cmd.MaxParallel.HasValue)
+                lines.Add($"  Max parallel steps: {cmd.MaxParallel.Value}");
+
             if (cmd.Args is { Count: > 0 })
             {
                 lines.Add("  Arguments:");
@@ -171,26 +174,75 @@ public static class BuiltinCommandRegistration
                 foreach (var (optName, optCfg) in cmd.Options)
                 {
                     var def = optCfg.Default is not null ? $" [default: {optCfg.Default}]" : string.Empty;
-                    lines.Add($"    --{optName} ({optCfg.Type}){def}");
+                    var allowed = optCfg.Allowed is { Length: > 0 }
+                        ? $" [allowed: {string.Join(", ", optCfg.Allowed)}]"
+                        : string.Empty;
+                    lines.Add($"    --{optName} ({optCfg.Type}){def}{allowed}");
                 }
             }
 
             if (cmd.Steps.Count > 0)
             {
-                lines.Add("  Steps:");
+                lines.Add($"  Steps ({cmd.Steps.Count} total):");
+                var stepIndex = 0;
                 foreach (var step in cmd.Steps)
                 {
-                    var stepDesc = step switch
+                    stepIndex++;
+                    var stepType = step switch
                     {
-                        { Run: not null } => $"run: {step.Run}",
-                        { Uses: not null } => $"uses: {step.Uses}",
-                        { Command: not null } => $"command: {step.Command}",
+                        { Run: not null } => "run",
+                        { Uses: not null } => "uses",
+                        { Command: not null } => "command",
                         _ => "unknown",
                     };
-                    var when = step.When is not null ? $" (when: {step.When})" : string.Empty;
-                    var id = step.Id is not null ? $"[{step.Id}] " : string.Empty;
-                    lines.Add($"    {id}{stepDesc}{when}");
+                    var stepBody = step switch
+                    {
+                        { Run: not null } => step.Run,
+                        { Uses: not null } => step.Uses,
+                        { Command: not null } => step.Command,
+                        _ => string.Empty,
+                    };
+                    var id = step.Id is not null ? $"[{step.Id}] " : $"[step-{stepIndex}] ";
+                    var desc = step.Description is not null ? $" — {step.Description}" : string.Empty;
+                    lines.Add($"    {id}{stepType}: {stepBody}{desc}");
+
+                    if (step.When is not null)
+                        lines.Add($"        when: {step.When}");
+                    if (step.Parallel == true)
+                        lines.Add($"        parallel: true");
+                    if (step.ContinueOnError == true)
+                        lines.Add($"        continueOnError: true");
+                    if (step.OutputPattern is not null)
+                        lines.Add($"        outputPattern: {step.OutputPattern}");
+                    if (step.OutputFile is not null)
+                        lines.Add($"        outputFile: {step.OutputFile}");
                 }
+            }
+
+            // Push eligibility information
+            if (config.PushRulesJson is not null)
+            {
+                lines.Add("  Push rules:");
+                try
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(config.PushRulesJson);
+                    foreach (var prop in doc.RootElement.EnumerateObject())
+                    {
+                        lines.Add($"    {prop.Name}: {prop.Value}");
+                    }
+                }
+                catch (System.Text.Json.JsonException)
+                {
+                    lines.Add("    (unable to parse push rules)");
+                }
+            }
+
+            // Version provider info
+            if (config.Versioning is not null)
+            {
+                lines.Add($"  Version provider: {config.Versioning.Provider}");
+                if (config.Versioning.Fallback is not null)
+                    lines.Add($"    Fallback: {config.Versioning.Fallback}");
             }
 
             return CommandResult.Ok("explain", string.Join("\n", lines));

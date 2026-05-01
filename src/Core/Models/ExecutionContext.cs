@@ -12,6 +12,12 @@ public sealed record ExecutionContext(
     public string? CiProvider { get; init; }
     public bool IsPullRequest { get; init; }
     public bool IsCleanWorkingTree { get; init; }
+    public string? CiBuildId { get; init; }
+    public string? CiRunNumber { get; init; }
+    public string? CiWorkflowName { get; init; }
+    public string? CiActor { get; init; }
+    public string? CiTag { get; init; }
+    public string? CiBuildUrl { get; init; }
     public IReadOnlyDictionary<string, string> Args { get; init; } = new Dictionary<string, string>();
     public IReadOnlyDictionary<string, string?> Options { get; init; } = new Dictionary<string, string?>();
     public VersionResult? Version { get; init; }
@@ -31,3 +37,4 @@ public sealed record ExecutionContext(
     public ExecutionContext WithVersion(VersionResult version) =>
         this with { Version = version };
 }
+

@@ -1,6 +1,6 @@
 # repoOS Implementation TODO
 
-Last updated: 2026-05-01
+Last updated: 2026-05-02
 
 This checklist maps the current implementation against the project scope in `docs/scope.md`.
 
@@ -32,7 +32,7 @@ Legend:
 - [x] Resolve `extends` from local file paths (breadth-first merge, circular detection)
 - [~] Config merge order pipeline (defaults -> policies -> repo -> overlays -> CLI)
 - [x] Environment overlays (REXO_OVERLAY env var)
-- [ ] Merge strategy customization for arrays/objects
+- [x] Merge strategy customization for arrays/objects
 - [x] Alternative config file names (`repo.yaml`, `.repo/repo.json`, `.repo/repo.yaml`)
 
 ## 3) Command Resolution Order
@@ -107,14 +107,14 @@ Legend:
 - [x] Verify primitive (`test + analyze`)
 - [~] TRX and coverage output support is partial/basic
 - [x] Coverage thresholds enforcement (Cobertura XML parsed; lineCoverageThreshold checked)
-- [ ] Extended analysis toolchain (SARIF/security scanners)
+- [x] Extended analysis toolchain (SARIF/security scanners)
 
 ## 10) CI and Git Context
 
 - [x] Git context detection (branch, commit, short sha, remote, clean state)
 - [x] CI detection for common providers (at least core providers)
 - [x] CI context attached to execution context
-- [~] CI metadata depth is partial compared to full scope (run number/tag/etc.)
+- [x] CI metadata depth (run number, tag, buildUrl, actor, workflowName, runAttempt — all providers)
 
 ## 11) Manifests and JSON Output
 
@@ -129,7 +129,7 @@ Legend:
 
 - [x] Local file policy source class exists
 - [x] Policy source integration in runtime config load path (policy.json loaded alongside repo.json)
-- [ ] Embedded policy templates
+- [x] Embedded policy templates
 - [ ] Remote policy sources (HTTP/Git/NuGet/company registry)
 - [ ] Policy caching/version pinning/trust model
 
@@ -141,7 +141,7 @@ Legend:
 - [x] `repo config sources`
 - [x] `repo config materialize` (CLI sub-command + builtin:config-materialize)
 - [x] `repo explain version`
-- [~] Explain depth is basic (no full step graph/push eligibility/provider config details)
+- [x] Explain depth enhanced (step graph with flags, push eligibility, provider config details)
 
 ## 14) Safety and Governance
 
@@ -156,7 +156,7 @@ Legend:
 - [x] Spectre.Console renderer exists
 - [x] Basic `repo ui` command path
 - [x] Interactive command picker (Spectre.Console SelectionPrompt, `rx ui` or `rx` with no args)
-- [~] Rich command picker and execution dashboard
+- [x] Rich command picker with command descriptions and execution dashboard
 - [ ] Config/policy/resolution browsing UI
 - [ ] TUI project/features (future phase)
 

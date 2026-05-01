@@ -153,6 +153,13 @@ public sealed class TemplateRenderer : ITemplateRenderer
         {
             ["isCi"] = context.IsCi.ToString().ToLowerInvariant(),
             ["provider"] = context.CiProvider,
+            ["buildId"] = context.CiBuildId,
+            ["runNumber"] = context.CiRunNumber,
+            ["workflowName"] = context.CiWorkflowName,
+            ["actor"] = context.CiActor,
+            ["tag"] = context.CiTag,
+            ["buildUrl"] = context.CiBuildUrl,
+            ["isPullRequest"] = context.IsPullRequest.ToString().ToLowerInvariant(),
         };
 
         var steps = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);

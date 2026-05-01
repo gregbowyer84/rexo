@@ -166,4 +166,58 @@ public static class ConsoleRenderer
 
         return selection == "(cancel)" ? null : selection;
     }
+
+    /// <summary>
+    /// Presents an enhanced interactive command picker that shows command descriptions.
+    /// Returns the chosen command name, or <c>null</c> if cancelled.
+    /// </summary>
+    public static string? PromptCommandPickerWithDescriptions(
+        IReadOnlyList<(string Name, string? Description)> commands)
+    {
+        if (commands.Count == 0) return null;
+
+        const string cancelEntry = "(cancel)";
+        const int nameColumnWidth = 24;
+
+        var choices = commands
+            .Select(c =>
+            {
+                var paddedName = c.Name.PadRight(nameColumnWidth);
+                var desc = c.Description is not null
+                    ? $"[grey]— {Markup.Escape(c.Description)}[/]"
+                    : string.Empty;
+                return $"[cyan]{Markup.Escape(paddedName)}[/] {desc}";
+            })
+            .ToList();
+
+        choices.Add(cancelEntry);
+
+        // Use a mapping so we can return the original (unformatted) name
+        var displayToName = commands
+            .Zip(choices, (cmd, display) => (display, cmd.Name))
+            .ToDictionary(x => x.display, x => x.Name);
+
+        var selection = AnsiConsole.Prompt(
+            new SelectionPrompt<string>()
+                .Title("[bold yellow]Select a command to run:[/]")
+                .PageSize(20)
+                .HighlightStyle(new Style(foreground: Color.Yellow))
+                .AddChoices(choices));
+
+        if (selection == cancelEntry) return null;
+        return displayToName.TryGetValue(selection, out var name) ? name : null;
+    }
+
+    /// <summary>Renders a live execution dashboard row during command execution.</summary>
+    public static void RenderExecutionProgress(string commandName, int totalSteps, int completedSteps, bool success)
+    {
+        var bar = new string('█', completedSteps) + new string('░', totalSteps - completedSteps);
+        var pct = totalSteps == 0
+            ? 100
+            : completedSteps * 100 / totalSteps;
+
+        var statusColor = success ? "green" : "red";
+        AnsiConsole.MarkupLine(
+            $"  [{statusColor}]{bar}[/] {pct}% ({completedSteps}/{totalSteps} steps)  [dim]{Markup.Escape(commandName)}[/]");
+    }
 }

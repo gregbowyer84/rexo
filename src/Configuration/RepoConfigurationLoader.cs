@@ -126,10 +126,11 @@ public sealed class RepoConfigurationLoader
             Version = child.Version ?? @base.Version,
             Extends = null, // consumed — do not propagate
             Versioning = child.Versioning ?? @base.Versioning,
-            Artifacts = MergeLists(@base.Artifacts, child.Artifacts),
+            Artifacts = MergeLists(@base.Artifacts, child.Artifacts, child.MergeStrategy),
             Tests = child.Tests ?? @base.Tests,
             Analysis = child.Analysis ?? @base.Analysis,
             PushRulesJson = child.PushRulesJson ?? @base.PushRulesJson,
+            MergeStrategy = child.MergeStrategy ?? @base.MergeStrategy,
         };
 
     private static Dictionary<TKey, TValue> MergeDictionaries<TKey, TValue>(
@@ -149,11 +150,32 @@ public sealed class RepoConfigurationLoader
         return result;
     }
 
-    private static List<T>? MergeLists<T>(List<T>? @base, List<T>? child)
+    /// <summary>
+    /// Merges two lists according to the specified strategy.
+    /// <list type="bullet">
+    ///   <item><c>replace</c> — child list discards base; only child entries are kept.</item>
+    ///   <item><c>prepend</c> — child entries are inserted before base entries.</item>
+    ///   <item>Default (<c>union</c>) — child entries are appended after base entries.</item>
+    /// </list>
+    /// </summary>
+    private static List<T>? MergeLists<T>(List<T>? @base, List<T>? child, string? strategy = null)
     {
         if (@base is null or { Count: 0 }) return child;
         if (child is null or { Count: 0 }) return @base;
 
+        if (string.Equals(strategy, "replace", StringComparison.OrdinalIgnoreCase))
+        {
+            return child;
+        }
+
+        if (string.Equals(strategy, "prepend", StringComparison.OrdinalIgnoreCase))
+        {
+            var prepended = new List<T>(child);
+            prepended.AddRange(@base);
+            return prepended;
+        }
+
+        // Default: union (append child after base)
         var merged = new List<T>(@base);
         merged.AddRange(child);
         return merged;

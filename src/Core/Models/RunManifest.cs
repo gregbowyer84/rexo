@@ -11,6 +11,12 @@ public sealed record RunManifest
     public string? RemoteUrl { get; init; }
     public string? CiProvider { get; init; }
     public bool IsCi { get; init; }
+    public string? CiBuildId { get; init; }
+    public string? CiRunNumber { get; init; }
+    public string? CiWorkflowName { get; init; }
+    public string? CiActor { get; init; }
+    public string? CiTag { get; init; }
+    public string? CiBuildUrl { get; init; }
     public string? CommandExecuted { get; init; }
     public bool Success { get; init; }
     public int ExitCode { get; init; }
@@ -20,6 +26,7 @@ public sealed record RunManifest
     public VersionResult? Version { get; init; }
     public IReadOnlyList<StepManifestEntry> Steps { get; init; } = Array.Empty<StepManifestEntry>();
     public IReadOnlyList<ArtifactManifestEntry> Artifacts { get; init; } = Array.Empty<ArtifactManifestEntry>();
+    public IReadOnlyList<PushDecision> PushDecisions { get; init; } = Array.Empty<PushDecision>();
     public IReadOnlyList<string> Warnings { get; init; } = Array.Empty<string>();
     public IReadOnlyList<string> Errors { get; init; } = Array.Empty<string>();
 
@@ -48,3 +55,10 @@ public sealed record ArtifactManifestEntry(
     bool Built,
     bool Pushed,
     IReadOnlyList<string> Tags);
+
+/// <summary>Records why an artifact push was allowed or denied.</summary>
+public sealed record PushDecision(
+    string ArtifactName,
+    bool Allowed,
+    string Reason);
+

@@ -1,0 +1,42 @@
+{
+  "$schema": "schemas/1.0/schema.json",
+  "schemaVersion": "1.0",
+  "name": "standard-policy",
+  "description": "Standard policy template — provides sensible defaults for most repositories.",
+  "commands": {
+    "ci": {
+      "description": "Run the full CI pipeline: validate, test, and build artifacts.",
+      "options": {},
+      "steps": [
+        { "uses": "builtin:validate",         "description": "Validate repo.json" },
+        { "uses": "builtin:resolve-version",  "description": "Resolve version" },
+        { "uses": "builtin:test",             "description": "Run tests" },
+        { "uses": "builtin:analyze",          "description": "Run analysis" },
+        { "uses": "builtin:build-artifacts",  "description": "Build artifacts" }
+      ]
+    },
+    "release": {
+      "description": "Run CI then push artifacts. Only runs outside of pull requests.",
+      "options": {
+        "push": { "type": "bool", "default": "false" }
+      },
+      "steps": [
+        { "uses": "builtin:validate",         "description": "Validate repo.json" },
+        { "uses": "builtin:resolve-version",  "description": "Resolve version" },
+        { "uses": "builtin:test",             "description": "Run tests" },
+        { "uses": "builtin:analyze",          "description": "Run analysis" },
+        { "uses": "builtin:build-artifacts",  "description": "Build artifacts" },
+        { "uses": "builtin:tag-artifacts",    "description": "Tag artifacts" },
+        {
+          "uses": "builtin:push-artifacts",
+          "description": "Push artifacts",
+          "when": "{{options.push}} == true"
+        }
+      ]
+    }
+  },
+  "aliases": {
+    "build": "ci",
+    "publish": "release"
+  }
+}

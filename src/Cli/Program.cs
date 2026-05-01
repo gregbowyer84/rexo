@@ -4,6 +4,7 @@ using System.Text.Json;
 using Rexo.Artifacts;
 using Rexo.Artifacts.Docker;
 using Rexo.Artifacts.NuGet;
+using Rexo.Ci;
 using Rexo.Configuration;
 using Rexo.Configuration.Models;
 using Rexo.Core.Models;
@@ -227,7 +228,29 @@ public static class Program
         if (commandNames.Count == 0)
             commandNames.AddRange(["version", "list", "doctor", "config resolved", "config sources"]);
 
-        var selected = ConsoleRenderer.PromptCommandPicker(commandNames);
+        string? selected;
+
+        // Use richer picker with descriptions when config is available
+        if (config?.Commands is { Count: > 0 })
+        {
+            var commandsWithDescriptions = commandNames
+                .Select(name =>
+                {
+                    string? desc = null;
+                    if (config.Commands.TryGetValue(name, out var cmd))
+                        desc = cmd.Description;
+                    else if (config.Aliases.TryGetValue(name, out var target))
+                        desc = $"→ {target}";
+                    return (Name: name, Description: desc);
+                })
+                .ToArray();
+
+            selected = ConsoleRenderer.PromptCommandPickerWithDescriptions(commandsWithDescriptions);
+        }
+        else
+        {
+            selected = ConsoleRenderer.PromptCommandPicker(commandNames);
+        }
         if (selected is null) return 0;
 
         var invocation = EmptyInvocation(workingDir, false, null);
@@ -412,6 +435,8 @@ public static class Program
             configHash = Convert.ToHexString(hashBytes).ToLowerInvariant();
         }
 
+        var ciInfo = CiDetector.Detect();
+
         var manifest = new RunManifest
         {
             ToolVersion = GetToolVersion(),
@@ -426,6 +451,14 @@ public static class Program
             AssemblyVersion = result.Version?.AssemblyVersion,
             InformationalVersion = result.Version?.InformationalVersion,
             NuGetVersion = result.Version?.NuGetVersion,
+            IsCi = ciInfo.IsCi,
+            CiProvider = ciInfo.Provider,
+            CiBuildId = ciInfo.BuildId,
+            CiRunNumber = ciInfo.RunNumber,
+            CiWorkflowName = ciInfo.WorkflowName,
+            CiActor = ciInfo.Actor,
+            CiTag = ciInfo.Tag,
+            CiBuildUrl = ciInfo.BuildUrl,
             Steps = result.Steps
                 .Select(s => new StepManifestEntry(s.StepId, s.Success, s.ExitCode, s.Duration.TotalMilliseconds))
                 .ToArray(),

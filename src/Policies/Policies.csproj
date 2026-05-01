@@ -2,4 +2,7 @@
   <ItemGroup>
     <ProjectReference Include="..\\Core\\Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="EmbeddedTemplates\*.policy.json" />
+  </ItemGroup>
 </Project>

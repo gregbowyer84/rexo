@@ -293,12 +293,38 @@ public sealed class ConfigCommandLoader
         // builtin:analyze
         _builtinRegistry.Register("builtin:analyze", async (step, ctx, ct) =>
         {
+            var analysisResults = new List<Analysis.AnalysisResult>();
+
             var formatResult = await Analysis.DotnetAnalysisRunner.RunFormatCheckAsync(repositoryRoot, ct);
-            if (!formatResult.Success)
+            analysisResults.Add(formatResult);
+            if (!formatResult.Success && (config.Analysis?.FailOnIssues ?? true))
             {
                 return new StepResult(step.Id ?? "analyze", false, 1, TimeSpan.Zero,
                     new Dictionary<string, object?> { ["error"] = string.Join("; ", formatResult.Issues) });
             }
+
+            // Run custom analysis tools from config.Analysis.Tools
+            if (config.Analysis?.Tools is { Length: > 0 })
+            {
+                foreach (var toolCmd in config.Analysis.Tools)
+                {
+                    if (string.IsNullOrWhiteSpace(toolCmd)) continue;
+
+                    var toolResult = await Analysis.DotnetAnalysisRunner.RunCustomToolAsync(toolCmd, repositoryRoot, ct);
+                    analysisResults.Add(toolResult);
+
+                    if (!toolResult.Success && (config.Analysis.FailOnIssues))
+                    {
+                        // Write SARIF before returning failure
+                        await WriteSarifIfConfiguredAsync(analysisResults, repositoryRoot, config, ct);
+
+                        return new StepResult(step.Id ?? "analyze", false, 1, TimeSpan.Zero,
+                            new Dictionary<string, object?> { ["error"] = string.Join("; ", toolResult.Issues) });
+                    }
+                }
+            }
+
+            await WriteSarifIfConfiguredAsync(analysisResults, repositoryRoot, config, ct);
 
             return new StepResult(step.Id ?? "analyze", true, 0, TimeSpan.Zero,
                 new Dictionary<string, object?> { ["message"] = "Analysis passed." });
@@ -415,6 +441,12 @@ public sealed class ConfigCommandLoader
             CiProvider = ciInfo.Provider,
             IsPullRequest = ciInfo.IsPullRequest,
             IsCleanWorkingTree = gitInfo.IsClean,
+            CiBuildId = ciInfo.BuildId,
+            CiRunNumber = ciInfo.RunNumber,
+            CiWorkflowName = ciInfo.WorkflowName,
+            CiActor = ciInfo.Actor,
+            CiTag = ciInfo.Tag,
+            CiBuildUrl = ciInfo.BuildUrl,
             Args = invocation.Args,
             Options = BuildOptionsWithDefaults(invocation.Options, commandConfig),
         };
@@ -505,6 +537,29 @@ public sealed class ConfigCommandLoader
             $"Command '{commandName}' completed successfully.",
             new Dictionary<string, object?>())
         { Steps = stepResults, Version = currentContext.Version };
+    }
+
+    private static async Task WriteSarifIfConfiguredAsync(
+        IReadOnlyList<Analysis.AnalysisResult> results,
+        string repositoryRoot,
+        RepoConfig config,
+        CancellationToken cancellationToken)
+    {
+        // Write SARIF output when an analysis configuration is present and specifies a configuration path
+        if (config.Analysis?.Configuration is not null)
+        {
+            var sarifPath = System.IO.Path.IsPathRooted(config.Analysis.Configuration)
+                ? config.Analysis.Configuration
+                : System.IO.Path.Combine(repositoryRoot, config.Analysis.Configuration);
+
+            // Only write SARIF if the path ends with .sarif or .json (to avoid overwriting arbitrary paths)
+            if (sarifPath.EndsWith(".sarif", StringComparison.OrdinalIgnoreCase) ||
+                sarifPath.EndsWith(".sarif.json", StringComparison.OrdinalIgnoreCase))
+            {
+                await Analysis.DotnetAnalysisRunner.WriteSarifReportAsync(results, sarifPath, cancellationToken);
+                Console.WriteLine($"  SARIF report written to: {sarifPath}");
+            }
+        }
     }
 
     private static IReadOnlyDictionary<string, string?> BuildOptionsWithDefaults(

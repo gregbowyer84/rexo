@@ -18,6 +18,16 @@ public sealed record RepoConfig(
     public RepoTestsConfig? Tests { get; init; }
     public RepoAnalysisConfig? Analysis { get; init; }
     public string? PushRulesJson { get; init; }
+
+    /// <summary>
+    /// Controls how list fields are merged when combining configs via <c>extends</c>.
+    /// <list type="bullet">
+    ///   <item><c>union</c> (default) — child list entries are appended after base entries.</item>
+    ///   <item><c>replace</c> — child list replaces the base list entirely; base entries are discarded.</item>
+    ///   <item><c>prepend</c> — child list entries are inserted before base entries.</item>
+    /// </list>
+    /// </summary>
+    public string? MergeStrategy { get; init; }
 }
 
 public sealed record RepoCommandConfig(
