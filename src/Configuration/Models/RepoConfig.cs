@@ -26,6 +26,9 @@ public sealed record RepoCommandConfig(
     List<RepoStepConfig> Steps)
 {
     public Dictionary<string, RepoArgConfig>? Args { get; init; }
+
+    /// <summary>Maximum number of steps to run concurrently within a parallel group.</summary>
+    public int? MaxParallel { get; init; }
 }
 
 public sealed record RepoArgConfig(

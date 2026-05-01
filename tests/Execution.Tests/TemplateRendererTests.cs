@@ -168,4 +168,80 @@ public sealed class TemplateRendererTests
         var result = renderer.Render("{{'foo' == 'foo'}}", ctx);
         Assert.Equal("true", result);
     }
+
+    [Fact]
+    public void TrimFilterRemovesWhitespace()
+    {
+        var renderer = new TemplateRenderer();
+        var ctx = MakeContext(args: new Dictionary<string, string> { ["val"] = "  hello  " });
+        Assert.Equal("hello", renderer.Render("{{args.val | trim}}", ctx));
+    }
+
+    [Fact]
+    public void BasenameFilterReturnsFileName()
+    {
+        var renderer = new TemplateRenderer();
+        var ctx = MakeContext(args: new Dictionary<string, string> { ["path"] = "/foo/bar/baz.txt" });
+        Assert.Equal("baz.txt", renderer.Render("{{args.path | basename}}", ctx));
+    }
+
+    [Fact]
+    public void DirnameFilterReturnsDirectory()
+    {
+        var renderer = new TemplateRenderer();
+        var ctx = MakeContext(args: new Dictionary<string, string> { ["path"] = "/foo/bar/baz.txt" });
+        var result = renderer.Render("{{args.path | dirname}}", ctx);
+        // Result is OS-dependent but must not contain the filename
+        Assert.DoesNotContain("baz.txt", result);
+    }
+
+    [Fact]
+    public void FilestemFilterReturnsNameWithoutExtension()
+    {
+        var renderer = new TemplateRenderer();
+        var ctx = MakeContext(args: new Dictionary<string, string> { ["path"] = "report.xml" });
+        Assert.Equal("report", renderer.Render("{{args.path | filestem}}", ctx));
+    }
+
+    [Fact]
+    public void FileextFilterReturnsExtension()
+    {
+        var renderer = new TemplateRenderer();
+        var ctx = MakeContext(args: new Dictionary<string, string> { ["path"] = "archive.tar.gz" });
+        Assert.Equal(".gz", renderer.Render("{{args.path | fileext}}", ctx));
+    }
+
+    [Fact]
+    public void UrlencodeFilterEncodesSpecialCharacters()
+    {
+        var renderer = new TemplateRenderer();
+        var ctx = MakeContext(args: new Dictionary<string, string> { ["q"] = "hello world" });
+        Assert.Equal("hello%20world", renderer.Render("{{args.q | urlencode}}", ctx));
+    }
+
+    [Fact]
+    public void ReplaceFilterSubstitutesSubstring()
+    {
+        var renderer = new TemplateRenderer();
+        var ctx = MakeContext(args: new Dictionary<string, string> { ["branch"] = "feature/my-feature" });
+        Assert.Equal("feature-my-feature", renderer.Render("{{args.branch | replace(/,-)}}", ctx));
+    }
+
+    [Fact]
+    public void TruncateFilterCutsLongValues()
+    {
+        var renderer = new TemplateRenderer();
+        var ctx = MakeContext(args: new Dictionary<string, string> { ["sha"] = "abcdef1234567890" });
+        Assert.Equal("abcdef", renderer.Render("{{args.sha | truncate(6)}}", ctx));
+    }
+
+    [Fact]
+    public void Sha256FilterProduces64CharHexString()
+    {
+        var renderer = new TemplateRenderer();
+        var ctx = MakeContext(args: new Dictionary<string, string> { ["val"] = "hello" });
+        var result = renderer.Render("{{args.val | sha256}}", ctx);
+        Assert.Equal(64, result.Length);
+        Assert.Matches("^[0-9a-f]{64}$", result);
+    }
 }

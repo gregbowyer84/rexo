@@ -39,6 +39,13 @@ public sealed class FixedVersionProvider : IVersionProvider
             CommitSha: context.CommitSha ?? "unknown",
             ShortSha: context.ShortSha ?? "unknown",
             IsPreRelease: isPrerelease,
-            IsStable: !isPrerelease);
+            IsStable: !isPrerelease)
+        {
+            Branch = context.Branch,
+            NuGetVersion = prerelease is not null
+                ? $"{major}.{minor}.{patch}-{prerelease.Replace('+', '.')}"
+                : version,
+            DockerVersion = version.Replace('+', '-'),
+        };
     }
 }

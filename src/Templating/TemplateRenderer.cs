@@ -75,6 +75,18 @@ public sealed class TemplateRenderer : ITemplateRenderer
             "slug" => Slug(result),
             "upper" => result.ToUpperInvariant(),
             "lower" => result.ToLowerInvariant(),
+            "trim" => result.Trim(),
+            "basename" => Path.GetFileName(result),
+            "dirname" => Path.GetDirectoryName(result) ?? string.Empty,
+            "fileext" => Path.GetExtension(result),
+            "filestem" => Path.GetFileNameWithoutExtension(result),
+            "urlencode" => Uri.EscapeDataString(result),
+            "sha256" => ComputeSha256Hex(result),
+            "replace" when filterArg is not null => ApplyReplace(result, filterArg),
+            "truncate" when filterArg is not null && int.TryParse(filterArg, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var len)
+                => result.Length > len ? result[..len] : result,
+            "first" when filterArg is not null && int.TryParse(filterArg, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var n)
+                => result.Length > n ? result[..n] : result,
             _ => result,
         };
     }
@@ -186,4 +198,23 @@ public sealed class TemplateRenderer : ITemplateRenderer
 
     private static string Slug(string value) =>
         SlugCleanPattern.Replace(value.ToLowerInvariant(), "-").Trim('-');
+
+    private static string ComputeSha256Hex(string value)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(value);
+        var hash = System.Security.Cryptography.SHA256.HashData(bytes);
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// Apply a replace filter with argument format <c>old,new</c> (comma-separated).
+    /// </summary>
+    private static string ApplyReplace(string value, string filterArg)
+    {
+        var commaIndex = filterArg.IndexOf(',', StringComparison.Ordinal);
+        if (commaIndex < 0) return value;
+        var oldValue = filterArg[..commaIndex];
+        var newValue = filterArg[(commaIndex + 1)..];
+        return value.Replace(oldValue, newValue, StringComparison.Ordinal);
+    }
 }

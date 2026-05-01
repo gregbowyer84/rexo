@@ -66,19 +66,28 @@ public static class Program
         BuildServicesAsync(string workingDir, bool debug, CancellationToken cancellationToken)
     {
         if (debug) Console.WriteLine($"[debug] Loading configuration from {workingDir}");
-        // Try load config
+        // Try load config — check multiple candidate locations in priority order
         RepoConfig? config = null;
-        var configPath = Path.Combine(workingDir, "repo.json");
+        var configCandidates = new[]
+        {
+            Path.Combine(workingDir, "repo.json"),
+            Path.Combine(workingDir, "repo.yaml"),
+            Path.Combine(workingDir, "repo.yml"),
+            Path.Combine(workingDir, ".repo", "repo.json"),
+            Path.Combine(workingDir, ".repo", "repo.yaml"),
+            Path.Combine(workingDir, ".repo", "repo.yml"),
+        };
+        var configPath = configCandidates.FirstOrDefault(File.Exists) ?? Path.Combine(workingDir, "repo.json");
         if (File.Exists(configPath))
         {
             try
             {
                 config = await RepoConfigurationLoader.LoadAsync(configPath, cancellationToken);
-                if (debug) Console.WriteLine($"[debug] Loaded repo.json: {config.Name}");
+                if (debug) Console.WriteLine($"[debug] Loaded config: {configPath} ({config.Name})");
             }
             catch (Exception ex)
             {
-                ConsoleRenderer.RenderError($"Failed to load repo.json: {ex.Message}");
+                ConsoleRenderer.RenderError($"Failed to load config '{configPath}': {ex.Message}");
             }
         }
 
@@ -104,9 +113,18 @@ public static class Program
 
             configLoader.LoadInto(registry, config, workingDir, executor);
 
-            // Load policy.json from workingDir if present (policy commands have lower priority)
-            var policyPath = Path.Combine(workingDir, "policy.json");
-            if (File.Exists(policyPath))
+            // Load policy from workingDir if present — check policy.json and policy.yaml
+            // Policy commands have lower priority than repo.json commands.
+            var policyCandidates = new[]
+            {
+                Path.Combine(workingDir, "policy.json"),
+                Path.Combine(workingDir, "policy.yaml"),
+                Path.Combine(workingDir, "policy.yml"),
+                Path.Combine(workingDir, ".repo", "policy.json"),
+                Path.Combine(workingDir, ".repo", "policy.yaml"),
+            };
+            var policyPath = policyCandidates.FirstOrDefault(File.Exists);
+            if (policyPath is not null)
             {
                 try
                 {
@@ -115,12 +133,12 @@ public static class Program
                     if (policyConfig is not null)
                     {
                         configLoader.LoadPolicyCommandsInto(registry, policyConfig, config, workingDir, executor);
-                        if (debug) Console.WriteLine($"[debug] Loaded policy.json");
+                        if (debug) Console.WriteLine($"[debug] Loaded policy: {policyPath}");
                     }
                 }
                 catch (Exception ex)
                 {
-                    if (debug) Console.WriteLine($"[debug] policy.json load skipped: {ex.Message}");
+                    if (debug) Console.WriteLine($"[debug] Policy load skipped ({policyPath}): {ex.Message}");
                 }
             }
         }
@@ -384,6 +402,16 @@ public static class Program
         var manifestPath = jsonFile.Replace(".json", "-manifest.json", StringComparison.OrdinalIgnoreCase);
         if (manifestPath == jsonFile) manifestPath = jsonFile + ".manifest.json";
 
+        // Compute SHA-256 of repo.json content for traceability
+        string? configHash = null;
+        var repoJsonPath = Path.Combine(workingDir, "repo.json");
+        if (File.Exists(repoJsonPath))
+        {
+            var configBytes = await File.ReadAllBytesAsync(repoJsonPath, cancellationToken);
+            var hashBytes = System.Security.Cryptography.SHA256.HashData(configBytes);
+            configHash = Convert.ToHexString(hashBytes).ToLowerInvariant();
+        }
+
         var manifest = new RunManifest
         {
             ToolVersion = GetToolVersion(),
@@ -393,6 +421,11 @@ public static class Program
             ExitCode = result.ExitCode,
             StartedAt = startedAt,
             CompletedAt = completedAt,
+            ConfigHash = configHash,
+            Version = result.Version,
+            AssemblyVersion = result.Version?.AssemblyVersion,
+            InformationalVersion = result.Version?.InformationalVersion,
+            NuGetVersion = result.Version?.NuGetVersion,
             Steps = result.Steps
                 .Select(s => new StepManifestEntry(s.StepId, s.Success, s.ExitCode, s.Duration.TotalMilliseconds))
                 .ToArray(),

@@ -22,6 +22,18 @@ public sealed record RunManifest
     public IReadOnlyList<ArtifactManifestEntry> Artifacts { get; init; } = Array.Empty<ArtifactManifestEntry>();
     public IReadOnlyList<string> Warnings { get; init; } = Array.Empty<string>();
     public IReadOnlyList<string> Errors { get; init; } = Array.Empty<string>();
+
+    /// <summary>SHA-256 hash of the resolved repo.json content at run time.</summary>
+    public string? ConfigHash { get; init; }
+
+    /// <summary>Assembly version derived from the resolved version.</summary>
+    public string? AssemblyVersion { get; init; }
+
+    /// <summary>Informational version (SemVer + build metadata) derived from the resolved version.</summary>
+    public string? InformationalVersion { get; init; }
+
+    /// <summary>NuGet-compatible version string derived from the resolved version.</summary>
+    public string? NuGetVersion { get; init; }
 }
 
 public sealed record StepManifestEntry(

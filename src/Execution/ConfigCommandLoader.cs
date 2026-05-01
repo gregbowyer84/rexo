@@ -128,8 +128,18 @@ public sealed class ConfigCommandLoader
                     ["minor"] = versionResult.Minor.ToString(System.Globalization.CultureInfo.InvariantCulture),
                     ["patch"] = versionResult.Patch.ToString(System.Globalization.CultureInfo.InvariantCulture),
                     ["prerelease"] = versionResult.PreRelease,
+                    ["buildMetadata"] = versionResult.BuildMetadata,
+                    ["branch"] = versionResult.Branch,
+                    ["commitSha"] = versionResult.CommitSha,
+                    ["shortSha"] = versionResult.ShortSha,
+                    ["assemblyVersion"] = versionResult.AssemblyVersion,
+                    ["fileVersion"] = versionResult.FileVersion,
+                    ["informationalVersion"] = versionResult.InformationalVersion,
+                    ["nugetVersion"] = versionResult.NuGetVersion,
+                    ["dockerVersion"] = versionResult.DockerVersion,
                     ["isPrerelease"] = versionResult.IsPreRelease.ToString().ToLowerInvariant(),
                     ["isStable"] = versionResult.IsStable.ToString().ToLowerInvariant(),
+                    ["commitsSinceVersionSource"] = versionResult.CommitsSinceVersionSource?.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 });
         });
 
@@ -430,10 +440,33 @@ public sealed class ConfigCommandLoader
             else
             {
                 // Run parallel group concurrently — all steps share a snapshot of currentContext
+                // Honour maxParallel if set on the command (0 / null = no cap)
                 var snapshot = currentContext;
-                var tasks = group.Select(sc =>
-                    stepExecutor.ExecuteAsync(BuildStepDefinition(sc), snapshot, cancellationToken));
-                groupResults = [.. await Task.WhenAll(tasks)];
+                var maxParallel = commandConfig.MaxParallel;
+
+                if (maxParallel is > 0)
+                {
+                    using var semaphore = new SemaphoreSlim(maxParallel.Value, maxParallel.Value);
+                    var tasks = group.Select(async sc =>
+                    {
+                        await semaphore.WaitAsync(cancellationToken);
+                        try
+                        {
+                            return await stepExecutor.ExecuteAsync(BuildStepDefinition(sc), snapshot, cancellationToken);
+                        }
+                        finally
+                        {
+                            semaphore.Release();
+                        }
+                    });
+                    groupResults = [.. await Task.WhenAll(tasks)];
+                }
+                else
+                {
+                    var tasks = group.Select(sc =>
+                        stepExecutor.ExecuteAsync(BuildStepDefinition(sc), snapshot, cancellationToken));
+                    groupResults = [.. await Task.WhenAll(tasks)];
+                }
             }
 
             foreach (var stepResult in groupResults)
@@ -461,7 +494,7 @@ public sealed class ConfigCommandLoader
                     failed.Result.ExitCode,
                     $"Step '{failed.Result.StepId}' failed with exit code {failed.Result.ExitCode}.",
                     new Dictionary<string, object?>())
-                { Steps = stepResults };
+                { Steps = stepResults, Version = currentContext.Version };
             }
         }
 
@@ -471,7 +504,7 @@ public sealed class ConfigCommandLoader
             0,
             $"Command '{commandName}' completed successfully.",
             new Dictionary<string, object?>())
-        { Steps = stepResults };
+        { Steps = stepResults, Version = currentContext.Version };
     }
 
     private static IReadOnlyDictionary<string, string?> BuildOptionsWithDefaults(
