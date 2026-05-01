@@ -15,7 +15,7 @@ Thumbs.db
 # Test and artifacts
 TestResults/
 coverage/
-artifacts/
+/artifacts/
 
 # Generated runtime/provider configs
 .repo/generated/
