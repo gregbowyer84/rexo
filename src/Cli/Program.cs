@@ -9,6 +9,7 @@ using Rexo.Configuration;
 using Rexo.Configuration.Models;
 using Rexo.Core.Models;
 using Rexo.Execution;
+using Rexo.Git;
 using Rexo.Templating;
 using Rexo.Ui;
 using Rexo.Versioning;
@@ -436,11 +437,16 @@ public static class Program
         }
 
         var ciInfo = CiDetector.Detect();
+        var gitInfo = await GitDetector.DetectAsync(workingDir, cancellationToken);
 
         var manifest = new RunManifest
         {
             ToolVersion = GetToolVersion(),
+            RepoName = Path.GetFileName(workingDir.TrimEnd(Path.DirectorySeparatorChar)),
             RepoRoot = workingDir,
+            Branch = gitInfo.Branch,
+            CommitSha = gitInfo.CommitSha,
+            RemoteUrl = gitInfo.RemoteUrl,
             CommandExecuted = commandName,
             Success = result.Success,
             ExitCode = result.ExitCode,
@@ -461,6 +467,11 @@ public static class Program
             CiBuildUrl = ciInfo.BuildUrl,
             Steps = result.Steps
                 .Select(s => new StepManifestEntry(s.StepId, s.Success, s.ExitCode, s.Duration.TotalMilliseconds))
+                .ToArray(),
+            Errors = result.StructuredErrors
+                .Select(e => e.Message)
+                .Where(m => m is not null)
+                .Select(m => m!)
                 .ToArray(),
         };
 

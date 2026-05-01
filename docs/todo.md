@@ -60,7 +60,7 @@ Legend:
 - [x] Variable replacement
 - [x] Context references: `args`, `options`, `repo`, `version`, `steps`, `env`
 - [x] Basic filters: `slug`, `default(...)`, `upper`, `lower`
-- [~] Simple conditions via truthy rendered values
+- [x] Simple conditions via truthy rendered values (`when:` field evaluated via IsTruthy in StepExecutor)
 - [x] Expression operators/comparisons in templates (`==` and `!=` equality operators)
 - [x] Path helper functions: `basename`, `dirname`, `filestem`, `fileext`, `urlencode`, `sha256`, `trim`, `replace(old,new)`, `truncate(n)`, `first(n)`
 
@@ -122,7 +122,7 @@ Legend:
 - [x] JSON file output via `--json-file`
 - [x] Run manifest model exists
 - [x] Manifest writing path exists for run invocations
-- [~] Manifest content is partial versus scope (config hash/artifacts/push decisions/warnings/errors detail)
+- [~] Manifest content is partial versus scope (PushDecisions/Artifacts not yet flowed from step results; Branch/CommitSha/RemoteUrl/RepoName/Errors now populated)
 - [ ] Stable versioned JSON schema contract documentation
 
 ## 12) Policy and Template Sources
