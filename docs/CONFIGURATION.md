@@ -357,7 +357,7 @@ The following features are defined in the product scope but not yet implemented:
 ### Parallel Step Execution
 
 - Basic parallel step execution works via the `parallel: true` flag on steps, with a `maxParallel` concurrency cap.
-- **Advanced fan-in and dependency declarations** between parallel groups are not yet implemented.
+- Dependency-aware fan-in is supported via `dependsOn` (step IDs) within parallel groups.
 
 ### Run Manifest
 

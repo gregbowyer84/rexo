@@ -210,6 +210,8 @@ public static class BuiltinCommandRegistration
                         lines.Add($"        when: {step.When}");
                     if (step.Parallel == true)
                         lines.Add($"        parallel: true");
+                    if (step.DependsOn is { Length: > 0 })
+                        lines.Add($"        dependsOn: {string.Join(", ", step.DependsOn)}");
                     if (step.ContinueOnError == true)
                         lines.Add($"        continueOnError: true");
                     if (step.OutputPattern is not null)

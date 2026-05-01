@@ -54,7 +54,7 @@ Legend:
 - [x] `parallel` step groups (consecutive parallel steps batched via Task.WhenAll)
 - [x] Output capture via `outputPattern` (regex named groups) and `outputFile` (write stdout to file)
 - [x] Command-level parallel settings (`parallel`, `maxParallel`) — SemaphoreSlim concurrency cap
-- [ ] Advanced dependency and fan-in behavior for parallel groups
+- [x] Advanced dependency and fan-in behavior for parallel groups
 
 ## 5) Templating
 
