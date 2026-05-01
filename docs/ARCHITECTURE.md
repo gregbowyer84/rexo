@@ -68,7 +68,7 @@ Program.ExecuteAsync
   1. Parse global flags (--json, --json-file, --verbose, --debug, --quiet/-q)
   2. Load repo.json → RepoConfigurationLoader
        a. Validate $schema + schemaVersion metadata
-       b. NJsonSchema validation against embedded schema (or local `schema.json`)
+      b. NJsonSchema validation against embedded schema (or local `rexo.schema.json` / `policy.schema.json`)
        c. JsonSerializer.Deserialize<RepoConfig>
        d. Resolve `extends` chain (breadth-first merge, child wins, circular detection)
   3. Build service graph (BuildServicesAsync)
@@ -116,9 +116,9 @@ the target project.
 
 ### Schema versioning
 
-Config schema lives under `schemas/<version>/schema.json`. The loader validates the
+Config and policy schemas live at the repo root as `rexo.schema.json` and `policy.schema.json`. The loader validates the
 `$schema` URI and `schemaVersion` string before NJsonSchema structural validation.
-This allows future versions to ship a new schema path (`schemas/2.0/schema.json`)
+This allows future versions to ship new schema files (for example `rexo.schema.v2.json` and `policy.schema.v2.json`)
 while the loader rejects old configs cleanly.
 
 ### Multi-word command resolution

@@ -137,4 +137,63 @@ public sealed class BuiltinCommandRegistrationTests
         Assert.True(result.Success);
         Assert.Contains("No versioning", result.Message, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public async Task DoctorReportsEmbeddedSchemaFallbackWhenNoLocalSchema()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"rexo-doctor-noschema-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(dir, ".rexo"));
+        await File.WriteAllTextAsync(Path.Combine(dir, ".rexo", "rexo.json"), "{}");
+
+        try
+        {
+            var registry = BuiltinCommandRegistration.CreateDefault();
+            var executor = new DefaultCommandExecutor(registry);
+            var invocation = new CommandInvocation(
+                new Dictionary<string, string>(),
+                new Dictionary<string, string?>(),
+                Json: false,
+                JsonFile: null,
+                WorkingDirectory: dir);
+
+            var result = await executor.ExecuteAsync("doctor", invocation, CancellationToken.None);
+
+            Assert.Contains("schema", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("embedded fallback", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public async Task DoctorReportsLocalSchemaWhenPresent()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"rexo-doctor-localschema-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(dir, ".rexo"));
+        await File.WriteAllTextAsync(Path.Combine(dir, ".rexo", "rexo.json"), "{}");
+        await File.WriteAllTextAsync(Path.Combine(dir, "rexo.schema.json"), "{}");
+
+        try
+        {
+            var registry = BuiltinCommandRegistration.CreateDefault();
+            var executor = new DefaultCommandExecutor(registry);
+            var invocation = new CommandInvocation(
+                new Dictionary<string, string>(),
+                new Dictionary<string, string?>(),
+                Json: false,
+                JsonFile: null,
+                WorkingDirectory: dir);
+
+            var result = await executor.ExecuteAsync("doctor", invocation, CancellationToken.None);
+
+            Assert.Contains("schema", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("local", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
 }

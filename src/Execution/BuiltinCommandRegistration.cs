@@ -13,8 +13,8 @@ public static class BuiltinCommandRegistration
 {
     private static readonly JsonSerializerOptions IndentedJsonOptions = new() { WriteIndented = true };
     private static readonly HttpClient HttpClient = new();
-    private static readonly string[] InitLocationChoices = [".rexo", "root"];
     private static readonly string[] InitTemplateChoices = ["auto", "dotnet", "node", "generic"];
+    private static readonly string[] InitSchemaSourceChoices = ["local", "remote"];
     private static readonly string[] InitYesNoChoices = ["yes", "no"];
     private const string DefaultInstructionsPath = ".github/instructions/rexo.instructions.md";
     private const string InstructionsTemplateUrl = "https://raw.githubusercontent.com/agile-north/rexo/release/next/docs/rexo.instructions.md";
@@ -93,6 +93,25 @@ public static class BuiltinCommandRegistration
             "config",
             configPath is not null,
             configPath is not null ? $"found ({Path.GetFileName(configPath)})" : "not found (expected rexo.json/rexo.yml in root or .rexo/)"));
+
+        if (configPath is not null)
+        {
+            var configDirectory = Path.GetDirectoryName(configPath) ?? invocation.WorkingDirectory;
+            var schemaPathCandidates = new[]
+            {
+                Path.Combine(configDirectory, RepoConfigurationLoader.SupportedRexoSchemaPath),
+                Path.Combine(configDirectory, "..", RepoConfigurationLoader.SupportedRexoSchemaPath),
+                Path.Combine(configDirectory, ".rexo", RepoConfigurationLoader.SupportedRexoSchemaPath),
+                Path.Combine(configDirectory, RepoConfigurationLoader.LegacySchemaPath),
+                Path.Combine(configDirectory, "..", RepoConfigurationLoader.LegacySchemaPath),
+                Path.Combine(configDirectory, ".rexo", RepoConfigurationLoader.LegacySchemaPath),
+            };
+            var schemaPath = schemaPathCandidates.FirstOrDefault(File.Exists);
+
+            checks.Add(schemaPath is not null
+                ? ("schema", true, $"local rexo schema ({Path.GetFullPath(schemaPath)})")
+                : ("schema", true, "embedded fallback (no local rexo.schema.json found)"));
+        }
 
         // CI context
         var ciInfo = CiDetector.Detect();
@@ -421,27 +440,38 @@ public static class BuiltinCommandRegistration
         }
 
         var detectedTemplate = DetectTemplate(workingDir);
-        var location = ReadOption(options, "location") ?? ".rexo";
+        var requestedLocation = ReadOption(options, "location");
         var template = ReadOption(options, "template") ?? detectedTemplate;
+        var schemaSource = ReadOption(options, "schema-source") ?? "local";
         var withPolicy = IsTrue(options, "with-policy");
         var policyTemplate = ReadOption(options, "policy-template");
         var instructionsPathOption = ReadOption(options, "instructions-path");
         var withInstructions = IsTrue(options, "with-instructions") || !string.IsNullOrWhiteSpace(instructionsPathOption);
+
+        if (!string.IsNullOrWhiteSpace(requestedLocation) &&
+            !requestedLocation.Equals(".rexo", StringComparison.OrdinalIgnoreCase) &&
+            !requestedLocation.Equals("rexo", StringComparison.OrdinalIgnoreCase))
+        {
+            return CommandResult.Fail(
+                "init",
+                1,
+                "Invalid --location value. 'init' always creates .rexo/rexo.json; root location must be set up manually.");
+        }
 
         if (!nonInteractive)
         {
             Console.WriteLine("Rexo init");
             Console.WriteLine($"Detected repository template: {detectedTemplate}");
 
-            location = PromptChoice(
-                "Where should config be created?",
-                InitLocationChoices,
-                location.Equals("root", StringComparison.OrdinalIgnoreCase) ? "root" : ".rexo");
-
             template = PromptChoice(
                 "Choose starter template:",
                 InitTemplateChoices,
                 "auto");
+
+            schemaSource = PromptChoice(
+                "Schema source?",
+                InitSchemaSourceChoices,
+                "local");
 
             if (template.Equals("auto", StringComparison.OrdinalIgnoreCase))
             {
@@ -501,16 +531,16 @@ public static class BuiltinCommandRegistration
                     : available.Count > 0 ? available[0] : null;
         }
 
-        location = NormalizeLocation(location);
-        if (location is null)
-        {
-            return CommandResult.Fail("init", 1, "Invalid --location value. Use '.rexo' or 'root'.");
-        }
-
         template = NormalizeTemplate(template);
         if (template is null)
         {
             return CommandResult.Fail("init", 1, "Invalid --template value. Use auto|dotnet|node|generic.");
+        }
+
+        schemaSource = NormalizeSchemaSource(schemaSource);
+        if (schemaSource is null)
+        {
+            return CommandResult.Fail("init", 1, "Invalid --schema-source value. Use local|remote.");
         }
 
         if (withPolicy && string.IsNullOrWhiteSpace(policyTemplate))
@@ -526,9 +556,7 @@ public static class BuiltinCommandRegistration
                 $"Invalid --policy-template value '{policyTemplate}'. Available: {string.Join(", ", EmbeddedPolicyTemplates.TemplateNames)}");
         }
 
-        var configDir = location == ".rexo"
-            ? Path.Combine(workingDir, ".rexo")
-            : workingDir;
+        var configDir = Path.Combine(workingDir, ".rexo");
 
         string? instructionsTargetPath = null;
         if (withInstructions)
@@ -572,7 +600,37 @@ public static class BuiltinCommandRegistration
         }
 
         var repoName = Path.GetFileName(workingDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        var configJson = BuildStarterConfigJson(repoName, template);
+        var schemaValue = schemaSource.Equals("local", StringComparison.OrdinalIgnoreCase)
+            ? RepoConfigurationLoader.SupportedRexoSchemaPath
+            : RepoConfigurationLoader.SupportedRexoSchemaUri;
+        var configJson = BuildStarterConfigJson(repoName, template, schemaValue);
+
+        string? rexoSchemaPath = null;
+        string? policySchemaPath = null;
+        if (schemaSource.Equals("local", StringComparison.OrdinalIgnoreCase))
+        {
+            rexoSchemaPath = Path.Combine(workingDir, ".rexo", RepoConfigurationLoader.SupportedRexoSchemaPath);
+            if (File.Exists(rexoSchemaPath) && !force)
+            {
+                return CommandResult.Fail("init", 1, $"Target schema already exists at '{rexoSchemaPath}'. Use --force to overwrite.");
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(rexoSchemaPath)!);
+            var embeddedRexoSchemaJson = await RepoConfigurationLoader.ReadEmbeddedRexoSchemaJsonAsync(cancellationToken);
+            await File.WriteAllTextAsync(rexoSchemaPath, embeddedRexoSchemaJson, cancellationToken);
+
+            if (withPolicy)
+            {
+                policySchemaPath = Path.Combine(workingDir, ".rexo", RepoConfigurationLoader.SupportedPolicySchemaPath);
+                if (File.Exists(policySchemaPath) && !force)
+                {
+                    return CommandResult.Fail("init", 1, $"Target schema already exists at '{policySchemaPath}'. Use --force to overwrite.");
+                }
+
+                var embeddedPolicySchemaJson = await RepoConfigurationLoader.ReadEmbeddedPolicySchemaJsonAsync(cancellationToken);
+                await File.WriteAllTextAsync(policySchemaPath, embeddedPolicySchemaJson, cancellationToken);
+            }
+        }
 
         await File.WriteAllTextAsync(configPath, configJson, cancellationToken);
 
@@ -588,7 +646,11 @@ public static class BuiltinCommandRegistration
                     $"Target policy already exists at '{policyPath}'. Use --force to overwrite.");
             }
 
+            var policySchemaValue = schemaSource.Equals("local", StringComparison.OrdinalIgnoreCase)
+                ? RepoConfigurationLoader.SupportedPolicySchemaPath
+                : RepoConfigurationLoader.SupportedPolicySchemaUri;
             var policyJson = EmbeddedPolicyTemplates.ReadTemplate(policyTemplate!);
+            policyJson = ApplySchemaMetadata(policyJson, policySchemaValue);
             await File.WriteAllTextAsync(policyPath, policyJson, cancellationToken);
         }
 
@@ -617,6 +679,9 @@ public static class BuiltinCommandRegistration
         {
             $"Initialized Rexo config: {configPath}",
             $"Template: {template}",
+            $"Schema source: {schemaSource}",
+            rexoSchemaPath is not null ? $"Initialized schema: {rexoSchemaPath}" : "Schema file: not created (remote URL)",
+            policySchemaPath is not null ? $"Initialized schema: {policySchemaPath}" : "Policy schema file: not created",
             withPolicy ? $"Policy template: {policyTemplate}" : "Policy template: none",
             withPolicy ? $"Initialized policy: {policyPath}" : "Policy file: not created",
             withInstructions ? $"Initialized instructions: {instructionsTargetPath}" : "Instructions file: not created",
@@ -643,22 +708,6 @@ public static class BuiltinCommandRegistration
         }
 
         return "generic";
-    }
-
-    private static string? NormalizeLocation(string value)
-    {
-        if (value.Equals(".rexo", StringComparison.OrdinalIgnoreCase) ||
-            value.Equals("rexo", StringComparison.OrdinalIgnoreCase))
-        {
-            return ".rexo";
-        }
-
-        if (value.Equals("root", StringComparison.OrdinalIgnoreCase))
-        {
-            return "root";
-        }
-
-        return null;
     }
 
     private static string? NormalizeTemplate(string value)
@@ -697,7 +746,7 @@ public static class BuiltinCommandRegistration
         return match ?? defaultChoice;
     }
 
-    private static string BuildStarterConfigJson(string repoName, string template)
+    private static string BuildStarterConfigJson(string repoName, string template, string schemaValue)
     {
         object commands = template switch
         {
@@ -761,7 +810,7 @@ public static class BuiltinCommandRegistration
 
         var doc = new Dictionary<string, object?>
         {
-            ["$schema"] = "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/schema.json",
+            ["$schema"] = schemaValue,
             ["schemaVersion"] = "1.0",
             ["name"] = string.IsNullOrWhiteSpace(repoName) ? "my-repo" : repoName,
             ["description"] = "Generated by rx init",
@@ -770,6 +819,45 @@ public static class BuiltinCommandRegistration
         };
 
         return JsonSerializer.Serialize(doc, IndentedJsonOptions);
+    }
+
+    private static string ApplySchemaMetadata(string jsonText, string schemaValue)
+    {
+        using var document = JsonDocument.Parse(jsonText);
+        var root = document.RootElement;
+
+        var node = new Dictionary<string, object?>
+        {
+            ["$schema"] = schemaValue,
+            ["schemaVersion"] = RepoConfigurationLoader.SupportedSchemaVersion,
+        };
+
+        foreach (var property in root.EnumerateObject())
+        {
+            if (property.NameEquals("$schema") || property.NameEquals("schemaVersion"))
+            {
+                continue;
+            }
+
+            node[property.Name] = JsonSerializer.Deserialize<object?>(property.Value.GetRawText(), IndentedJsonOptions);
+        }
+
+        return JsonSerializer.Serialize(node, IndentedJsonOptions);
+    }
+
+    private static string? NormalizeSchemaSource(string value)
+    {
+        if (value.Equals("local", StringComparison.OrdinalIgnoreCase))
+        {
+            return "local";
+        }
+
+        if (value.Equals("remote", StringComparison.OrdinalIgnoreCase))
+        {
+            return "remote";
+        }
+
+        return null;
     }
 }
 

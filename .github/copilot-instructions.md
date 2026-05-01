@@ -51,7 +51,7 @@ src/Policies/          Local file policy source
 ## Config model (`repo.json`)
 
 Every `repo.json` must have `$schema` and `schemaVersion: "1.0"`.
-Schema file: `schema.json` (repo root).
+Schema file: `rexo.schema.json` (repo root).
 Loader: `src/Configuration/RepoConfigurationLoader.cs`.
 
 ## What still needs to be built
@@ -62,3 +62,4 @@ See `docs/todo.md`. Priority gaps:
 3. `config resolved` / `config sources` sub-commands
 4. Parallel step execution
 5. NBGV and MinVer version providers
+

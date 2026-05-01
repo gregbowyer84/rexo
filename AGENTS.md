@@ -47,9 +47,8 @@ Directory.Build.props       # Central build conventions + branding
 Directory.Build.targets     # Shared MSBuild targets
 Directory.Packages.props    # Central NuGet version management
 repo.json                   # Example / self-describing config
-schemas/
-  1.0/
-    schema.json             # JSON Schema for repo.json v1.0
+rexo.schema.json           # JSON Schema for rexo.json v1.0
+policy.schema.json         # JSON Schema for policy.json v1.0
 src/
   Analysis/                 # dotnet format + build analysis runner
   Artifacts/                # IArtifactProvider abstraction + registry
@@ -123,7 +122,7 @@ Every `repo.json` must start with:
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/schema.json",
+  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
   "schemaVersion": "1.0",
   ...
 }
@@ -132,18 +131,18 @@ Every `repo.json` must start with:
 Alternative `$schema` values accepted:
 
 - Remote canonical URL (once the repository is published)
-- `https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/schema.json`
-- `schema.json`
-- `./schema.json`
+- `https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json`
+- `rexo.schema.json`
+- `./rexo.schema.json`
 
 ### Validation flow (`RepoConfigurationLoader`)
 
 1. Check `$schema` is present and matches an allowed URI
 2. Check `schemaVersion` is present and equals `"1.0"`
-3. Validate full JSON against `schema.json` (embedded in assembly) via NJsonSchema
+3. Validate full JSON against `rexo.schema.json` (embedded in assembly) via NJsonSchema
 4. Deserialize to `RepoConfig`
 
-The schema file is embedded in `Rexo.Configuration.dll`; a local `schema.json` at the repo root
+The schema file is embedded in `Rexo.Configuration.dll`; a local `rexo.schema.json` at the repo root
 can override it for development.
 
 ---

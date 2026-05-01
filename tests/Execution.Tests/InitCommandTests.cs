@@ -26,8 +26,11 @@ public sealed class InitCommandTests
 
             Assert.True(result.Success);
             var configPath = Path.Combine(dir, ".rexo", "rexo.json");
+            var schemaPath = Path.Combine(dir, ".rexo", "rexo.schema.json");
             Assert.True(File.Exists(configPath));
+            Assert.True(File.Exists(schemaPath));
             var content = await File.ReadAllTextAsync(configPath);
+            Assert.Contains("\"$schema\": \"rexo.schema.json\"", content, StringComparison.Ordinal);
             Assert.Contains("\"schemaVersion\": \"1.0\"", content, StringComparison.Ordinal);
             Assert.Contains("\"commands\"", content, StringComparison.Ordinal);
         }
@@ -204,6 +207,77 @@ public sealed class InitCommandTests
 
             Assert.False(result.Success);
             Assert.Contains("Instructions file already exists", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public async Task InitFailsWhenLocationIsRoot()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"rexo-init-root-schema-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+
+        try
+        {
+            var registry = BuiltinCommandRegistration.CreateDefault();
+            var executor = new DefaultCommandExecutor(registry);
+
+            var invocation = new CommandInvocation(
+                new Dictionary<string, string>(),
+                new Dictionary<string, string?>
+                {
+                    ["yes"] = "true",
+                    ["location"] = "root",
+                },
+                Json: false,
+                JsonFile: null,
+                WorkingDirectory: dir);
+
+            var result = await executor.ExecuteAsync("init", invocation, CancellationToken.None);
+
+            Assert.False(result.Success);
+            Assert.Contains("always creates .rexo/rexo.json", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public async Task InitWithRemoteSchemaDoesNotCreateLocalSchemaFile()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"rexo-init-remote-schema-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+
+        try
+        {
+            var registry = BuiltinCommandRegistration.CreateDefault();
+            var executor = new DefaultCommandExecutor(registry);
+
+            var invocation = new CommandInvocation(
+                new Dictionary<string, string>(),
+                new Dictionary<string, string?>
+                {
+                    ["yes"] = "true",
+                    ["schema-source"] = "remote",
+                },
+                Json: false,
+                JsonFile: null,
+                WorkingDirectory: dir);
+
+            var result = await executor.ExecuteAsync("init", invocation, CancellationToken.None);
+
+            Assert.True(result.Success);
+            var configPath = Path.Combine(dir, ".rexo", "rexo.json");
+            var schemaPath = Path.Combine(dir, ".rexo", "rexo.schema.json");
+            Assert.True(File.Exists(configPath));
+            Assert.False(File.Exists(schemaPath));
+            var content = await File.ReadAllTextAsync(configPath);
+            Assert.Contains("\"$schema\": \"https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json\"", content, StringComparison.Ordinal);
         }
         finally
         {

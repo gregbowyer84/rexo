@@ -1,7 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
-    <EmbeddedResource Include="..\\..\\schema.json"
-      LogicalName="Rexo.Configuration.schema.1.0.json" />
+    <EmbeddedResource Include="..\\..\\rexo.schema.json"
+      LogicalName="Rexo.Configuration.rexo.schema.1.0.json" />
+    <EmbeddedResource Include="..\\..\\policy.schema.json"
+      LogicalName="Rexo.Configuration.policy.schema.1.0.json" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\\Core\\Core.csproj" />

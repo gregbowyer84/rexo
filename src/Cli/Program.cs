@@ -571,8 +571,8 @@ public static class Program
         Console.WriteLine("  doctor               Check environment and configuration");
         Console.WriteLine("  init                 Create a starter rexo config");
         Console.WriteLine("      --yes            Non-interactive defaults");
-        Console.WriteLine("      --location       .rexo (default) or root");
         Console.WriteLine("      --template       auto|dotnet|node|generic");
+        Console.WriteLine("      --schema-source  local (default) or remote");
         Console.WriteLine("      --with-policy    Also create policy.json from a template");
         Console.WriteLine("      --policy-template standard|dotnet (or any embedded template)");
         Console.WriteLine("      --with-instructions Download docs/rexo.instructions.md into repo");

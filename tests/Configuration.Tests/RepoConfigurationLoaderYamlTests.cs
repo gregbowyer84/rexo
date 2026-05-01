@@ -12,10 +12,8 @@ public sealed class RepoConfigurationLoaderYamlTests
       Environment.SetEnvironmentVariable("REXO_OVERLAY", null);
         var dir = Path.Combine(Path.GetTempPath(), $"rexo-yaml-{Guid.NewGuid():N}");
         Directory.CreateDirectory(dir);
-        Directory.CreateDirectory(Path.Combine(dir, "schemas", "1.0"));
-
-        var schemaPath = Path.Combine(dir, "schemas", "1.0", "schema.json");
-        var configPath = Path.Combine(dir, "rexo.yml");
+    var schemaPath = Path.Combine(dir, "rexo.schema.json");
+    var configPath = Path.Combine(dir, "rexo.yml");
 
         await File.WriteAllTextAsync(
             schemaPath,
@@ -37,7 +35,7 @@ public sealed class RepoConfigurationLoaderYamlTests
         await File.WriteAllTextAsync(
             configPath,
             """
-            $schema: schema.json
+            $schema: rexo.schema.json
             schemaVersion: "1.0"
             name: yaml-sample
             commands:
@@ -72,6 +70,9 @@ public sealed class RepoConfigurationLoaderYamlTests
         await File.WriteAllTextAsync(
             policyPath,
             """
+            $schema: https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/policy.schema.json
+            schemaVersion: "1.0"
+            name: yaml-policy
             commands:
               secure-check:
                 description: Run secure check

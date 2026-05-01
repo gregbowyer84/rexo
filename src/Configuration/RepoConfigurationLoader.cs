@@ -9,8 +9,20 @@ using YamlDotNet.Serialization;
 public sealed class RepoConfigurationLoader
 {
     public const string SupportedSchemaVersion = "1.0";
-    public const string SupportedSchemaUri = "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/schema.json";
-    public const string SupportedSchemaPath = "schema.json";
+    public const string SupportedRexoSchemaUri = "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json";
+    public const string SupportedRexoSchemaPath = "rexo.schema.json";
+    public const string SupportedRexoSchemaPathInRexoFolder = ".rexo/rexo.schema.json";
+    public const string SupportedPolicySchemaUri = "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/policy.schema.json";
+    public const string SupportedPolicySchemaPath = "policy.schema.json";
+    public const string SupportedPolicySchemaPathInRexoFolder = ".rexo/policy.schema.json";
+
+    // Legacy values kept for backward compatibility.
+    public const string LegacySchemaUri = "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/schema.json";
+    public const string LegacySchemaPath = "schema.json";
+    public const string LegacySchemaPathInRexoFolder = ".rexo/schema.json";
+
+    private const string EmbeddedRexoSchemaResourceName = "Rexo.Configuration.rexo.schema.1.0.json";
+    private const string EmbeddedPolicySchemaResourceName = "Rexo.Configuration.policy.schema.1.0.json";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -122,7 +134,29 @@ public sealed class RepoConfigurationLoader
         }
 
         var policyJson = await ReadAsJsonAsync(policyPath, cancellationToken);
+        ValidatePolicyMetadata(policyPath, policyJson);
+        await ValidatePolicySchemaAsync(policyPath, policyJson, cancellationToken);
         return JsonSerializer.Deserialize<PolicyConfig>(policyJson, JsonOptions);
+    }
+
+    public static async Task<string> ReadEmbeddedRexoSchemaJsonAsync(CancellationToken cancellationToken)
+    {
+        var asm = typeof(RepoConfigurationLoader).Assembly;
+        using var stream = asm.GetManifestResourceStream(EmbeddedRexoSchemaResourceName)
+            ?? throw new InvalidOperationException(
+                $"Embedded schema resource '{EmbeddedRexoSchemaResourceName}' was not found in the assembly.");
+        using var reader = new StreamReader(stream);
+        return await reader.ReadToEndAsync(cancellationToken);
+    }
+
+    public static async Task<string> ReadEmbeddedPolicySchemaJsonAsync(CancellationToken cancellationToken)
+    {
+        var asm = typeof(RepoConfigurationLoader).Assembly;
+        using var stream = asm.GetManifestResourceStream(EmbeddedPolicySchemaResourceName)
+            ?? throw new InvalidOperationException(
+                $"Embedded schema resource '{EmbeddedPolicySchemaResourceName}' was not found in the assembly.");
+        using var reader = new StreamReader(stream);
+        return await reader.ReadToEndAsync(cancellationToken);
     }
 
     /// <summary>
@@ -209,10 +243,16 @@ public sealed class RepoConfigurationLoader
         var schema = schemaProp.GetString();
         var allowedSchemaValues = new[]
         {
-            SupportedSchemaUri,
-            SupportedSchemaPath,
-            "./" + SupportedSchemaPath,
-            "../" + SupportedSchemaPath,
+            SupportedRexoSchemaUri,
+            SupportedRexoSchemaPath,
+            "./" + SupportedRexoSchemaPath,
+            "../" + SupportedRexoSchemaPath,
+            SupportedRexoSchemaPathInRexoFolder,
+            LegacySchemaUri,
+            LegacySchemaPath,
+            "./" + LegacySchemaPath,
+            "../" + LegacySchemaPath,
+            LegacySchemaPathInRexoFolder,
         };
 
         if (string.IsNullOrWhiteSpace(schema) || !allowedSchemaValues.Contains(schema, StringComparer.Ordinal))
@@ -242,30 +282,21 @@ public sealed class RepoConfigurationLoader
         cancellationToken.ThrowIfCancellationRequested();
 
         JsonSchema schema;
-        // Look for schema.json next to the config file, then one level up (handles .rexo/ layout).
-        var schemaPath = Path.Combine(configDirectory, "schema.json");
-        if (!File.Exists(schemaPath))
-            schemaPath = Path.Combine(configDirectory, "..", "schema.json");
-        if (File.Exists(schemaPath))
+        var schemaPath = FindLocalSchemaPath(configDirectory, SupportedRexoSchemaPath, LegacySchemaPath);
+        if (schemaPath is not null)
         {
-            schema = await JsonSchema.FromFileAsync(schemaPath, CancellationToken.None);
+            var schemaJson = await File.ReadAllTextAsync(schemaPath, cancellationToken);
+            schema = await ParseSchemaWithCompatibilityAsync(schemaJson, cancellationToken);
         }
         else
         {
-            // Fall back to the schema embedded in this assembly so the tool works
-            // without a local schemas/ directory (e.g. when installed via dotnet tool install).
-            var asm = typeof(RepoConfigurationLoader).Assembly;
-            const string resourceName = "Rexo.Configuration.schema.1.0.json";
-            using var stream = asm.GetManifestResourceStream(resourceName)
-                ?? throw new InvalidOperationException(
-                    $"Embedded schema resource '{resourceName}' was not found in the assembly.");
-            using var reader = new StreamReader(stream);
-            var schemaJson = await reader.ReadToEndAsync(cancellationToken);
-            schema = await JsonSchema.FromJsonAsync(schemaJson, CancellationToken.None);
+            // Fall back to the embedded schema so the tool works when installed globally.
+            var schemaJson = await ReadEmbeddedRexoSchemaJsonAsync(cancellationToken);
+            schema = await ParseSchemaWithCompatibilityAsync(schemaJson, cancellationToken);
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        var errors = schema.Validate(jsonText);
+        var errors = ValidateWithCompatibilityFallback(schema, jsonText, cancellationToken);
         if (errors.Count > 0)
         {
             var details = string.Join(
@@ -277,6 +308,151 @@ public sealed class RepoConfigurationLoader
                 Environment.NewLine +
                 details);
         }
+    }
+
+    private static void ValidatePolicyMetadata(string policyPath, string jsonText)
+    {
+        using var doc = JsonDocument.Parse(jsonText);
+        var root = doc.RootElement;
+
+        if (!root.TryGetProperty("$schema", out var schemaProp) || schemaProp.ValueKind != JsonValueKind.String)
+        {
+            throw new InvalidOperationException("Policy must define a '$schema' string property.");
+        }
+
+        var schema = schemaProp.GetString();
+        var allowedSchemaValues = new[]
+        {
+            SupportedPolicySchemaUri,
+            SupportedPolicySchemaPath,
+            "./" + SupportedPolicySchemaPath,
+            "../" + SupportedPolicySchemaPath,
+            SupportedPolicySchemaPathInRexoFolder,
+        };
+
+        if (string.IsNullOrWhiteSpace(schema) || !allowedSchemaValues.Contains(schema, StringComparer.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Unsupported policy '$schema' value '{schema}'. Expected one of: {string.Join(", ", allowedSchemaValues)}");
+        }
+
+        if (!root.TryGetProperty("schemaVersion", out var versionProp) || versionProp.ValueKind != JsonValueKind.String)
+        {
+            throw new InvalidOperationException("Policy must define a 'schemaVersion' string property.");
+        }
+
+        var version = versionProp.GetString();
+        if (!string.Equals(version, SupportedSchemaVersion, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Unsupported policy schemaVersion '{version}'. Supported version is '{SupportedSchemaVersion}'.");
+        }
+    }
+
+    private static async Task ValidatePolicySchemaAsync(string policyPath, string jsonText, CancellationToken cancellationToken)
+    {
+        var policyDirectory = Path.GetDirectoryName(policyPath)
+            ?? throw new InvalidOperationException("Could not determine policy directory.");
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        JsonSchema schema;
+        var schemaPath = FindLocalSchemaPath(policyDirectory, SupportedPolicySchemaPath);
+        if (schemaPath is not null)
+        {
+            var schemaJson = await File.ReadAllTextAsync(schemaPath, cancellationToken);
+            schema = await ParseSchemaWithCompatibilityAsync(schemaJson, cancellationToken);
+        }
+        else
+        {
+            var schemaJson = await ReadEmbeddedPolicySchemaJsonAsync(cancellationToken);
+            schema = await ParseSchemaWithCompatibilityAsync(schemaJson, cancellationToken);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var errors = ValidateWithCompatibilityFallback(schema, jsonText, cancellationToken);
+        if (errors.Count > 0)
+        {
+            var details = string.Join(
+                Environment.NewLine,
+                errors.Select(e => $"- {e.Path}: {e.Kind} ({e.Property})"));
+
+            throw new InvalidOperationException(
+                "Policy does not match the declared schema. Validation errors:" +
+                Environment.NewLine +
+                details);
+        }
+    }
+
+    private static string? FindLocalSchemaPath(string baseDirectory, string schemaFileName, string? legacySchemaFileName = null)
+    {
+        var candidates = new List<string>
+        {
+            Path.Combine(baseDirectory, schemaFileName),
+            Path.Combine(baseDirectory, "..", schemaFileName),
+            Path.Combine(baseDirectory, ".rexo", schemaFileName),
+        };
+
+        if (!string.IsNullOrWhiteSpace(legacySchemaFileName))
+        {
+            candidates.Add(Path.Combine(baseDirectory, legacySchemaFileName));
+            candidates.Add(Path.Combine(baseDirectory, "..", legacySchemaFileName));
+            candidates.Add(Path.Combine(baseDirectory, ".rexo", legacySchemaFileName));
+        }
+
+        return candidates.FirstOrDefault(File.Exists);
+    }
+
+    private static ICollection<NJsonSchema.Validation.ValidationError> ValidateWithCompatibilityFallback(
+        JsonSchema schema,
+        string jsonText,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return schema.Validate(jsonText);
+        }
+        catch (Exception ex) when (NeedsDefsCompatibilityFallback(ex.Message))
+        {
+            var normalizedSchemaJson = NormalizeSchemaForLegacyDefinitions(schema.ToJson());
+            var normalizedSchema = JsonSchema.FromJsonAsync(normalizedSchemaJson, CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+
+            cancellationToken.ThrowIfCancellationRequested();
+            return normalizedSchema.Validate(jsonText);
+        }
+    }
+
+    private static async Task<JsonSchema> ParseSchemaWithCompatibilityAsync(
+        string schemaJson,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await JsonSchema.FromJsonAsync(schemaJson, CancellationToken.None);
+        }
+        catch (Exception ex) when (NeedsDefsCompatibilityFallback(ex.Message))
+        {
+            var normalizedSchemaJson = NormalizeSchemaForLegacyDefinitions(schemaJson);
+            return await JsonSchema.FromJsonAsync(normalizedSchemaJson, CancellationToken.None);
+        }
+    }
+
+    private static bool NeedsDefsCompatibilityFallback(string? message) =>
+        !string.IsNullOrWhiteSpace(message) &&
+        message.Contains("#/$defs/", StringComparison.Ordinal);
+
+    private static string NormalizeSchemaForLegacyDefinitions(string schemaJson)
+    {
+        // NJsonSchema may require draft-07 style definitions in some execution paths.
+        return schemaJson
+            .Replace("\"$defs\"", "\"definitions\"", StringComparison.Ordinal)
+            .Replace("#/$defs/", "#/definitions/", StringComparison.Ordinal)
+            .Replace(
+                "https://json-schema.org/draft/2020-12/schema",
+                "http://json-schema.org/draft-07/schema#",
+                StringComparison.Ordinal);
     }
 
     private static async Task<string> ReadAsJsonAsync(string path, CancellationToken cancellationToken)

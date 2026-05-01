@@ -16,17 +16,27 @@ Every config file (`rexo.json`/`rexo.yml`) must begin with:
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/schema.json",
+  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
   "schemaVersion": "1.0",
   ...
 }
 ```
 
-- `$schema`: the canonical URL `https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/schema.json` (recommended), or the relative `schema.json` / `../schema.json` for local-only use
+- `$schema`: the canonical URL `https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json` (recommended), or the relative `rexo.schema.json` / `../rexo.schema.json` for local-only use
 - `schemaVersion`: must be `"1.0"`
 
-The loader validates against the embedded schema (or a local `schema.json`) via NJsonSchema before
+The loader validates against the embedded schema (or a local `rexo.schema.json`) via NJsonSchema before
 deserializing. Missing/unsupported metadata or schema violations cause a hard failure.
+
+Policy files (`policy.json`/`policy.yml`) follow the same contract, using:
+
+- `$schema`: `https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/policy.schema.json` (recommended), or `policy.schema.json` / `../policy.schema.json`
+- `schemaVersion`: must be `"1.0"`
+
+When `rx init --schema-source local --with-policy` is used, both schema files are written to `.rexo/`:
+
+- `.rexo/rexo.schema.json`
+- `.rexo/policy.schema.json`
 
 ---
 
@@ -34,7 +44,7 @@ deserializing. Missing/unsupported metadata or schema violations cause a hard fa
 
 ```jsonc
 {
-  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/schema.json",
+  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
   "schemaVersion": "1.0",
   "name": "my-repo",
   "description": "Optional description",
@@ -280,11 +290,13 @@ Use as `uses: builtin:<name>` in a step:
 
 `rx init` also supports interactive policy setup and these non-interactive flags:
 
-- `--location .rexo|root`
 - `--template auto|dotnet|node|generic`
+- `--schema-source local|remote`
 - `--with-policy`
 - `--policy-template <name>` (e.g. `standard`, `dotnet`)
 - `--yes` and `--force`
+
+`rx init` always scaffolds under `.rexo/`. Root config files are still supported when authored manually.
 
 ### Config Inspection Reference
 

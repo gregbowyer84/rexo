@@ -1,7 +1,7 @@
 # Rexo Schema Version 1.0
 
-**Schema file:** `schema.json` (repo root)
-**Schema ID:** `https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/schema.json`
+**Schema file:** `rexo.schema.json` (repo root)
+**Schema ID:** `https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json`
 **JSON Schema draft:** 2020-12
 
 ---
@@ -22,7 +22,7 @@ Every `repo.json` must declare:
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/schema.json",
+  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
   "schemaVersion": "1.0",
   "name": "my-repo",
   "commands": {},
@@ -32,7 +32,7 @@ Every `repo.json` must declare:
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `$schema` | `string` | Remote URL or `schema.json` / `./schema.json` / `../schema.json` |
+| `$schema` | `string` | Remote URL or `rexo.schema.json` / `./rexo.schema.json` / `../rexo.schema.json` |
 | `schemaVersion` | `string` | Must be `"1.0"` |
 | `name` | `string` (min 1 char) | Repository name |
 | `commands` | `object` | Map of command name → command config (may be empty) |
@@ -181,3 +181,6 @@ All other non-empty values are truthy.
 | Version | Date | Changes |
 | --- | --- | --- |
 | `1.0` | Initial | Initial stable release |
+
+
+

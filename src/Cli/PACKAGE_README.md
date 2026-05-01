@@ -41,7 +41,19 @@ rx list
 Non-interactive example with policy template:
 
 ```bash
-rx init --yes --location .rexo --template auto --with-policy --policy-template dotnet
+rx init --yes --template auto --with-policy --policy-template dotnet
+```
+
+By default, `init` uses a local schema file to avoid editor trust prompts:
+
+```bash
+rx init --yes --schema-source local
+```
+
+Use remote schema URL instead:
+
+```bash
+rx init --yes --schema-source remote
 ```
 
 Non-interactive example that also downloads AI instructions into the repo:
@@ -60,7 +72,7 @@ Minimal example:
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/schema.json",
+  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
   "schemaVersion": "1.0",
   "name": "my-repo",
   "commands": {
@@ -114,7 +126,8 @@ Policy files are discovered in root, `.rexo/`, and legacy `.repo/` locations.
 | --- | --- |
 | GitHub repository | <https://github.com/agile-north/rexo> |
 | Configuration reference | <https://github.com/agile-north/rexo/blob/release/next/docs/CONFIGURATION.md> |
-| JSON Schema | <https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/schema.json> |
+| Rexo config schema | <https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json> |
+| Policy schema | <https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/policy.schema.json> |
 | Architecture overview | <https://github.com/agile-north/rexo/blob/release/next/docs/ARCHITECTURE.md> |
 | Contributing / dev guide | <https://github.com/agile-north/rexo/blob/release/next/docs/DEVELOPMENT.md> |
 

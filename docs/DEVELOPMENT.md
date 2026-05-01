@@ -128,12 +128,12 @@ Built-in primitives are step types used as `uses: builtin:my-primitive`.
 
 When breaking changes to `repo.json` are needed:
 
-1. Create `schemas/2.0/schema.json` with the new schema.
+1. Create the next versioned schema files (for example `rexo.schema.v2.json` and `policy.schema.v2.json`).
 2. Add `"2.0"` to the supported schema versions in `RepoConfigurationLoader`.
 3. Update `SupportedSchemaUri` / `SupportedSchemaPath` constants or add overloads.
 4. Bump the `$schema` URL in documentation and examples.
 
-Current version: **1.0** — schema at `schema.json` (repo root).
+Current version: **1.0** — schemas at `rexo.schema.json` and `policy.schema.json` (repo root).
 
 ---
 
