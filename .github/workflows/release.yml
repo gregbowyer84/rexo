@@ -89,7 +89,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Pack
-        run: dotnet pack solution.slnx -c Release -o artifacts/packages -p:Version=${{ steps.gitversion.outputs.semVer }} --no-build
+        run: dotnet pack src/Cli/Cli.csproj -c Release -o artifacts/packages -p:Version=${{ steps.gitversion.outputs.semVer }} --no-build
 
       - name: Create and push release tag
         env:
