@@ -19,7 +19,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -120,7 +120,7 @@ jobs:
           # Exchange the GitHub OIDC token for a short-lived NuGet.org API key
           NUGET_TOKEN=$(curl -sS \
             -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=api.nuget.org" | jq -r '.value')
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=api.nuget.org" | jq -er '.value')
           dotnet nuget push "artifacts/packages/*.nupkg" \
             --source "https://api.nuget.org/v3/index.json" \
             --api-key "$NUGET_TOKEN" \
