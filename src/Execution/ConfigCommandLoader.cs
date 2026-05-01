@@ -8,6 +8,9 @@ using Rexo.Versioning;
 
 public sealed class ConfigCommandLoader
 {
+    private static readonly System.Text.Json.JsonSerializerOptions IndentedJsonOptions =
+        new() { WriteIndented = true };
+
     private readonly BuiltinRegistry _builtinRegistry;
     private readonly ITemplateRenderer _templateRenderer;
     private readonly VersionProviderRegistry _versionProviders;
@@ -159,6 +162,16 @@ public sealed class ConfigCommandLoader
                     new Dictionary<string, object?> { ["message"] = "No artifacts configured." });
             }
 
+            // Push policy enforcement
+            var policyViolation = CheckPushPolicy(config.PushRulesJson, ctx);
+            if (policyViolation is not null)
+            {
+                return new StepResult(step.Id ?? "push-artifacts", false, 7, TimeSpan.Zero,
+                    new Dictionary<string, object?> { ["error"] = policyViolation });
+            }
+
+            var manifestEntries = new List<Core.Models.ArtifactManifestEntry>();
+
             foreach (var artifactCfg in config.Artifacts)
             {
                 var provider = _artifactProviders.Resolve(artifactCfg.Type);
@@ -169,13 +182,23 @@ public sealed class ConfigCommandLoader
                     artifactCfg.Name,
                     artifactCfg.Settings ?? new Dictionary<string, string>());
 
-                var result = await provider.PushAsync(artifactConfig, ctx, ct);
-                if (!result.Success)
+                var pushResult = await provider.PushAsync(artifactConfig, ctx, ct);
+                manifestEntries.Add(new Core.Models.ArtifactManifestEntry(
+                    artifactCfg.Type,
+                    artifactCfg.Name,
+                    Built: true,
+                    Pushed: pushResult.Success,
+                    Tags: pushResult.PublishedReferences));
+
+                if (!pushResult.Success)
                 {
+                    await WriteArtifactManifestAsync(repositoryRoot, manifestEntries, ct);
                     return new StepResult(step.Id ?? "push-artifacts", false, 6, TimeSpan.Zero,
                         new Dictionary<string, object?> { ["error"] = $"Failed to push artifact '{artifactCfg.Name}'." });
                 }
             }
+
+            await WriteArtifactManifestAsync(repositoryRoot, manifestEntries, ct);
 
             return new StepResult(step.Id ?? "push-artifacts", true, 0, TimeSpan.Zero,
                 new Dictionary<string, object?> { ["message"] = "All artifacts pushed." });
@@ -191,7 +214,7 @@ public sealed class ConfigCommandLoader
                 Configuration: testsConfig?.Configuration ?? "Release",
                 ResultsOutput: testsConfig?.ResultsOutput,
                 CoverageOutput: testsConfig?.CoverageOutput,
-                LineCoverageThreshold: null,
+                LineCoverageThreshold: testsConfig?.CoverageThreshold,
                 BranchCoverageThreshold: null);
 
             var result = await Verification.DotnetTestRunner.RunAsync(verificationConfig, repositoryRoot, ct);
@@ -263,6 +286,58 @@ public sealed class ConfigCommandLoader
             return new StepResult(step.Id ?? "verify", true, 0, TimeSpan.Zero,
                 new Dictionary<string, object?> { ["message"] = "Verification passed." });
         });
+
+        // builtin:config-resolved — serialize current effective config to JSON
+        _builtinRegistry.Register("builtin:config-resolved", (step, ctx, ct) =>
+        {
+            var json = System.Text.Json.JsonSerializer.Serialize(config, IndentedJsonOptions);
+            Console.WriteLine(json);
+            return Task.FromResult(new StepResult(
+                step.Id ?? "config-resolved",
+                true,
+                0,
+                TimeSpan.Zero,
+                new Dictionary<string, object?> { ["json"] = json }));
+        });
+
+        // builtin:config-materialize — write provider config files (e.g. GitVersion.yml)
+        _builtinRegistry.Register("builtin:config-materialize", async (step, ctx, ct) =>
+        {
+            var materialized = new List<string>();
+
+            // If using gitversion provider, offer to write GitVersion.yml
+            if (string.Equals(config.Versioning?.Provider, "gitversion", StringComparison.OrdinalIgnoreCase))
+            {
+                var gvPath = Path.Combine(repositoryRoot, "GitVersion.yml");
+                if (!File.Exists(gvPath))
+                {
+                    var gvContent = """
+                        mode: ContinuousDeployment
+                        branches: {}
+                        ignore:
+                          sha: []
+                        """;
+                    await File.WriteAllTextAsync(gvPath, gvContent, ct);
+                    materialized.Add(gvPath);
+                    Console.WriteLine($"  Materialized: {gvPath}");
+                }
+            }
+
+            var message = materialized.Count > 0
+                ? $"Materialized {materialized.Count} file(s)."
+                : "Nothing to materialize.";
+
+            return new StepResult(
+                step.Id ?? "config-materialize",
+                true,
+                0,
+                TimeSpan.Zero,
+                new Dictionary<string, object?>
+                {
+                    ["message"] = message,
+                    ["files"] = string.Join(", ", materialized),
+                });
+        });
     }
 
     private async Task<CommandResult> ExecuteConfigCommandAsync(
@@ -287,6 +362,8 @@ public sealed class ConfigCommandLoader
             RemoteUrl = gitInfo.RemoteUrl,
             IsCi = ciInfo.IsCi,
             CiProvider = ciInfo.Provider,
+            IsPullRequest = ciInfo.IsPullRequest,
+            IsCleanWorkingTree = gitInfo.IsClean,
             Args = invocation.Args,
             Options = BuildOptionsWithDefaults(invocation.Options, commandConfig),
         };
@@ -295,35 +372,53 @@ public sealed class ConfigCommandLoader
         var stepResults = new List<StepResult>();
         var currentContext = context;
 
-        foreach (var stepConfig in commandConfig.Steps)
+        // Group consecutive parallel steps; sequential steps are singleton groups
+        var stepGroups = GroupSteps(commandConfig.Steps);
+
+        foreach (var group in stepGroups)
         {
-            var stepDef = new StepDefinition(
-                Id: stepConfig.Id,
-                Run: stepConfig.Run,
-                Uses: stepConfig.Uses,
-                Command: stepConfig.Command,
-                When: stepConfig.When);
+            List<StepResult> groupResults;
 
-            var stepResult = await stepExecutor.ExecuteAsync(stepDef, currentContext, cancellationToken);
-            stepResults.Add(stepResult);
-
-            // Apply step to context (for future steps to reference outputs)
-            currentContext = currentContext.WithStep(stepResult);
-
-            // If this step resolved a version, propagate it to context
-            if (stepResult.Outputs.TryGetValue("__version", out var versionObj) &&
-                versionObj is VersionResult versionResult)
+            if (group.Count == 1)
             {
-                currentContext = currentContext.WithVersion(versionResult);
+                var stepConfig = group[0];
+                var stepDef = BuildStepDefinition(stepConfig);
+                var stepResult = await stepExecutor.ExecuteAsync(stepDef, currentContext, cancellationToken);
+                groupResults = [stepResult];
+            }
+            else
+            {
+                // Run parallel group concurrently — all steps share a snapshot of currentContext
+                var snapshot = currentContext;
+                var tasks = group.Select(sc =>
+                    stepExecutor.ExecuteAsync(BuildStepDefinition(sc), snapshot, cancellationToken));
+                groupResults = [.. await Task.WhenAll(tasks)];
             }
 
-            if (!stepResult.Success && stepConfig.ContinueOnError != true)
+            foreach (var stepResult in groupResults)
+            {
+                stepResults.Add(stepResult);
+                currentContext = currentContext.WithStep(stepResult);
+
+                if (stepResult.Outputs.TryGetValue("__version", out var versionObj) &&
+                    versionObj is VersionResult versionResult)
+                {
+                    currentContext = currentContext.WithVersion(versionResult);
+                }
+            }
+
+            // Fail fast if any step failed and it doesn't have continueOnError
+            var failed = groupResults
+                .Zip(group, (r, c) => (Result: r, Config: c))
+                .FirstOrDefault(t => !t.Result.Success && t.Config.ContinueOnError != true);
+
+            if (failed.Result is not null)
             {
                 return new CommandResult(
                     commandName,
                     false,
-                    stepResult.ExitCode,
-                    $"Step '{stepResult.StepId}' failed with exit code {stepResult.ExitCode}.",
+                    failed.Result.ExitCode,
+                    $"Step '{failed.Result.StepId}' failed with exit code {failed.Result.ExitCode}.",
                     new Dictionary<string, object?>())
                 { Steps = stepResults };
             }
@@ -353,5 +448,106 @@ public sealed class ConfigCommandLoader
         }
 
         return result;
+    }
+
+    private static async Task WriteArtifactManifestAsync(
+        string repositoryRoot,
+        IReadOnlyList<Core.Models.ArtifactManifestEntry> entries,
+        CancellationToken cancellationToken)
+    {
+        var artifactsDir = Path.Combine(repositoryRoot, "artifacts");
+        Directory.CreateDirectory(artifactsDir);
+        var manifestPath = Path.Combine(artifactsDir, "manifest.json");
+
+        var manifest = new
+        {
+            SchemaVersion = "1.0",
+            GeneratedAt = DateTimeOffset.UtcNow,
+            Artifacts = entries,
+        };
+
+        var json = System.Text.Json.JsonSerializer.Serialize(manifest, IndentedJsonOptions);
+        await File.WriteAllTextAsync(manifestPath, json, cancellationToken);
+        Console.WriteLine($"  Artifact manifest written to {manifestPath}");
+    }
+
+    /// <summary>
+    /// Evaluates push policy rules against the current execution context.
+    /// Returns a violation message if a rule is violated, or null if push is allowed.
+    /// </summary>
+    private static string? CheckPushPolicy(string? pushRulesJson, Core.Models.ExecutionContext ctx)
+    {
+        if (string.IsNullOrWhiteSpace(pushRulesJson)) return null;
+
+        try
+        {
+            var rules = System.Text.Json.JsonSerializer.Deserialize<PushPolicyRules>(pushRulesJson);
+            if (rules is null) return null;
+
+            if (rules.NoPushInPullRequest && ctx.IsPullRequest)
+                return "Push policy violation: push is not allowed in pull requests.";
+
+            if (rules.RequireCleanWorkingTree && !ctx.IsCleanWorkingTree)
+                return "Push policy violation: working tree has uncommitted changes.";
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            // Malformed rules JSON — skip enforcement
+        }
+
+        return null;
+    }
+
+    private sealed record PushPolicyRules(
+        bool NoPushInPullRequest = false,
+        bool RequireCleanWorkingTree = false);
+
+    private static StepDefinition BuildStepDefinition(RepoStepConfig stepConfig) =>
+        new(
+            Id: stepConfig.Id,
+            Run: stepConfig.Run,
+            Uses: stepConfig.Uses,
+            Command: stepConfig.Command,
+            When: stepConfig.When)
+        {
+            Parallel = stepConfig.Parallel ?? false,
+            ContinueOnError = stepConfig.ContinueOnError ?? false,
+            OutputPattern = stepConfig.OutputPattern,
+            OutputFile = stepConfig.OutputFile,
+        };
+
+    /// <summary>
+    /// Groups consecutive steps marked <c>parallel: true</c> into batches.
+    /// Sequential steps (parallel == false) form singleton groups.
+    /// </summary>
+    private static List<List<RepoStepConfig>> GroupSteps(IEnumerable<RepoStepConfig> steps)
+    {
+        var groups = new List<List<RepoStepConfig>>();
+        List<RepoStepConfig>? currentGroup = null;
+
+        foreach (var step in steps)
+        {
+            if (step.Parallel == true)
+            {
+                currentGroup ??= [];
+                currentGroup.Add(step);
+            }
+            else
+            {
+                if (currentGroup is { Count: > 0 })
+                {
+                    groups.Add(currentGroup);
+                    currentGroup = null;
+                }
+                groups.Add([step]);
+            }
+        }
+
+        if (currentGroup is { Count: > 0 })
+        {
+            groups.Add(currentGroup);
+        }
+
+        return groups;
     }
 }

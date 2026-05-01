@@ -19,6 +19,8 @@ public sealed class VersionProviderRegistry
         registry.Register("fixed", new FixedVersionProvider());
         registry.Register("env", new EnvVersionProvider());
         registry.Register("gitversion", new GitVersionVersionProvider());
+        registry.Register("nbgv", new NbgvVersionProvider());
+        registry.Register("minver", new MinVerVersionProvider());
         return registry;
     }
 }

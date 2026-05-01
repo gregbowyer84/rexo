@@ -44,7 +44,10 @@ public sealed record RepoStepConfig(
     string? Run = null,
     string? When = null,
     string? Description = null,
-    bool? ContinueOnError = null);
+    bool? ContinueOnError = null,
+    bool? Parallel = null,
+    string? OutputPattern = null,
+    string? OutputFile = null);
 
 public sealed record RepoVersioningConfig(
     string Provider,

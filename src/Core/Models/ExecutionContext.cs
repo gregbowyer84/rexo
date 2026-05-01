@@ -10,6 +10,8 @@ public sealed record ExecutionContext(
     public string? RemoteUrl { get; init; }
     public bool IsCi { get; init; }
     public string? CiProvider { get; init; }
+    public bool IsPullRequest { get; init; }
+    public bool IsCleanWorkingTree { get; init; }
     public IReadOnlyDictionary<string, string> Args { get; init; } = new Dictionary<string, string>();
     public IReadOnlyDictionary<string, string?> Options { get; init; } = new Dictionary<string, string?>();
     public VersionResult? Version { get; init; }

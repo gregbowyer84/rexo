@@ -160,4 +160,133 @@ public sealed class RepoConfigurationLoaderTests
             File.Delete(path);
         }
     }
+
+  [Fact]
+  public async Task LoadAsyncMergesExtendsConfig()
+  {
+    var dir = Path.Combine(Path.GetTempPath(), $"rexo-extends-{Guid.NewGuid():N}");
+    Directory.CreateDirectory(dir);
+    Directory.CreateDirectory(Path.Combine(dir, "schemas", "1.0"));
+
+    var minimalSchema = """
+            {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "object",
+              "required": ["$schema", "schemaVersion", "name", "commands", "aliases"],
+              "properties": {
+                "$schema": { "type": "string" },
+                "schemaVersion": { "type": "string" },
+                "name": { "type": "string" },
+                "commands": { "type": "object" },
+                "aliases": { "type": "object" },
+                "extends": { "type": "array" }
+              }
+            }
+            """;
+
+    await File.WriteAllTextAsync(Path.Combine(dir, "schemas", "1.0", "schema.json"), minimalSchema);
+
+    var basePath = Path.Combine(dir, "base.json");
+    await File.WriteAllTextAsync(basePath, """
+            {
+              "$schema": "schemas/1.0/schema.json",
+              "schemaVersion": "1.0",
+              "name": "base",
+              "commands": {
+                "shared": { "options": {}, "steps": [] }
+              },
+              "aliases": {}
+            }
+            """);
+
+    var childPath = Path.Combine(dir, "child.json");
+    await File.WriteAllTextAsync(childPath, $$"""
+            {
+              "$schema": "schemas/1.0/schema.json",
+              "schemaVersion": "1.0",
+              "name": "child",
+              "extends": ["./base.json"],
+              "commands": {
+                "child-cmd": { "options": {}, "steps": [] }
+              },
+              "aliases": {}
+            }
+            """);
+
+    try
+    {
+      var config = await RepoConfigurationLoader.LoadAsync(childPath, CancellationToken.None);
+
+      Assert.Equal("child", config.Name);
+      Assert.True(config.Commands.ContainsKey("shared"), "Should inherit base command 'shared'");
+      Assert.True(config.Commands.ContainsKey("child-cmd"), "Should have own command 'child-cmd'");
+    }
+    finally
+    {
+      Directory.Delete(dir, true);
+    }
+  }
+
+  [Fact]
+  public async Task LoadAsyncThrowsOnCircularExtends()
+  {
+    var dir = Path.Combine(Path.GetTempPath(), $"rexo-circular-{Guid.NewGuid():N}");
+    Directory.CreateDirectory(dir);
+    Directory.CreateDirectory(Path.Combine(dir, "schemas", "1.0"));
+
+    var minimalSchema = """
+            {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "object",
+              "required": ["$schema", "schemaVersion", "name", "commands", "aliases"],
+              "properties": {
+                "$schema": { "type": "string" },
+                "schemaVersion": { "type": "string" },
+                "name": { "type": "string" },
+                "commands": { "type": "object" },
+                "aliases": { "type": "object" },
+                "extends": { "type": "array" }
+              }
+            }
+            """;
+
+    await File.WriteAllTextAsync(Path.Combine(dir, "schemas", "1.0", "schema.json"), minimalSchema);
+
+    var aPath = Path.Combine(dir, "a.json");
+    var bPath = Path.Combine(dir, "b.json");
+
+    await File.WriteAllTextAsync(aPath, $$"""
+            {
+              "$schema": "schemas/1.0/schema.json",
+              "schemaVersion": "1.0",
+              "name": "a",
+              "extends": ["./b.json"],
+              "commands": {},
+              "aliases": {}
+            }
+            """);
+
+    await File.WriteAllTextAsync(bPath, $$"""
+            {
+              "$schema": "schemas/1.0/schema.json",
+              "schemaVersion": "1.0",
+              "name": "b",
+              "extends": ["./a.json"],
+              "commands": {},
+              "aliases": {}
+            }
+            """);
+
+    try
+    {
+      var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+          RepoConfigurationLoader.LoadAsync(aPath, CancellationToken.None));
+
+      Assert.Contains("Circular", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+    finally
+    {
+      Directory.Delete(dir, true);
+    }
+  }
 }

@@ -29,7 +29,7 @@ public static class Program
         var workingDir = Environment.CurrentDirectory;
 
         // Parse global flags
-        var (cleanArgs, json, jsonFile, verbose) = ParseGlobalFlags(args);
+        var (cleanArgs, json, jsonFile, verbose, debug, quiet) = ParseGlobalFlags(args);
 
         if (cleanArgs.Count == 0)
         {
@@ -47,23 +47,25 @@ public static class Program
         }
 
         // Set up the full service graph
-        var (registry, executor, config) = await BuildServicesAsync(workingDir, cancellationToken);
+        var (registry, executor, config) = await BuildServicesAsync(workingDir, debug, cancellationToken);
 
         return command switch
         {
-            "version" => await RunBuiltinAsync(executor, "version", EmptyInvocation(workingDir, json, jsonFile), verbose, cancellationToken),
-            "doctor" => await RunBuiltinAsync(executor, "doctor", EmptyInvocation(workingDir, json, jsonFile), verbose, cancellationToken),
-            "list" => await RunBuiltinAsync(executor, "list", EmptyInvocation(workingDir, json, jsonFile), verbose, cancellationToken),
-            "explain" => await RunExplainAsync(executor, cleanArgs, workingDir, json, jsonFile, verbose, cancellationToken),
+            "version" => await RunBuiltinAsync(executor, "version", EmptyInvocation(workingDir, json, jsonFile), verbose, quiet, cancellationToken),
+            "doctor" => await RunBuiltinAsync(executor, "doctor", EmptyInvocation(workingDir, json, jsonFile), verbose, quiet, cancellationToken),
+            "list" => await RunBuiltinAsync(executor, "list", EmptyInvocation(workingDir, json, jsonFile), verbose, quiet, cancellationToken),
+            "explain" => await RunExplainAsync(executor, cleanArgs, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
+            "config" => await RunConfigSubcommandAsync(cleanArgs, executor, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
             "ui" => await RunUiAsync(executor, workingDir, cancellationToken),
-            "run" => await RunConfiguredAsync(cleanArgs, executor, workingDir, json, jsonFile, verbose, cancellationToken),
-            _ => await RunDirectAsync(command, cleanArgs, executor, config, workingDir, json, jsonFile, verbose, cancellationToken),
+            "run" => await RunConfiguredAsync(cleanArgs, executor, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
+            _ => await RunDirectAsync(command, cleanArgs, executor, config, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
         };
     }
 
     private static async Task<(CommandRegistry registry, DefaultCommandExecutor executor, RepoConfig? config)>
-        BuildServicesAsync(string workingDir, CancellationToken cancellationToken)
+        BuildServicesAsync(string workingDir, bool debug, CancellationToken cancellationToken)
     {
+        if (debug) Console.WriteLine($"[debug] Loading configuration from {workingDir}");
         // Try load config
         RepoConfig? config = null;
         var configPath = Path.Combine(workingDir, "repo.json");
@@ -72,6 +74,7 @@ public static class Program
             try
             {
                 config = await RepoConfigurationLoader.LoadAsync(configPath, cancellationToken);
+                if (debug) Console.WriteLine($"[debug] Loaded repo.json: {config.Name}");
             }
             catch (Exception ex)
             {
@@ -80,7 +83,7 @@ public static class Program
         }
 
         // Build registry
-        var registry = BuiltinCommandRegistration.CreateDefault(config);
+        var registry = BuiltinCommandRegistration.CreateDefault(config, File.Exists(configPath) ? configPath : null);
         var executor = new DefaultCommandExecutor(registry);
 
         if (config is not null)
@@ -110,10 +113,11 @@ public static class Program
         string command,
         CommandInvocation invocation,
         bool verbose,
+        bool quiet,
         CancellationToken cancellationToken)
     {
         var result = await executor.ExecuteAsync(command, invocation, cancellationToken);
-        return await WriteResultAsync(result, invocation, verbose, cancellationToken);
+        return await WriteResultAsync(result, invocation, verbose, quiet, cancellationToken);
     }
 
     private static async Task<int> RunExplainAsync(
@@ -123,6 +127,7 @@ public static class Program
         bool json,
         string? jsonFile,
         bool verbose,
+        bool quiet,
         CancellationToken cancellationToken)
     {
         if (args.Count < 2)
@@ -141,7 +146,30 @@ public static class Program
             workingDir);
 
         var result = await executor.ExecuteAsync("explain", invocation, cancellationToken);
-        return await WriteResultAsync(result, invocation, verbose, cancellationToken);
+        return await WriteResultAsync(result, invocation, verbose, quiet, cancellationToken);
+    }
+
+    private static async Task<int> RunConfigSubcommandAsync(
+        IReadOnlyList<string> args,
+        DefaultCommandExecutor executor,
+        string workingDir,
+        bool json,
+        string? jsonFile,
+        bool verbose,
+        bool quiet,
+        CancellationToken cancellationToken)
+    {
+        // args[0] == "config", args[1] == sub-command
+        if (args.Count < 2)
+        {
+            Console.WriteLine("Usage: rx config <resolved|sources>");
+            return 1;
+        }
+
+        var subCommand = $"config {args[1].ToLowerInvariant()}";
+        var invocation = EmptyInvocation(workingDir, json, jsonFile);
+        var result = await executor.ExecuteAsync(subCommand, invocation, cancellationToken);
+        return await WriteResultAsync(result, invocation, verbose, quiet, cancellationToken);
     }
 
     private static async Task<int> RunUiAsync(
@@ -162,6 +190,7 @@ public static class Program
         bool json,
         string? jsonFile,
         bool verbose,
+        bool quiet,
         CancellationToken cancellationToken)
     {
         if (args.Count < 2)
@@ -197,7 +226,7 @@ public static class Program
         var result = await executor.ExecuteAsync(commandName, invocation, cancellationToken);
         var completedAt = DateTimeOffset.UtcNow;
 
-        var exitCode = await WriteResultAsync(result, invocation, verbose, cancellationToken);
+        var exitCode = await WriteResultAsync(result, invocation, verbose, quiet, cancellationToken);
 
         // Write run manifest if --json-file specified
         if (!string.IsNullOrEmpty(jsonFile))
@@ -217,6 +246,7 @@ public static class Program
         bool json,
         string? jsonFile,
         bool verbose,
+        bool quiet,
         CancellationToken cancellationToken)
     {
         // Try multi-word command resolution: "branch feature" from ["branch", "feature", "name"]
@@ -249,7 +279,7 @@ public static class Program
 
             var invocation = new CommandInvocation(parsedArgs, parsedOptions, json, jsonFile, workingDir);
             var result = await executor.ExecuteAsync(candidateName, invocation, cancellationToken);
-            return await WriteResultAsync(result, invocation, verbose, cancellationToken);
+            return await WriteResultAsync(result, invocation, verbose, quiet, cancellationToken);
         }
 
         ConsoleRenderer.RenderError($"Command '{command}' not found. Run '{GetCliCommandName()} list' to see available commands.");
@@ -260,6 +290,7 @@ public static class Program
         CommandResult result,
         CommandInvocation invocation,
         bool verbose,
+        bool quiet,
         CancellationToken cancellationToken)
     {
         if (invocation.Json)
@@ -270,14 +301,14 @@ public static class Program
                 var dir = Path.GetDirectoryName(invocation.JsonFile);
                 if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
                 await File.WriteAllTextAsync(invocation.JsonFile!, payload, cancellationToken);
-                Console.WriteLine($"JSON output written to {invocation.JsonFile}");
+                if (!quiet) Console.WriteLine($"JSON output written to {invocation.JsonFile}");
             }
             else
             {
                 Console.WriteLine(payload);
             }
         }
-        else
+        else if (!quiet)
         {
             switch (result.Command)
             {
@@ -348,12 +379,14 @@ public static class Program
             .FirstOrDefault()?.InformationalVersion ?? "0.1.0-local";
     }
 
-    private static (IReadOnlyList<string> cleanArgs, bool json, string? jsonFile, bool verbose) ParseGlobalFlags(string[] args)
+    private static (IReadOnlyList<string> cleanArgs, bool json, string? jsonFile, bool verbose, bool debug, bool quiet) ParseGlobalFlags(string[] args)
     {
         var clean = new List<string>();
         var json = false;
         string? jsonFile = null;
         var verbose = false;
+        var debug = false;
+        var quiet = false;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -369,13 +402,20 @@ public static class Program
                 case "--verbose" or "-v":
                     verbose = true;
                     break;
+                case "--debug":
+                    debug = true;
+                    verbose = true;
+                    break;
+                case "--quiet" or "-q":
+                    quiet = true;
+                    break;
                 default:
                     clean.Add(args[i]);
                     break;
             }
         }
 
-        return (clean, json, jsonFile, verbose);
+        return (clean, json, jsonFile, verbose, debug, quiet);
     }
 
     private static (IReadOnlyDictionary<string, string> args, IReadOnlyDictionary<string, string?> options)

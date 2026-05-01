@@ -5,4 +5,10 @@ public sealed record StepDefinition(
     string? Run,
     string? Uses,
     string? Command,
-    string? When);
+    string? When)
+{
+    public bool Parallel { get; init; }
+    public bool ContinueOnError { get; init; }
+    public string? OutputPattern { get; init; }
+    public string? OutputFile { get; init; }
+}

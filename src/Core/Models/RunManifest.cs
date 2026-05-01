@@ -19,6 +19,7 @@ public sealed record RunManifest
     public TimeSpan Duration => CompletedAt - StartedAt;
     public VersionResult? Version { get; init; }
     public IReadOnlyList<StepManifestEntry> Steps { get; init; } = Array.Empty<StepManifestEntry>();
+    public IReadOnlyList<ArtifactManifestEntry> Artifacts { get; init; } = Array.Empty<ArtifactManifestEntry>();
     public IReadOnlyList<string> Warnings { get; init; } = Array.Empty<string>();
     public IReadOnlyList<string> Errors { get; init; } = Array.Empty<string>();
 }
@@ -28,3 +29,10 @@ public sealed record StepManifestEntry(
     bool Success,
     int ExitCode,
     double DurationMs);
+
+public sealed record ArtifactManifestEntry(
+    string Type,
+    string Name,
+    bool Built,
+    bool Pushed,
+    IReadOnlyList<string> Tags);

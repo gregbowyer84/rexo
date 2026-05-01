@@ -35,7 +35,108 @@ public sealed class RepoConfigurationLoader
             throw new InvalidOperationException("Configuration file is empty or invalid.");
         }
 
+        // Resolve extends chain (breadth-first, child overrides base)
+        if (config.Extends is { Count: > 0 })
+        {
+            config = await ResolveExtendsAsync(config, configPath, [], cancellationToken);
+        }
+
         return config;
+    }
+
+    private static async Task<RepoConfig> ResolveExtendsAsync(
+        RepoConfig config,
+        string configPath,
+        HashSet<string> visited,
+        CancellationToken cancellationToken)
+    {
+        var configDir = Path.GetDirectoryName(configPath) ?? Directory.GetCurrentDirectory();
+        _ = visited.Add(Path.GetFullPath(configPath));
+
+        // Load and merge all base configs (first listed = lowest priority)
+        RepoConfig? merged = null;
+        foreach (var extendPath in config.Extends!)
+        {
+            var basePath = Path.IsPathRooted(extendPath)
+                ? extendPath
+                : Path.GetFullPath(Path.Combine(configDir, extendPath));
+
+            if (visited.Contains(basePath))
+            {
+                throw new InvalidOperationException(
+                    $"Circular 'extends' reference detected for '{basePath}'.");
+            }
+
+            if (!File.Exists(basePath))
+            {
+                throw new FileNotFoundException(
+                    $"Extended config file not found: '{basePath}'.", basePath);
+            }
+
+            var baseJsonText = await File.ReadAllTextAsync(basePath, cancellationToken);
+            ValidateMetadata(basePath, baseJsonText);
+            var baseConfig = JsonSerializer.Deserialize<RepoConfig>(baseJsonText, JsonOptions)
+                ?? throw new InvalidOperationException($"Extended config '{basePath}' is empty or invalid.");
+
+            if (baseConfig.Extends is { Count: > 0 })
+            {
+                baseConfig = await ResolveExtendsAsync(baseConfig, basePath, visited, cancellationToken);
+            }
+
+            merged = merged is null ? baseConfig : MergeConfigs(merged, baseConfig);
+        }
+
+        // Child config takes priority over merged base
+        return merged is null ? config : MergeConfigs(merged, config);
+    }
+
+    /// <summary>
+    /// Merges <paramref name="child"/> on top of <paramref name="base"/>:
+    /// child wins for scalar properties; collections are combined (child appended after base).
+    /// </summary>
+    private static RepoConfig MergeConfigs(RepoConfig @base, RepoConfig child) =>
+        new(
+            Name: string.IsNullOrEmpty(child.Name) ? @base.Name : child.Name,
+            Commands: MergeDictionaries(@base.Commands, child.Commands),
+            Aliases: MergeDictionaries(@base.Aliases, child.Aliases))
+        {
+            Schema = child.Schema ?? @base.Schema,
+            SchemaVersion = child.SchemaVersion ?? @base.SchemaVersion,
+            Description = child.Description ?? @base.Description,
+            Version = child.Version ?? @base.Version,
+            Extends = null, // consumed — do not propagate
+            Versioning = child.Versioning ?? @base.Versioning,
+            Artifacts = MergeLists(@base.Artifacts, child.Artifacts),
+            Tests = child.Tests ?? @base.Tests,
+            Analysis = child.Analysis ?? @base.Analysis,
+            PushRulesJson = child.PushRulesJson ?? @base.PushRulesJson,
+        };
+
+    private static Dictionary<TKey, TValue> MergeDictionaries<TKey, TValue>(
+        Dictionary<TKey, TValue>? @base,
+        Dictionary<TKey, TValue>? child)
+        where TKey : notnull
+    {
+        if (@base is null or { Count: 0 }) return child ?? [];
+        if (child is null or { Count: 0 }) return @base;
+
+        var result = new Dictionary<TKey, TValue>(@base);
+        foreach (var kvp in child)
+        {
+            result[kvp.Key] = kvp.Value;
+        }
+
+        return result;
+    }
+
+    private static List<T>? MergeLists<T>(List<T>? @base, List<T>? child)
+    {
+        if (@base is null or { Count: 0 }) return child;
+        if (child is null or { Count: 0 }) return @base;
+
+        var merged = new List<T>(@base);
+        merged.AddRange(child);
+        return merged;
     }
 
     private static void ValidateMetadata(string configPath, string jsonText)

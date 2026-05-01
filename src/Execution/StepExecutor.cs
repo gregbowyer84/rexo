@@ -1,5 +1,6 @@
 namespace Rexo.Execution;
 
+using System.Text.RegularExpressions;
 using Rexo.Core.Abstractions;
 using Rexo.Core.Models;
 
@@ -47,7 +48,7 @@ public sealed class StepExecutor : IStepExecutor
 
         if (!string.IsNullOrEmpty(stepDefinition.Run))
         {
-            result = await ExecuteRunAsync(stepId, stepDefinition.Run, context, sw, cancellationToken);
+            result = await ExecuteRunAsync(stepId, stepDefinition.Run, stepDefinition, context, sw, cancellationToken);
         }
         else if (!string.IsNullOrEmpty(stepDefinition.Uses))
         {
@@ -74,6 +75,7 @@ public sealed class StepExecutor : IStepExecutor
     private async Task<StepResult> ExecuteRunAsync(
         string stepId,
         string run,
+        StepDefinition stepDefinition,
         ExecutionContext context,
         System.Diagnostics.Stopwatch sw,
         CancellationToken cancellationToken)
@@ -94,16 +96,53 @@ public sealed class StepExecutor : IStepExecutor
             Console.Error.WriteLine(shellResult.Stderr);
         }
 
+        var outputs = new Dictionary<string, object?>
+        {
+            ["stdout"] = shellResult.Stdout,
+            ["stderr"] = shellResult.Stderr,
+        };
+
+        // Extract named groups from stdout via OutputPattern regex
+        if (!string.IsNullOrEmpty(stepDefinition.OutputPattern) && !string.IsNullOrEmpty(shellResult.Stdout))
+        {
+            try
+            {
+                var match = Regex.Match(shellResult.Stdout, stepDefinition.OutputPattern, RegexOptions.Multiline);
+                if (match.Success)
+                {
+                    foreach (Group group in match.Groups)
+                    {
+                        if (!int.TryParse(group.Name, out _))
+                        {
+                            outputs[group.Name] = group.Value;
+                        }
+                    }
+                }
+            }
+            catch (ArgumentException)
+            {
+                // invalid regex — skip extraction
+            }
+        }
+
+        // Write stdout to OutputFile if specified
+        if (!string.IsNullOrEmpty(stepDefinition.OutputFile) && !string.IsNullOrEmpty(shellResult.Stdout))
+        {
+            var outputFilePath = Path.IsPathRooted(stepDefinition.OutputFile)
+                ? stepDefinition.OutputFile
+                : Path.Combine(context.RepositoryRoot, stepDefinition.OutputFile);
+            var dir = Path.GetDirectoryName(outputFilePath);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+            await File.WriteAllTextAsync(outputFilePath, shellResult.Stdout, cancellationToken);
+            outputs["outputFile"] = outputFilePath;
+        }
+
         return new StepResult(
             stepId,
             shellResult.ExitCode == 0,
             shellResult.ExitCode,
             sw.Elapsed,
-            new Dictionary<string, object?>
-            {
-                ["stdout"] = shellResult.Stdout,
-                ["stderr"] = shellResult.Stderr,
-            });
+            outputs);
     }
 
     private async Task<StepResult> ExecuteUsesAsync(

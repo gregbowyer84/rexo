@@ -1,5 +1,6 @@
 namespace Rexo.Execution;
 
+using System.Text.Json;
 using Rexo.Ci;
 using Rexo.Configuration.Models;
 using Rexo.Core.Models;
@@ -7,7 +8,8 @@ using Rexo.Git;
 
 public static class BuiltinCommandRegistration
 {
-    public static CommandRegistry CreateDefault(RepoConfig? config = null)
+    private static readonly JsonSerializerOptions IndentedJsonOptions = new() { WriteIndented = true };
+    public static CommandRegistry CreateDefault(RepoConfig? config = null, string? configPath = null)
     {
         var registry = new CommandRegistry();
 
@@ -22,6 +24,12 @@ public static class BuiltinCommandRegistration
 
         registry.Register("explain", (invocation, ct) =>
             Task.FromResult(RunExplain(invocation, config)));
+
+        registry.Register("config resolved", (_, _) =>
+            Task.FromResult(RunConfigResolved(config)));
+
+        registry.Register("config sources", (invocation, _) =>
+            Task.FromResult(RunConfigSources(invocation, configPath)));
 
         return registry;
     }
@@ -183,6 +191,29 @@ public static class BuiltinCommandRegistration
         }
 
         return CommandResult.Fail("explain", 8, $"Command '{commandName}' not found.");
+    }
+
+    private static CommandResult RunConfigResolved(RepoConfig? config)
+    {
+        if (config is null)
+        {
+            return CommandResult.Fail("config resolved", 1, "No repo.json configuration loaded.");
+        }
+
+        var options = IndentedJsonOptions;
+        var json = JsonSerializer.Serialize(config, options);
+        return CommandResult.Ok("config resolved", json);
+    }
+
+    private static CommandResult RunConfigSources(CommandInvocation invocation, string? configPath)
+    {
+        var lines = new List<string> { "Configuration sources (in merge order):" };
+
+        var resolvedPath = configPath ?? Path.Combine(invocation.WorkingDirectory, "repo.json");
+        var exists = File.Exists(resolvedPath);
+        lines.Add($"  [{(exists ? "loaded" : "not found")}] {resolvedPath}");
+
+        return CommandResult.Ok("config sources", string.Join("\n", lines));
     }
 
     private static async Task<(bool ok, string? version)> IsToolAvailableAsync(

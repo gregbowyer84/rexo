@@ -77,15 +77,63 @@ public static class DotnetTestRunner
 
         var (total, passed, failed, skipped) = ParseTestOutput(stdout);
 
+        // Attempt to read line coverage from Cobertura XML if output was collected
+        double? lineCoverage = null;
+        if (config.CoverageOutput is not null)
+        {
+            lineCoverage = TryReadLineCoverage(Path.Combine(repositoryRoot, config.CoverageOutput));
+        }
+        // Enforce coverage threshold if configured
+        var coverageFailed = false;
+        if (config.LineCoverageThreshold.HasValue && lineCoverage.HasValue)
+        {
+            var threshold = config.LineCoverageThreshold.Value;
+            if (lineCoverage.Value < threshold)
+            {
+                Console.Error.WriteLine(
+                    $"  Coverage threshold not met: {lineCoverage.Value:F1}% < {threshold}% required.");
+                coverageFailed = true;
+            }
+        }
+
         return new VerificationResult(
-            Success: process.ExitCode == 0,
+            Success: process.ExitCode == 0 && !coverageFailed,
             TotalTests: total,
             PassedTests: passed,
             FailedTests: failed,
             SkippedTests: skipped,
-            LineCoverage: null,
+            LineCoverage: lineCoverage,
             ResultsPath: outputDir,
             CoveragePath: config.CoverageOutput);
+    }
+
+    private static double? TryReadLineCoverage(string coverageDir)
+    {
+        try
+        {
+            var xmlFiles = Directory.GetFiles(coverageDir, "coverage.cobertura.xml", SearchOption.AllDirectories);
+            if (xmlFiles.Length == 0) return null;
+
+            using var reader = System.Xml.XmlReader.Create(xmlFiles[0]);
+            while (reader.Read())
+            {
+                if (reader.NodeType == System.Xml.XmlNodeType.Element && reader.Name == "coverage")
+                {
+                    var lineRate = reader.GetAttribute("line-rate");
+                    if (double.TryParse(lineRate, System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture, out var rate))
+                    {
+                        return rate * 100.0;
+                    }
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // coverage XML not available — skip
+        }
+
+        return null;
     }
 
     private static (int total, int passed, int failed, int skipped) ParseTestOutput(string output)
