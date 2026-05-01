@@ -1,0 +1,176 @@
+namespace Rexo.Execution.Tests;
+
+using System.Text.Json;
+using Rexo.Artifacts.Docker;
+using Rexo.Core.Models;
+
+public sealed class DockerArtifactProviderTests
+{
+    [Fact]
+    public async Task BuildAsyncUsesBuildxSecretsAndStructuredSettings()
+    {
+        var invocations = new List<DockerInvocation>();
+        var provider = new DockerArtifactProvider(
+            runDockerAsync: (args, workingDirectory, envOverrides, standardInput, cancellationToken) =>
+            {
+                invocations.Add(new DockerInvocation(args.ToArray(), envOverrides, standardInput));
+                return Task.FromResult((0, string.Empty));
+            },
+            isBuildxAvailableAsync: (_, _, _) => Task.FromResult(true));
+
+        var artifact = new ArtifactConfig(
+            "docker",
+            "sample",
+            JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
+                """
+                {
+                  "image": "ghcr.io/acme/widget",
+                  "runner": "buildx",
+                  "platform": "linux/amd64",
+                  "buildTarget": "publish",
+                  "buildOutput": "type=local,dest=./out",
+                  "buildArgs": {
+                    "FROM_CONFIG": "yes"
+                  },
+                  "secrets": {
+                    "npm_token": { "env": "NPM_TOKEN" },
+                    "cert": { "file": "./cert.pem" }
+                  },
+                  "tags": ["semver", "major"]
+                }
+                """)!);
+
+        var context = new ExecutionContext(
+            RepositoryRoot: Path.GetTempPath(),
+            Branch: "main",
+            CommitSha: "abcdef123456",
+            Values: new Dictionary<string, object?>())
+        {
+            Version = new VersionResult("1.2.3", 1, 2, 3, null, "abcdef123456", "abcdef", false, true)
+            {
+                DockerVersion = "1.2.3",
+            },
+            ShortSha = "abcdef",
+        };
+
+        var result = await provider.BuildAsync(artifact, context, CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Single(invocations);
+        Assert.Equal(
+            [
+                "buildx",
+                "build",
+                "--progress",
+                "plain",
+                "-f",
+                "Dockerfile",
+                "--platform",
+                "linux/amd64",
+                "--target",
+                "publish",
+                "--output",
+                "type=local,dest=./out",
+                "--secret",
+                "id=npm_token,env=NPM_TOKEN",
+                "--secret",
+                "id=cert,src=./cert.pem",
+                "--build-arg",
+                "FROM_CONFIG=yes",
+                "--build-arg",
+                "APP_VERSION=1.2.3",
+                "-t",
+                "ghcr.io/acme/widget:1.2.3",
+                "-t",
+                "ghcr.io/acme/widget:1",
+                "."
+            ],
+            invocations[0].Arguments);
+    }
+
+    [Fact]
+    public async Task BuildAsyncUsesDockerSecretEnvOverride()
+    {
+        const string secretEnvName = "DOCKER_SECRET_API";
+        var original = Environment.GetEnvironmentVariable(secretEnvName);
+        Environment.SetEnvironmentVariable(secretEnvName, "present");
+
+        try
+        {
+            var invocations = new List<DockerInvocation>();
+            var provider = new DockerArtifactProvider(
+                runDockerAsync: (args, workingDirectory, envOverrides, standardInput, cancellationToken) =>
+                {
+                    invocations.Add(new DockerInvocation(args.ToArray(), envOverrides, standardInput));
+                    return Task.FromResult((0, string.Empty));
+                },
+                isBuildxAvailableAsync: (_, _, _) => Task.FromResult(true));
+
+            var artifact = new ArtifactConfig(
+                "docker",
+                "sample",
+                JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
+                    """
+                    {
+                      "image": "ghcr.io/acme/widget",
+                      "runner": "buildx",
+                      "secrets": {
+                        "api": { "env": "IGNORED" }
+                      }
+                    }
+                    """)!);
+
+            var context = ExecutionContext.Empty(Path.GetTempPath()) with
+            {
+                Version = new VersionResult("1.2.3", 1, 2, 3, null, "abcdef123456", "abcdef", false, true),
+            };
+
+            var result = await provider.BuildAsync(artifact, context, CancellationToken.None);
+
+            Assert.True(result.Success);
+            Assert.Contains("id=api,env=DOCKER_SECRET_API", invocations[0].Arguments);
+            Assert.DoesNotContain("id=api,env=IGNORED", invocations[0].Arguments);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(secretEnvName, original);
+        }
+    }
+
+    [Fact]
+    public async Task BuildAsyncFailsWhenSecretsRequireBuildx()
+    {
+        var provider = new DockerArtifactProvider(
+            runDockerAsync: (args, workingDirectory, envOverrides, standardInput, cancellationToken) =>
+                Task.FromResult((0, string.Empty)),
+            isBuildxAvailableAsync: (_, _, _) => Task.FromResult(false));
+
+        var artifact = new ArtifactConfig(
+            "docker",
+            "sample",
+            JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
+                """
+                {
+                  "image": "ghcr.io/acme/widget",
+                  "runner": "build",
+                  "secrets": {
+                    "npm_token": { "env": "NPM_TOKEN" }
+                  }
+                }
+                """)!);
+
+        var context = ExecutionContext.Empty(Path.GetTempPath()) with
+        {
+            Version = new VersionResult("1.2.3", 1, 2, 3, null, "abcdef123456", "abcdef", false, true),
+        };
+
+        var result = await provider.BuildAsync(artifact, context, CancellationToken.None);
+
+        Assert.False(result.Success);
+    }
+
+    private sealed record DockerInvocation(
+        IReadOnlyList<string> Arguments,
+        IReadOnlyDictionary<string, string?>? Environment,
+        string? StandardInput);
+}

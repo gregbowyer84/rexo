@@ -1,5 +1,6 @@
 namespace Rexo.Configuration.Models;
 
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 public sealed record RepoConfig(
@@ -71,7 +72,7 @@ public sealed record RepoVersioningConfig(
 public sealed record RepoArtifactConfig(
     string Type,
     string Name,
-    Dictionary<string, string>? Settings = null);
+    Dictionary<string, JsonElement>? Settings = null);
 
 public sealed record RepoTestsConfig(
     bool Enabled,

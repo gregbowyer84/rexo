@@ -75,6 +75,11 @@ Legend:
 - [x] `builtin:build-artifacts`
 - [x] `builtin:tag-artifacts`
 - [x] `builtin:push-artifacts`
+- [x] `builtin:plan-artifacts`
+- [x] `builtin:ship-artifacts`
+- [x] `builtin:all-artifacts`
+- [x] `builtin:plan` / `builtin:ship` / `builtin:all` aliases
+- [x] `builtin:docker-plan` / `builtin:docker-ship` / `builtin:docker-all` / `builtin:docker-stage`
 - [x] `builtin:config-resolved`
 - [x] `builtin:config-materialize`
 - [x] `doctor` built-in command path
@@ -208,4 +213,10 @@ Items expected in MVP (per scope section 56) and status:
 - [x] Secret masking/redaction in logs and outputs
 - [x] Not-found command suggestion engine
 - [x] Add focused tests for merge/policy/parallel/manifest edge cases (80 tests total)
+- [ ] Add Helm chart OCI artifact provider (`type: helm-oci`) with build/tag/push lifecycle integration
+- [ ] Add typed schema + tests + docs for Helm chart OCI artifact settings
+- [ ] Add CI pipeline scaffolding (`rx init ci`) for GitHub Actions and Azure DevOps thin-wrapper templates
+- [ ] Add shared feed-auth resolution layer for artifact pushes (Docker/NuGet/Helm) with env-mounted credentials
+- [ ] Add CI-native identity fallback for feed authentication (OIDC/service connection/token providers) with env fallback
+- [ ] Add auth preflight validation + secret-safe diagnostics for missing/invalid feed credentials
 - [ ] Smarter `rx init` repo introspection (language/framework detection, richer templates, policy template recommendations)

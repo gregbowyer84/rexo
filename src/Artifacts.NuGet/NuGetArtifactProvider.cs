@@ -1,6 +1,7 @@
 namespace Rexo.Artifacts.NuGet;
 
 using System.Diagnostics;
+using System.Text.Json;
 using Rexo.Core.Abstractions;
 using Rexo.Core.Models;
 
@@ -105,5 +106,16 @@ public sealed class NuGetArtifactProvider : IArtifactProvider
     }
 
     private static string? GetSetting(ArtifactConfig artifact, string key) =>
-        artifact.Settings.TryGetValue(key, out var v) ? v : null;
+        artifact.Settings.TryGetValue(key, out var value) ? GetString(value) : null;
+
+    private static string? GetString(JsonElement value) =>
+        value.ValueKind switch
+        {
+            JsonValueKind.Null or JsonValueKind.Undefined => null,
+            JsonValueKind.String => value.GetString(),
+            JsonValueKind.True => bool.TrueString.ToLowerInvariant(),
+            JsonValueKind.False => bool.FalseString.ToLowerInvariant(),
+            JsonValueKind.Number => value.GetRawText(),
+            _ => value.ToString(),
+        };
 }

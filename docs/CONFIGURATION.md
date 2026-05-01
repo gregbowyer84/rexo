@@ -114,6 +114,17 @@ Each step has one of `run`, `uses`, or `command`:
 }
 ```
 
+Command-level concurrency is controlled with `maxParallel`:
+
+```jsonc
+"commands": {
+  "build": {
+    "maxParallel": 4,
+    "steps": [ ... ]
+  }
+}
+```
+
 ```jsonc
 {
   "uses": "builtin:resolve-version"  // built-in primitive
@@ -191,6 +202,122 @@ the group (they cannot see each other's outputs within the same group).
 After `builtin:push-artifacts` completes, a manifest is written to
 `artifacts/manifest.json` listing each artifact's type, name, push status, and
 published references.
+
+### Docker artifact settings (`type: "docker"`)
+
+The schema now validates Docker settings explicitly. Supported keys:
+
+| Key | Type | Purpose |
+| --- | --- | --- |
+| `image` | `string` | Fully-qualified image name (e.g. `ghcr.io/org/app`) |
+| `dockerfile` / `file` | `string` | Dockerfile path |
+| `context` | `string` | Build context path |
+| `runner` | `build \| buildx \| auto` | Docker build runner selection |
+| `platform` | `string` | Build platform (e.g. `linux/amd64`) |
+| `buildTarget` | `string` | Build stage target |
+| `buildOutput` | `string \| string[]` | Build output flags |
+| `buildArgs` | `string \| object \| array` | Build args (`KEY=VALUE`) |
+| `secrets` | `object` | BuildKit secrets map (`env` or `file`) |
+| `registry` / `repository` | `string` | Image target composition fallback |
+| `target.registry` / `target.repository` | `string` | Nested target settings |
+| `loginRegistry` / `login.registry` | `string` | Docker login registry override |
+| `cleanupLocal` / `cleanup.local` | `bool \| auto` | Local image cleanup mode |
+| `pushEnabled` / `push.enabled` | `bool` | Provider push enable/disable |
+| `pushBranches` / `push.branches` | `string \| string[]` | Branch eligibility patterns |
+| `push.branchesShortcut` | `string` | Delimited branch shortcut |
+| `denyNonPublicPush` / `push.denyNonPublicPush` | `bool` | Block non-public branch push |
+| `latest` / `tags.latest` | `bool` | Add `latest` tag |
+| `tags` | `string \| string[]` | Explicit tag strategy kinds |
+| `publicBuild` / `build.public` | `bool` | Explicit classification override |
+| `publicBranches*`, `nonPublicBranches*` | `string \| string[]` | Branch classification rules |
+| `classification.*` | `object` | Nested branch classification settings |
+| `tagPolicy.public` / `tagPolicy.nonPublic` | `string \| string[]` | Tag strategy policy by classification |
+| `nonPublicMode` | `string` | Non-public behavior mode (e.g. `full-only`) |
+| `aliases.*` | `object` | Branch alias generation settings |
+| `aliases.rules[]` | `array` | Match/template alias rules |
+| `stages` | `object` | Named stage definitions |
+| `stageFallback` | `bool` | Fallback behavior for stage requests |
+
+`secrets` shape:
+
+```jsonc
+"secrets": {
+  "npm_token": { "env": "NPM_TOKEN" },
+  "cert": { "file": "./cert.pem" }
+}
+```
+
+Each secret must include exactly one of `env` or `file`.
+
+`stages` shape:
+
+```jsonc
+"stages": {
+  "publish": {
+    "target": "publish",
+    "output": ["type=local,dest=./publish"],
+    "runner": "buildx",
+    "platform": "linux/amd64"
+  }
+}
+```
+
+### NuGet artifact settings (`type: "nuget"`)
+
+Supported keys:
+
+| Key | Type | Purpose |
+| --- | --- | --- |
+| `project` | `string` | Project path for `dotnet pack` |
+| `output` | `string` | Output directory |
+| `source` | `string` | NuGet feed URL |
+| `apiKeyEnv` | `string` | Environment variable containing API key |
+
+### Artifact workflow procedures
+
+General multi-artifact procedure (all artifact types):
+
+1. `builtin:plan` (or `builtin:plan-artifacts`) to inspect planned artifacts and key build settings.
+2. `builtin:build-artifacts` to build all configured artifacts.
+3. `builtin:tag-artifacts` to apply artifact tags/versions.
+4. `builtin:push-artifacts` to publish artifacts (with global and per-artifact push policy enforcement).
+
+Shortcut procedures:
+
+- `builtin:ship` (or `builtin:ship-artifacts`) runs `tag + push` across all configured artifacts.
+- `builtin:all` (or `builtin:all-artifacts`) runs `build + tag + push` across all configured artifacts.
+
+Example command wiring:
+
+```jsonc
+"commands": {
+  "plan": { "steps": [{ "id": "plan", "uses": "builtin:plan" }] },
+  "ship": { "steps": [{ "id": "ship", "uses": "builtin:ship" }] },
+  "all": { "steps": [{ "id": "all", "uses": "builtin:all" }] }
+}
+```
+
+Docker-specific procedure:
+
+1. `builtin:docker-plan` to inspect only Docker artifacts.
+2. `builtin:docker-ship` to tag and push only Docker artifacts.
+3. `builtin:docker-all` to build, tag, and push only Docker artifacts.
+4. `builtin:docker-stage` to build one named stage from `settings.stages`.
+
+Example stage invocation patterns:
+
+```jsonc
+"commands": {
+  "docker stage": {
+    "args": {
+      "stage": { "required": true, "description": "Stage name from artifacts[].settings.stages" }
+    },
+    "steps": [{ "id": "docker-stage", "uses": "builtin:docker-stage" }]
+  }
+}
+```
+
+The stage value can be provided via `args.stage` or `--stage`.
 
 ---
 
@@ -271,6 +398,16 @@ Use as `uses: builtin:<name>` in a step:
 | `builtin:build-artifacts` | Build all configured artifacts |
 | `builtin:tag-artifacts` | Tag all artifacts |
 | `builtin:push-artifacts` | Push artifacts; enforce push rules; write `artifacts/manifest.json` |
+| `builtin:plan-artifacts` | Plan all configured artifacts and emit plan JSON |
+| `builtin:ship-artifacts` | Tag + push all configured artifacts |
+| `builtin:all-artifacts` | Build + tag + push all configured artifacts |
+| `builtin:plan` | Alias of `builtin:plan-artifacts` |
+| `builtin:ship` | Alias of `builtin:ship-artifacts` |
+| `builtin:all` | Alias of `builtin:all-artifacts` |
+| `builtin:docker-plan` | Plan Docker artifacts only |
+| `builtin:docker-ship` | Tag + push Docker artifacts only |
+| `builtin:docker-all` | Build + tag + push Docker artifacts only |
+| `builtin:docker-stage` | Build a named Docker stage (`args.stage` or `--stage`) |
 | `builtin:config-resolved` | Print the effective merged config as JSON |
 | `builtin:config-materialize` | Write provider config files (e.g. `GitVersion.yml`) if absent |
 
@@ -389,7 +526,8 @@ The following features are defined in the product scope but not yet implemented:
 ### Run Manifest
 
 - The run manifest (written via `--json-file`) includes steps, version, CI context, git context, and errors.
-- **Push decisions and artifact entries** are not yet propagated from step execution into the run manifest (the artifact manifest file `artifacts/manifest.json` is still written separately by `builtin:push-artifacts`).
+- **Push decisions and artifact entries** are propagated from `builtin:push-artifacts` into command results and JSON output.
+- The artifact manifest file `artifacts/manifest.json` is still written separately by `builtin:push-artifacts` for file-based consumption.
 
 ### Config Inspection Commands
 

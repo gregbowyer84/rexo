@@ -993,6 +993,40 @@ NuGet artifact config:
 
 ---
 
+## 29.1 Helm Chart OCI Artifact (Later)
+
+Helm chart OCI support is a planned artifact provider so a single repo can deliver
+Docker images, NuGet packages, and Helm charts through the same artifact lifecycle.
+
+Planned config shape:
+
+```json
+{
+  "type": "helm-oci",
+  "name": "orders-chart",
+  "chartPath": "deploy/charts/orders",
+  "registry": "ghcr.io/company",
+  "repository": "orders",
+  "version": "{{version.semver}}",
+  "push": {
+    "enabled": true,
+    "branches": ["main", "release/*"]
+  }
+}
+```
+
+Planned lifecycle mapping:
+
+```text
+Build -> helm dependency update (optional) + helm package
+Tag   -> chart/version tagging policy alignment
+Push  -> helm push oci://<registry>/<repository>
+```
+
+This provider will reuse global push policy gates and manifest output behavior.
+
+---
+
 ## 30. Artifact Tags
 
 Docker tag strategies:
@@ -1367,6 +1401,7 @@ CI config should be thin:
 steps:
   - checkout
   - setup dotnet
+  - setup feed auth (platform-native where available)
   - dotnet tool restore
   - repo release --push
 ```
@@ -1438,6 +1473,22 @@ provider-specific auth
 ```
 
 Secret options should be masked.
+
+Feed authentication strategy (planned):
+
+```text
+Rexo resolves feed auth for artifact providers from env-mounted credentials.
+When CI-native identity is available (OIDC/service connection/token provider), use it first.
+Fallback to explicit env credentials when native identity is unavailable.
+```
+
+Expected behavior:
+
+```text
+Preflight checks validate required feed credentials before push steps.
+Errors identify missing env names without printing secret values.
+Logs remain redacted for all secret-bearing settings and command arguments.
+```
 
 Example:
 
@@ -2146,6 +2197,8 @@ file capture
 policy templates from Git
 policy templates from NuGet packages
 provider config materialisation
+shared feed-auth resolution layer (env + CI-native fallback)
+auth preflight validation for artifact push providers
 ```
 
 ### Phase 3
@@ -2154,6 +2207,7 @@ provider config materialisation
 RazorConsole UI
 interactive init
 interactive release
+CI pipeline scaffolding via init command (GitHub Actions, Azure DevOps)
 artifact browser
 coverage viewer
 analysis viewer
@@ -2168,7 +2222,7 @@ provenance
 cosign signing
 SLSA attestations
 OCI artifact support
-Helm charts
+Helm charts (OCI provider)
 Terraform modules
 npm packages
 container scanning
@@ -2254,6 +2308,56 @@ jobs:
 
       - name: Release
         run: repo release --push --json-file artifacts/manifests/release.json
+```
+
+Future enhancement:
+
+```text
+Generate this file from `repo init ci --provider github` with repo-specific defaults.
+Keep generated CI YAML thin and call repo commands for verify/release behavior.
+```
+
+---
+
+## 60.1 Example Azure DevOps (Later)
+
+```yaml
+trigger:
+  branches:
+    include:
+      - main
+      - release/*
+
+pr:
+  branches:
+    include:
+      - '*'
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  - checkout: self
+    fetchDepth: 0
+
+  - task: UseDotNet@2
+    inputs:
+      packageType: sdk
+      version: 8.0.x
+
+  - script: dotnet tool restore
+    displayName: Restore tools
+
+  - script: repo release --push --json-file artifacts/manifests/release.json
+    displayName: Release
+```
+
+Planned scaffolding command:
+
+```text
+repo init ci --provider azdo
+repo init ci --provider github
+repo init ci --provider both
 ```
 
 ---

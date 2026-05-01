@@ -1,5 +1,7 @@
 namespace Rexo.Execution;
 
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using Rexo.Ci;
 using Rexo.Configuration.Models;
 using Rexo.Core.Abstractions;
@@ -144,137 +146,309 @@ public sealed class ConfigCommandLoader
         });
 
         // builtin:build-artifacts
-        _builtinRegistry.Register("builtin:build-artifacts", async (step, ctx, ct) =>
+        _builtinRegistry.Register("builtin:build-artifacts", (step, ctx, ct) =>
+            BuildArtifactsAsync(
+                step.Id ?? "build-artifacts",
+                config,
+                ctx,
+                includePredicate: static _ => true,
+                successMessage: "All artifacts built.",
+            emptyMessage: "No artifacts configured.",
+            cancellationToken: ct));
+
+        // builtin:tag-artifacts
+        _builtinRegistry.Register("builtin:tag-artifacts", (step, ctx, ct) =>
+            TagArtifactsAsync(
+                step.Id ?? "tag-artifacts",
+                config,
+                ctx,
+                includePredicate: static _ => true,
+                successMessage: "All artifacts tagged.",
+            emptyMessage: "No artifacts configured.",
+            cancellationToken: ct));
+
+        // builtin:push-artifacts
+        _builtinRegistry.Register("builtin:push-artifacts", (step, ctx, ct) =>
+            PushArtifactsAsync(
+                step.Id ?? "push-artifacts",
+                config,
+                repositoryRoot,
+                ctx,
+                includePredicate: static _ => true,
+                successMessage: "Artifact push phase completed.",
+            emptyMessage: "No artifacts configured.",
+            cancellationToken: ct));
+
+        // builtin:plan-artifacts
+        _builtinRegistry.Register("builtin:plan-artifacts", (step, ctx, ct) =>
+            Task.FromResult(PlanArtifacts(
+                step.Id ?? "plan-artifacts",
+                config,
+                includePredicate: static _ => true,
+                successMessage: "Planned all artifacts.",
+                emptyMessage: "No artifacts configured.")));
+
+        // builtin:ship-artifacts = tag + push
+        _builtinRegistry.Register("builtin:ship-artifacts", async (step, ctx, ct) =>
         {
-            if (config.Artifacts is null || config.Artifacts.Count == 0)
+            var tagResult = await TagArtifactsAsync(
+                step.Id ?? "ship-artifacts",
+                config,
+                ctx,
+                includePredicate: static _ => true,
+                successMessage: "Artifacts tagged.",
+                emptyMessage: "No artifacts configured.",
+                cancellationToken: ct);
+
+            if (!tagResult.Success)
             {
-                return new StepResult(step.Id ?? "build-artifacts", true, 0, TimeSpan.Zero,
-                    new Dictionary<string, object?> { ["message"] = "No artifacts configured." });
+                return tagResult;
             }
 
-            foreach (var artifactCfg in config.Artifacts)
+            return await PushArtifactsAsync(
+                step.Id ?? "ship-artifacts",
+                config,
+                repositoryRoot,
+                ctx,
+                includePredicate: static _ => true,
+                successMessage: "Ship completed.",
+                emptyMessage: "No artifacts configured.",
+                cancellationToken: ct);
+        });
+
+        // builtin:all-artifacts = build + tag + push
+        _builtinRegistry.Register("builtin:all-artifacts", async (step, ctx, ct) =>
+        {
+            var buildResult = await BuildArtifactsAsync(
+                step.Id ?? "all-artifacts",
+                config,
+                ctx,
+                includePredicate: static _ => true,
+                successMessage: "Artifacts built.",
+                emptyMessage: "No artifacts configured.",
+                cancellationToken: ct);
+
+            if (!buildResult.Success)
+            {
+                return buildResult;
+            }
+
+            var tagResult = await TagArtifactsAsync(
+                step.Id ?? "all-artifacts",
+                config,
+                ctx,
+                includePredicate: static _ => true,
+                successMessage: "Artifacts tagged.",
+                emptyMessage: "No artifacts configured.",
+                cancellationToken: ct);
+
+            if (!tagResult.Success)
+            {
+                return tagResult;
+            }
+
+            return await PushArtifactsAsync(
+                step.Id ?? "all-artifacts",
+                config,
+                repositoryRoot,
+                ctx,
+                includePredicate: static _ => true,
+                successMessage: "All workflow completed.",
+                emptyMessage: "No artifacts configured.",
+                cancellationToken: ct);
+        });
+
+        // Dockship-style shorthand aliases, mapped to Rexo artifact workflows.
+        _builtinRegistry.Register("builtin:plan", (step, ctx, ct) =>
+            Task.FromResult(PlanArtifacts(
+                step.Id ?? "plan",
+                config,
+                includePredicate: static _ => true,
+                successMessage: "Planned all artifacts.",
+                emptyMessage: "No artifacts configured.")));
+
+        _builtinRegistry.Register("builtin:ship", async (step, ctx, ct) =>
+            await (_builtinRegistry.TryResolve("builtin:ship-artifacts", out var ship) && ship is not null
+                ? ship(step, ctx, ct)
+                : Task.FromResult(new StepResult(step.Id ?? "ship", false, 1, TimeSpan.Zero,
+                    new Dictionary<string, object?> { ["error"] = "builtin:ship-artifacts is not registered." }))));
+
+        _builtinRegistry.Register("builtin:all", async (step, ctx, ct) =>
+            await (_builtinRegistry.TryResolve("builtin:all-artifacts", out var all) && all is not null
+                ? all(step, ctx, ct)
+                : Task.FromResult(new StepResult(step.Id ?? "all", false, 1, TimeSpan.Zero,
+                    new Dictionary<string, object?> { ["error"] = "builtin:all-artifacts is not registered." }))));
+
+        // builtin:docker-plan
+        _builtinRegistry.Register("builtin:docker-plan", (step, ctx, ct) =>
+            Task.FromResult(PlanArtifacts(
+                step.Id ?? "docker-plan",
+                config,
+                includePredicate: static a => string.Equals(a.Type, "docker", StringComparison.OrdinalIgnoreCase),
+                successMessage: "Planned docker artifacts.",
+                emptyMessage: "No docker artifacts configured.")));
+
+        // builtin:docker-ship = tag + push (docker artifacts only)
+        _builtinRegistry.Register("builtin:docker-ship", async (step, ctx, ct) =>
+        {
+            var tagResult = await TagArtifactsAsync(
+                step.Id ?? "docker-ship",
+                config,
+                ctx,
+                includePredicate: static a => string.Equals(a.Type, "docker", StringComparison.OrdinalIgnoreCase),
+                successMessage: "Docker artifacts tagged.",
+                emptyMessage: "No docker artifacts configured.",
+                cancellationToken: ct);
+
+            if (!tagResult.Success)
+            {
+                return tagResult;
+            }
+
+            return await PushArtifactsAsync(
+                step.Id ?? "docker-ship",
+                config,
+                repositoryRoot,
+                ctx,
+                includePredicate: static a => string.Equals(a.Type, "docker", StringComparison.OrdinalIgnoreCase),
+                successMessage: "Docker ship completed.",
+                emptyMessage: "No docker artifacts configured.",
+                cancellationToken: ct);
+        });
+
+        // builtin:docker-all = build + tag + push (docker artifacts only)
+        _builtinRegistry.Register("builtin:docker-all", async (step, ctx, ct) =>
+        {
+            var buildResult = await BuildArtifactsAsync(
+                step.Id ?? "docker-all",
+                config,
+                ctx,
+                includePredicate: static a => string.Equals(a.Type, "docker", StringComparison.OrdinalIgnoreCase),
+                successMessage: "Docker artifacts built.",
+                emptyMessage: "No docker artifacts configured.",
+                cancellationToken: ct);
+
+            if (!buildResult.Success)
+            {
+                return buildResult;
+            }
+
+            var tagResult = await TagArtifactsAsync(
+                step.Id ?? "docker-all",
+                config,
+                ctx,
+                includePredicate: static a => string.Equals(a.Type, "docker", StringComparison.OrdinalIgnoreCase),
+                successMessage: "Docker artifacts tagged.",
+                emptyMessage: "No docker artifacts configured.",
+                cancellationToken: ct);
+
+            if (!tagResult.Success)
+            {
+                return tagResult;
+            }
+
+            return await PushArtifactsAsync(
+                step.Id ?? "docker-all",
+                config,
+                repositoryRoot,
+                ctx,
+                includePredicate: static a => string.Equals(a.Type, "docker", StringComparison.OrdinalIgnoreCase),
+                successMessage: "Docker all completed.",
+                emptyMessage: "No docker artifacts configured.",
+                cancellationToken: ct);
+        });
+
+        // builtin:docker-stage = build one named stage from artifact settings.stages
+        _builtinRegistry.Register("builtin:docker-stage", async (step, ctx, ct) =>
+        {
+            var stageName = ctx.Args.TryGetValue("stage", out var argStage) && !string.IsNullOrWhiteSpace(argStage)
+                ? argStage
+                : (ctx.Options.TryGetValue("stage", out var optionStage) ? optionStage : null);
+
+            if (string.IsNullOrWhiteSpace(stageName))
+            {
+                return new StepResult(
+                    step.Id ?? "docker-stage",
+                    false,
+                    2,
+                    TimeSpan.Zero,
+                    new Dictionary<string, object?> { ["error"] = "Missing stage name. Provide args.stage or --stage." });
+            }
+
+            var dockerArtifacts = (config.Artifacts ?? [])
+                .Where(a => string.Equals(a.Type, "docker", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (dockerArtifacts.Count == 0)
+            {
+                return new StepResult(
+                    step.Id ?? "docker-stage",
+                    true,
+                    0,
+                    TimeSpan.Zero,
+                    new Dictionary<string, object?> { ["message"] = "No docker artifacts configured." });
+            }
+
+            foreach (var artifactCfg in dockerArtifacts)
             {
                 var provider = _artifactProviders.Resolve(artifactCfg.Type);
                 if (provider is null)
                 {
-                    Console.Error.WriteLine($"  Warning: No provider found for artifact type '{artifactCfg.Type}'.");
                     continue;
                 }
+
+                if (artifactCfg.Settings is null ||
+                    !artifactCfg.Settings.TryGetValue("stages", out var stagesValue) ||
+                    stagesValue.ValueKind != JsonValueKind.Object ||
+                    !stagesValue.TryGetProperty(stageName, out var selectedStage) ||
+                    selectedStage.ValueKind != JsonValueKind.Object)
+                {
+                    return new StepResult(
+                        step.Id ?? "docker-stage",
+                        false,
+                        2,
+                        TimeSpan.Zero,
+                        new Dictionary<string, object?>
+                        {
+                            ["error"] = $"Stage '{stageName}' not found for docker artifact '{artifactCfg.Name}'.",
+                        });
+                }
+
+                var clonedSettings = CloneSettings(artifactCfg.Settings);
+                clonedSettings["stages"] = JsonSerializer.SerializeToElement(new Dictionary<string, JsonElement>
+                {
+                    [stageName] = selectedStage.Clone(),
+                });
+                clonedSettings["stageFallback"] = JsonSerializer.SerializeToElement(false);
 
                 var artifactConfig = new ArtifactConfig(
                     artifactCfg.Type,
                     artifactCfg.Name,
-                    artifactCfg.Settings ?? new Dictionary<string, string>());
+                    clonedSettings);
 
                 var result = await provider.BuildAsync(artifactConfig, ctx, ct);
                 if (!result.Success)
                 {
-                    return new StepResult(step.Id ?? "build-artifacts", false, 5, TimeSpan.Zero,
-                        new Dictionary<string, object?> { ["error"] = $"Failed to build artifact '{artifactCfg.Name}'." });
-                }
-            }
-
-            return new StepResult(step.Id ?? "build-artifacts", true, 0, TimeSpan.Zero,
-                new Dictionary<string, object?> { ["message"] = "All artifacts built." });
-        });
-
-        // builtin:tag-artifacts
-        _builtinRegistry.Register("builtin:tag-artifacts", async (step, ctx, ct) =>
-        {
-            if (config.Artifacts is null || config.Artifacts.Count == 0)
-            {
-                return new StepResult(step.Id ?? "tag-artifacts", true, 0, TimeSpan.Zero,
-                    new Dictionary<string, object?> { ["message"] = "No artifacts configured." });
-            }
-
-            foreach (var artifactCfg in config.Artifacts)
-            {
-                var provider = _artifactProviders.Resolve(artifactCfg.Type);
-                if (provider is null) continue;
-
-                var artifactConfig = new ArtifactConfig(
-                    artifactCfg.Type,
-                    artifactCfg.Name,
-                    artifactCfg.Settings ?? new Dictionary<string, string>());
-
-                await provider.TagAsync(artifactConfig, ctx, ct);
-            }
-
-            return new StepResult(step.Id ?? "tag-artifacts", true, 0, TimeSpan.Zero,
-                new Dictionary<string, object?> { ["message"] = "All artifacts tagged." });
-        });
-
-        // builtin:push-artifacts
-        _builtinRegistry.Register("builtin:push-artifacts", async (step, ctx, ct) =>
-        {
-            if (config.Artifacts is null || config.Artifacts.Count == 0)
-            {
-                return new StepResult(step.Id ?? "push-artifacts", true, 0, TimeSpan.Zero,
-                    new Dictionary<string, object?> { ["message"] = "No artifacts configured." });
-            }
-
-            // Push policy enforcement
-            var policyViolation = CheckPushPolicy(config.PushRulesJson, ctx);
-            if (policyViolation is not null)
-            {
-                var deniedDecisions = (config.Artifacts ?? [])
-                    .Select(a => new Core.Models.PushDecision(a.Name, false, policyViolation))
-                    .ToList();
-                return new StepResult(step.Id ?? "push-artifacts", false, 7, TimeSpan.Zero,
-                    new Dictionary<string, object?>
-                    {
-                        ["error"] = policyViolation,
-                        ["__pushDecisions"] = deniedDecisions,
-                    });
-            }
-
-            var manifestEntries = new List<Core.Models.ArtifactManifestEntry>();
-            var pushDecisions = new List<Core.Models.PushDecision>();
-
-            foreach (var artifactCfg in config.Artifacts)
-            {
-                var provider = _artifactProviders.Resolve(artifactCfg.Type);
-                if (provider is null) continue;
-
-                var artifactConfig = new ArtifactConfig(
-                    artifactCfg.Type,
-                    artifactCfg.Name,
-                    artifactCfg.Settings ?? new Dictionary<string, string>());
-
-                var pushResult = await provider.PushAsync(artifactConfig, ctx, ct);
-                var entry = new Core.Models.ArtifactManifestEntry(
-                    artifactCfg.Type,
-                    artifactCfg.Name,
-                    Built: true,
-                    Pushed: pushResult.Success,
-                    Tags: pushResult.PublishedReferences);
-                manifestEntries.Add(entry);
-                pushDecisions.Add(new Core.Models.PushDecision(
-                    artifactCfg.Name,
-                    pushResult.Success,
-                    pushResult.Success ? "Push succeeded." : $"Failed to push artifact '{artifactCfg.Name}'."));
-
-                if (!pushResult.Success)
-                {
-                    await WriteArtifactManifestAsync(repositoryRoot, manifestEntries, ct);
-                    return new StepResult(step.Id ?? "push-artifacts", false, 6, TimeSpan.Zero,
+                    return new StepResult(
+                        step.Id ?? "docker-stage",
+                        false,
+                        5,
+                        TimeSpan.Zero,
                         new Dictionary<string, object?>
                         {
-                            ["error"] = $"Failed to push artifact '{artifactCfg.Name}'.",
-                            ["__artifacts"] = manifestEntries,
-                            ["__pushDecisions"] = pushDecisions,
+                            ["error"] = $"Failed to build docker stage '{stageName}' for artifact '{artifactCfg.Name}'.",
                         });
                 }
             }
 
-            await WriteArtifactManifestAsync(repositoryRoot, manifestEntries, ct);
-
-            return new StepResult(step.Id ?? "push-artifacts", true, 0, TimeSpan.Zero,
+            return new StepResult(
+                step.Id ?? "docker-stage",
+                true,
+                0,
+                TimeSpan.Zero,
                 new Dictionary<string, object?>
                 {
-                    ["message"] = "All artifacts pushed.",
-                    ["__artifacts"] = manifestEntries,
-                    ["__pushDecisions"] = pushDecisions,
+                    ["message"] = $"Docker stage '{stageName}' completed.",
                 });
         });
 
@@ -586,6 +760,245 @@ public sealed class ConfigCommandLoader
         }
     }
 
+    private async Task<StepResult> BuildArtifactsAsync(
+        string stepId,
+        RepoConfig config,
+        ExecutionContext ctx,
+        Func<RepoArtifactConfig, bool> includePredicate,
+        string successMessage,
+        string emptyMessage,
+        CancellationToken cancellationToken)
+    {
+        var artifacts = (config.Artifacts ?? [])
+            .Where(includePredicate)
+            .ToList();
+
+        if (artifacts.Count == 0)
+        {
+            return new StepResult(stepId, true, 0, TimeSpan.Zero,
+                new Dictionary<string, object?> { ["message"] = emptyMessage });
+        }
+
+        foreach (var artifactCfg in artifacts)
+        {
+            var provider = _artifactProviders.Resolve(artifactCfg.Type);
+            if (provider is null)
+            {
+                Console.Error.WriteLine($"  Warning: No provider found for artifact type '{artifactCfg.Type}'.");
+                continue;
+            }
+
+            var artifactConfig = ToArtifactConfig(artifactCfg);
+            var result = await provider.BuildAsync(artifactConfig, ctx, cancellationToken);
+            if (!result.Success)
+            {
+                return new StepResult(stepId, false, 5, TimeSpan.Zero,
+                    new Dictionary<string, object?> { ["error"] = $"Failed to build artifact '{artifactCfg.Name}'." });
+            }
+        }
+
+        return new StepResult(stepId, true, 0, TimeSpan.Zero,
+            new Dictionary<string, object?> { ["message"] = successMessage });
+    }
+
+    private async Task<StepResult> TagArtifactsAsync(
+        string stepId,
+        RepoConfig config,
+        ExecutionContext ctx,
+        Func<RepoArtifactConfig, bool> includePredicate,
+        string successMessage,
+        string emptyMessage,
+        CancellationToken cancellationToken)
+    {
+        var artifacts = (config.Artifacts ?? [])
+            .Where(includePredicate)
+            .ToList();
+
+        if (artifacts.Count == 0)
+        {
+            return new StepResult(stepId, true, 0, TimeSpan.Zero,
+                new Dictionary<string, object?> { ["message"] = emptyMessage });
+        }
+
+        foreach (var artifactCfg in artifacts)
+        {
+            var provider = _artifactProviders.Resolve(artifactCfg.Type);
+            if (provider is null)
+            {
+                continue;
+            }
+
+            await provider.TagAsync(ToArtifactConfig(artifactCfg), ctx, cancellationToken);
+        }
+
+        return new StepResult(stepId, true, 0, TimeSpan.Zero,
+            new Dictionary<string, object?> { ["message"] = successMessage });
+    }
+
+    private async Task<StepResult> PushArtifactsAsync(
+        string stepId,
+        RepoConfig config,
+        string repositoryRoot,
+        ExecutionContext ctx,
+        Func<RepoArtifactConfig, bool> includePredicate,
+        string successMessage,
+        string emptyMessage,
+        CancellationToken cancellationToken)
+    {
+        var artifacts = (config.Artifacts ?? [])
+            .Where(includePredicate)
+            .ToList();
+
+        if (artifacts.Count == 0)
+        {
+            return new StepResult(stepId, true, 0, TimeSpan.Zero,
+                new Dictionary<string, object?> { ["message"] = emptyMessage });
+        }
+
+        var manifestEntries = new List<Core.Models.ArtifactManifestEntry>();
+        var pushDecisions = new List<Core.Models.PushDecision>();
+        var globalPolicy = ParsePushPolicyRules(config.PushRulesJson);
+
+        foreach (var artifactCfg in artifacts)
+        {
+            var provider = _artifactProviders.Resolve(artifactCfg.Type);
+            if (provider is null)
+            {
+                continue;
+            }
+
+            var effectivePolicy = BuildEffectivePushPolicy(globalPolicy, artifactCfg.Settings);
+            if (!IsPushAllowed(effectivePolicy, ctx, out var gateReason))
+            {
+                manifestEntries.Add(new Core.Models.ArtifactManifestEntry(
+                    artifactCfg.Type,
+                    artifactCfg.Name,
+                    Built: true,
+                    Pushed: false,
+                    Tags: Array.Empty<string>()));
+                pushDecisions.Add(new Core.Models.PushDecision(artifactCfg.Name, false, gateReason));
+                continue;
+            }
+
+            var pushResult = await provider.PushAsync(ToArtifactConfig(artifactCfg), ctx, cancellationToken);
+            var pushPerformed = pushResult.PublishedReferences.Count > 0;
+            manifestEntries.Add(new Core.Models.ArtifactManifestEntry(
+                artifactCfg.Type,
+                artifactCfg.Name,
+                Built: true,
+                Pushed: pushPerformed,
+                Tags: pushResult.PublishedReferences));
+            pushDecisions.Add(new Core.Models.PushDecision(
+                artifactCfg.Name,
+                pushResult.Success,
+                pushResult.Success
+                    ? (pushPerformed ? "Push succeeded." : "Push skipped.")
+                    : $"Failed to push artifact '{artifactCfg.Name}'."));
+
+            if (!pushResult.Success)
+            {
+                await WriteArtifactManifestAsync(repositoryRoot, manifestEntries, cancellationToken);
+                return new StepResult(stepId, false, 6, TimeSpan.Zero,
+                    new Dictionary<string, object?>
+                    {
+                        ["error"] = $"Failed to push artifact '{artifactCfg.Name}'.",
+                        ["__artifacts"] = manifestEntries,
+                        ["__pushDecisions"] = pushDecisions,
+                    });
+            }
+        }
+
+        await WriteArtifactManifestAsync(repositoryRoot, manifestEntries, cancellationToken);
+        return new StepResult(stepId, true, 0, TimeSpan.Zero,
+            new Dictionary<string, object?>
+            {
+                ["message"] = successMessage,
+                ["__artifacts"] = manifestEntries,
+                ["__pushDecisions"] = pushDecisions,
+            });
+    }
+
+    private static StepResult PlanArtifacts(
+        string stepId,
+        RepoConfig config,
+        Func<RepoArtifactConfig, bool> includePredicate,
+        string successMessage,
+        string emptyMessage)
+    {
+        var artifacts = (config.Artifacts ?? [])
+            .Where(includePredicate)
+            .ToList();
+
+        if (artifacts.Count == 0)
+        {
+            return new StepResult(stepId, true, 0, TimeSpan.Zero,
+                new Dictionary<string, object?> { ["message"] = emptyMessage });
+        }
+
+        var plans = artifacts.Select(a => new
+        {
+            a.Type,
+            a.Name,
+            Image = TryGetArtifactSettingString(a.Settings, "image") ?? a.Name,
+            Dockerfile = TryGetArtifactSettingString(a.Settings, "dockerfile") ?? "Dockerfile",
+            Context = TryGetArtifactSettingString(a.Settings, "context") ?? ".",
+            Runner = TryGetArtifactSettingString(a.Settings, "runner") ?? "build",
+            Stages = TryGetArtifactSettingObject(a.Settings, "stages")?.Select(p => p.Name).ToArray() ?? Array.Empty<string>(),
+        }).ToList();
+
+        var json = JsonSerializer.Serialize(plans, IndentedJsonOptions);
+        Console.WriteLine(json);
+
+        return new StepResult(stepId, true, 0, TimeSpan.Zero,
+            new Dictionary<string, object?>
+            {
+                ["message"] = successMessage,
+                ["plan"] = json,
+            });
+    }
+
+    private static ArtifactConfig ToArtifactConfig(RepoArtifactConfig artifactCfg) =>
+        new(
+            artifactCfg.Type,
+            artifactCfg.Name,
+            artifactCfg.Settings ?? new Dictionary<string, JsonElement>());
+
+    private static string? TryGetArtifactSettingString(Dictionary<string, JsonElement>? settings, string key)
+    {
+        if (settings is null || !settings.TryGetValue(key, out var value))
+        {
+            return null;
+        }
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.Null or JsonValueKind.Undefined => null,
+            JsonValueKind.String => value.GetString(),
+            _ => value.ToString(),
+        };
+    }
+
+    private static IEnumerable<JsonProperty>? TryGetArtifactSettingObject(Dictionary<string, JsonElement>? settings, string key)
+    {
+        if (settings is null || !settings.TryGetValue(key, out var value) || value.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        return value.EnumerateObject();
+    }
+
+    private static Dictionary<string, JsonElement> CloneSettings(Dictionary<string, JsonElement> settings)
+    {
+        var clone = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        foreach (var (key, value) in settings)
+        {
+            clone[key] = value.Clone();
+        }
+
+        return clone;
+    }
+
     private static IReadOnlyDictionary<string, string?> BuildOptionsWithDefaults(
         IReadOnlyDictionary<string, string?> provided,
         RepoCommandConfig commandConfig)
@@ -624,36 +1037,218 @@ public sealed class ConfigCommandLoader
         Console.WriteLine($"  Artifact manifest written to {manifestPath}");
     }
 
-    /// <summary>
-    /// Evaluates push policy rules against the current execution context.
-    /// Returns a violation message if a rule is violated, or null if push is allowed.
-    /// </summary>
-    private static string? CheckPushPolicy(string? pushRulesJson, Core.Models.ExecutionContext ctx)
+    private static PushPolicyRules ParsePushPolicyRules(string? pushRulesJson)
     {
-        if (string.IsNullOrWhiteSpace(pushRulesJson)) return null;
+        if (string.IsNullOrWhiteSpace(pushRulesJson))
+        {
+            return PushPolicyRules.Default;
+        }
 
         try
         {
-            var rules = System.Text.Json.JsonSerializer.Deserialize<PushPolicyRules>(pushRulesJson);
-            if (rules is null) return null;
+            using var doc = JsonDocument.Parse(pushRulesJson);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return PushPolicyRules.Default;
+            }
 
-            if (rules.NoPushInPullRequest && ctx.IsPullRequest)
-                return "Push policy violation: push is not allowed in pull requests.";
-
-            if (rules.RequireCleanWorkingTree && !ctx.IsCleanWorkingTree)
-                return "Push policy violation: working tree has uncommitted changes.";
+            return new PushPolicyRules(
+                Enabled: ReadBoolean(root, "enabled") ?? true,
+                NoPushInPullRequest: ReadBoolean(root, "noPushInPullRequest") ?? false,
+                RequireCleanWorkingTree: ReadBoolean(root, "requireCleanWorkingTree") ?? false,
+                Branches: ReadStringList(root, "branches") ?? []);
         }
-        catch (System.Text.Json.JsonException)
+        catch (JsonException)
         {
-            // Malformed rules JSON — skip enforcement
+            // Malformed rules JSON — fall back to defaults.
+            return PushPolicyRules.Default;
         }
-
-        return null;
     }
 
+    private static PushPolicyRules BuildEffectivePushPolicy(
+        PushPolicyRules globalPolicy,
+        Dictionary<string, JsonElement>? artifactSettings)
+    {
+        if (artifactSettings is null || artifactSettings.Count == 0)
+        {
+            return globalPolicy;
+        }
+
+        var enabled = TryGetBool(artifactSettings, "push.enabled")
+            ?? TryGetBool(artifactSettings, "pushEnabled");
+        var noPushInPullRequest = TryGetBool(artifactSettings, "push.noPushInPullRequest")
+            ?? TryGetBool(artifactSettings, "push.noPushInPr")
+            ?? TryGetBool(artifactSettings, "noPushInPullRequest");
+        var requireCleanWorkingTree = TryGetBool(artifactSettings, "push.requireCleanWorkingTree")
+            ?? TryGetBool(artifactSettings, "requireCleanWorkingTree");
+        var branches = TryGetStringList(artifactSettings, "push.branches")
+            ?? TryGetStringList(artifactSettings, "pushBranches");
+
+        return globalPolicy with
+        {
+            Enabled = enabled ?? globalPolicy.Enabled,
+            NoPushInPullRequest = noPushInPullRequest ?? globalPolicy.NoPushInPullRequest,
+            RequireCleanWorkingTree = requireCleanWorkingTree ?? globalPolicy.RequireCleanWorkingTree,
+            Branches = branches ?? globalPolicy.Branches,
+        };
+    }
+
+    private static bool IsPushAllowed(
+        PushPolicyRules policy,
+        Core.Models.ExecutionContext ctx,
+        out string reason)
+    {
+        if (!policy.Enabled)
+        {
+            reason = "Push skipped by policy: disabled.";
+            return false;
+        }
+
+        if (policy.NoPushInPullRequest && ctx.IsPullRequest)
+        {
+            reason = "Push skipped by policy: pull request context.";
+            return false;
+        }
+
+        if (policy.RequireCleanWorkingTree && !ctx.IsCleanWorkingTree)
+        {
+            reason = "Push skipped by policy: working tree is not clean.";
+            return false;
+        }
+
+        if (policy.Branches.Count > 0)
+        {
+            if (string.IsNullOrWhiteSpace(ctx.Branch))
+            {
+                reason = "Push skipped by policy: branch is unknown.";
+                return false;
+            }
+
+            if (!policy.Branches.Any(pattern => BranchMatches(pattern, ctx.Branch!)))
+            {
+                reason = $"Push skipped by policy: branch '{ctx.Branch}' not allowed.";
+                return false;
+            }
+        }
+
+        reason = "Push allowed by policy.";
+        return true;
+    }
+
+    private static bool BranchMatches(string pattern, string branch)
+    {
+        if (pattern.StartsWith("regex:", StringComparison.OrdinalIgnoreCase))
+        {
+            return Regex.IsMatch(branch, pattern["regex:".Length..], RegexOptions.CultureInvariant);
+        }
+
+        var regex = "^" + Regex.Escape(pattern).Replace("\\*", ".*", StringComparison.Ordinal) + "$";
+        return Regex.IsMatch(branch, regex, RegexOptions.CultureInvariant);
+    }
+
+    private static bool? TryGetBool(Dictionary<string, JsonElement> settings, string path)
+    {
+        if (!TryGetValue(settings, path, out var value))
+        {
+            return null;
+        }
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.String when bool.TryParse(value.GetString(), out var parsed) => parsed,
+            _ => null,
+        };
+    }
+
+    private static bool? ReadBoolean(JsonElement root, string propertyName)
+    {
+        if (!root.TryGetProperty(propertyName, out var value))
+        {
+            return null;
+        }
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.String when bool.TryParse(value.GetString(), out var parsed) => parsed,
+            _ => null,
+        };
+    }
+
+    private static List<string>? ReadStringList(JsonElement root, string propertyName)
+    {
+        if (!root.TryGetProperty(propertyName, out var value))
+        {
+            return null;
+        }
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => SplitDelimitedList(value.GetString() ?? string.Empty),
+            JsonValueKind.Array => value.EnumerateArray()
+                .Select(v => v.ValueKind == JsonValueKind.String ? v.GetString() : v.ToString())
+                .Where(v => !string.IsNullOrWhiteSpace(v))
+                .Cast<string>()
+                .ToList(),
+            _ => null,
+        };
+    }
+
+    private static List<string>? TryGetStringList(Dictionary<string, JsonElement> settings, string path)
+    {
+        if (!TryGetValue(settings, path, out var value))
+        {
+            return null;
+        }
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => SplitDelimitedList(value.GetString() ?? string.Empty),
+            JsonValueKind.Array => value.EnumerateArray()
+                .Select(v => v.ValueKind == JsonValueKind.String ? v.GetString() : v.ToString())
+                .Where(v => !string.IsNullOrWhiteSpace(v))
+                .Cast<string>()
+                .ToList(),
+            _ => null,
+        };
+    }
+
+    private static bool TryGetValue(Dictionary<string, JsonElement> settings, string path, out JsonElement value)
+    {
+        value = default;
+        var parts = path.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 0 || !settings.TryGetValue(parts[0], out value))
+        {
+            return false;
+        }
+
+        for (var i = 1; i < parts.Length; i++)
+        {
+            if (value.ValueKind != JsonValueKind.Object || !value.TryGetProperty(parts[i], out value))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static List<string> SplitDelimitedList(string value) =>
+        value.Split([',', ';', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+
     private sealed record PushPolicyRules(
+        bool Enabled = true,
         bool NoPushInPullRequest = false,
-        bool RequireCleanWorkingTree = false);
+        bool RequireCleanWorkingTree = false,
+        List<string> Branches = null!)
+    {
+        public static PushPolicyRules Default => new(Branches: []);
+    }
 
     private static StepDefinition BuildStepDefinition(RepoStepConfig stepConfig) =>
         new(

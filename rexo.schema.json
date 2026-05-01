@@ -107,6 +107,10 @@
           "items": {
             "$ref": "#/$defs/step"
           }
+        },
+        "maxParallel": {
+          "type": "integer",
+          "minimum": 1
         }
       }
     },
@@ -171,11 +175,20 @@
         "continueOnError": {
           "type": "boolean"
         },
+        "parallel": {
+          "type": "boolean"
+        },
         "dependsOn": {
           "type": "array",
           "items": {
             "type": "string"
           }
+        },
+        "outputPattern": {
+          "type": "string"
+        },
+        "outputFile": {
+          "type": "string"
         }
       },
       "anyOf": [
@@ -206,6 +219,19 @@
       }
     },
     "artifact": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/dockerArtifact"
+        },
+        {
+          "$ref": "#/$defs/nugetArtifact"
+        },
+        {
+          "$ref": "#/$defs/genericArtifact"
+        }
+      ]
+    },
+    "dockerArtifact": {
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -214,7 +240,51 @@
       ],
       "properties": {
         "type": {
+          "const": "docker"
+        },
+        "name": {
           "type": "string"
+        },
+        "settings": {
+          "$ref": "#/$defs/dockerArtifactSettings"
+        }
+      }
+    },
+    "nugetArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "name"
+      ],
+      "properties": {
+        "type": {
+          "const": "nuget"
+        },
+        "name": {
+          "type": "string"
+        },
+        "settings": {
+          "$ref": "#/$defs/nugetArtifactSettings"
+        }
+      }
+    },
+    "genericArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "name"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "not": {
+            "enum": [
+              "docker",
+              "nuget"
+            ]
+          }
         },
         "name": {
           "type": "string"
@@ -222,10 +292,422 @@
         "settings": {
           "type": "object",
           "additionalProperties": {
-            "$ref": "#/$defs/settingValue"
+            "$ref": "#/$defs/artifactSettingValue"
           }
         }
       }
+    },
+    "stringOrStringArray": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "buildArgValue": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "boolean"
+        }
+      ]
+    },
+    "buildArgsValue": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/buildArgValue"
+          }
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/buildArgValue"
+          }
+        }
+      ]
+    },
+    "secretSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "env": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "env"
+          ]
+        },
+        {
+          "required": [
+            "file"
+          ]
+        }
+      ]
+    },
+    "aliasesRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "match",
+        "template"
+      ],
+      "properties": {
+        "match": {
+          "type": "string"
+        },
+        "template": {
+          "type": "string"
+        },
+        "sanitize": {
+          "type": "string",
+          "enum": [
+            "sanitized"
+          ]
+        }
+      }
+    },
+    "dockerStage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "target": {
+          "type": "string"
+        },
+        "output": {
+          "$ref": "#/$defs/stringOrStringArray"
+        },
+        "runner": {
+          "type": "string",
+          "enum": [
+            "build",
+            "buildx",
+            "auto"
+          ]
+        },
+        "platform": {
+          "type": "string"
+        }
+      }
+    },
+    "dockerArtifactSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "image": {
+          "type": "string"
+        },
+        "dockerfile": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "context": {
+          "type": "string"
+        },
+        "runner": {
+          "type": "string",
+          "enum": [
+            "build",
+            "buildx",
+            "auto"
+          ]
+        },
+        "platform": {
+          "type": "string"
+        },
+        "buildTarget": {
+          "type": "string"
+        },
+        "buildOutput": {
+          "$ref": "#/$defs/stringOrStringArray"
+        },
+        "buildArgs": {
+          "$ref": "#/$defs/buildArgsValue"
+        },
+        "secrets": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/secretSpec"
+          }
+        },
+        "registry": {
+          "type": "string"
+        },
+        "repository": {
+          "type": "string"
+        },
+        "target": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "registry": {
+              "type": "string"
+            },
+            "repository": {
+              "type": "string"
+            }
+          }
+        },
+        "loginRegistry": {
+          "type": "string"
+        },
+        "login": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "registry": {
+              "type": "string"
+            }
+          }
+        },
+        "cleanupLocal": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string",
+              "enum": [
+                "auto",
+                "true",
+                "false"
+              ]
+            }
+          ]
+        },
+        "cleanup": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "local": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "auto",
+                    "true",
+                    "false"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "pushEnabled": {
+          "type": "boolean"
+        },
+        "pushBranches": {
+          "$ref": "#/$defs/stringOrStringArray"
+        },
+        "denyNonPublicPush": {
+          "type": "boolean"
+        },
+        "push": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "branches": {
+              "$ref": "#/$defs/stringOrStringArray"
+            },
+            "branchesShortcut": {
+              "type": "string"
+            },
+            "denyNonPublicPush": {
+              "type": "boolean"
+            }
+          }
+        },
+        "latest": {
+          "type": "boolean"
+        },
+        "tags": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "publicBuild": {
+          "type": "boolean"
+        },
+        "build": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "public": {
+              "type": "boolean"
+            }
+          }
+        },
+        "publicBranches": {
+          "$ref": "#/$defs/stringOrStringArray"
+        },
+        "publicBranchesShortcut": {
+          "type": "string"
+        },
+        "nonPublicBranches": {
+          "$ref": "#/$defs/stringOrStringArray"
+        },
+        "nonPublicBranchesShortcut": {
+          "type": "string"
+        },
+        "classification": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "publicBranches": {
+              "$ref": "#/$defs/stringOrStringArray"
+            },
+            "publicBranchesShortcut": {
+              "type": "string"
+            },
+            "nonPublicBranches": {
+              "$ref": "#/$defs/stringOrStringArray"
+            },
+            "nonPublicBranchesShortcut": {
+              "type": "string"
+            }
+          }
+        },
+        "tagPolicy": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "public": {
+              "$ref": "#/$defs/stringOrStringArray"
+            },
+            "nonPublic": {
+              "$ref": "#/$defs/stringOrStringArray"
+            }
+          }
+        },
+        "nonPublicMode": {
+          "type": "string"
+        },
+        "aliases": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "branch": {
+              "type": "boolean"
+            },
+            "sanitizedBranch": {
+              "type": "boolean"
+            },
+            "sanitize": {
+              "type": "boolean"
+            },
+            "prefix": {
+              "type": "string"
+            },
+            "suffix": {
+              "type": "string"
+            },
+            "nonPublicPrefix": {
+              "type": "string"
+            },
+            "rules": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/aliasesRule"
+              }
+            }
+          }
+        },
+        "stages": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/dockerStage"
+          }
+        },
+        "stageFallback": {
+          "type": "boolean"
+        }
+      }
+    },
+    "nugetArtifactSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "project": {
+          "type": "string"
+        },
+        "output": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "apiKeyEnv": {
+          "type": "string"
+        }
+      }
+    },
+    "artifactSettingValue": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/artifactSettingValue"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/artifactSettingValue"
+          }
+        }
+      ]
     },
     "settingValue": {
       "oneOf": [

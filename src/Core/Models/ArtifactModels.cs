@@ -1,9 +1,11 @@
 namespace Rexo.Core.Models;
 
+using System.Text.Json;
+
 public sealed record ArtifactConfig(
     string Type,
     string Name,
-    IReadOnlyDictionary<string, string> Settings);
+    IReadOnlyDictionary<string, JsonElement> Settings);
 
 public sealed record ArtifactBuildResult(string Name, bool Success, string? Location);
 

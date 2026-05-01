@@ -281,22 +281,23 @@ public sealed class RepoConfigurationLoader
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        string schemaJson;
         JsonSchema schema;
         var schemaPath = FindLocalSchemaPath(configDirectory, SupportedRexoSchemaPath, LegacySchemaPath);
         if (schemaPath is not null)
         {
-            var schemaJson = await File.ReadAllTextAsync(schemaPath, cancellationToken);
+            schemaJson = await File.ReadAllTextAsync(schemaPath, cancellationToken);
             schema = await ParseSchemaWithCompatibilityAsync(schemaJson, cancellationToken);
         }
         else
         {
             // Fall back to the embedded schema so the tool works when installed globally.
-            var schemaJson = await ReadEmbeddedRexoSchemaJsonAsync(cancellationToken);
+            schemaJson = await ReadEmbeddedRexoSchemaJsonAsync(cancellationToken);
             schema = await ParseSchemaWithCompatibilityAsync(schemaJson, cancellationToken);
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        var errors = ValidateWithCompatibilityFallback(schema, jsonText, cancellationToken);
+        var errors = ValidateWithCompatibilityFallback(schema, schemaJson, jsonText, cancellationToken);
         if (errors.Count > 0)
         {
             var details = string.Join(
@@ -356,21 +357,22 @@ public sealed class RepoConfigurationLoader
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        string schemaJson;
         JsonSchema schema;
         var schemaPath = FindLocalSchemaPath(policyDirectory, SupportedPolicySchemaPath);
         if (schemaPath is not null)
         {
-            var schemaJson = await File.ReadAllTextAsync(schemaPath, cancellationToken);
+            schemaJson = await File.ReadAllTextAsync(schemaPath, cancellationToken);
             schema = await ParseSchemaWithCompatibilityAsync(schemaJson, cancellationToken);
         }
         else
         {
-            var schemaJson = await ReadEmbeddedPolicySchemaJsonAsync(cancellationToken);
+            schemaJson = await ReadEmbeddedPolicySchemaJsonAsync(cancellationToken);
             schema = await ParseSchemaWithCompatibilityAsync(schemaJson, cancellationToken);
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        var errors = ValidateWithCompatibilityFallback(schema, jsonText, cancellationToken);
+        var errors = ValidateWithCompatibilityFallback(schema, schemaJson, jsonText, cancellationToken);
         if (errors.Count > 0)
         {
             var details = string.Join(
@@ -405,6 +407,7 @@ public sealed class RepoConfigurationLoader
 
     private static ICollection<NJsonSchema.Validation.ValidationError> ValidateWithCompatibilityFallback(
         JsonSchema schema,
+        string schemaJson,
         string jsonText,
         CancellationToken cancellationToken)
     {
@@ -414,7 +417,7 @@ public sealed class RepoConfigurationLoader
         }
         catch (Exception ex) when (NeedsDefsCompatibilityFallback(ex.Message))
         {
-            var normalizedSchemaJson = NormalizeSchemaForLegacyDefinitions(schema.ToJson());
+            var normalizedSchemaJson = NormalizeSchemaForLegacyDefinitions(schemaJson);
             var normalizedSchema = JsonSchema.FromJsonAsync(normalizedSchemaJson, CancellationToken.None)
                 .GetAwaiter()
                 .GetResult();

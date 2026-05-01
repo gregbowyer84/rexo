@@ -6,6 +6,7 @@
     <PackageReference Include="xunit.runner.visualstudio" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Artifacts.Docker\Artifacts.Docker.csproj" />
     <Using Include="Xunit" />
   </ItemGroup>
   <ItemGroup>
