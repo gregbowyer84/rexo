@@ -217,11 +217,19 @@ public sealed class ConfigCommandLoader
             var policyViolation = CheckPushPolicy(config.PushRulesJson, ctx);
             if (policyViolation is not null)
             {
+                var deniedDecisions = (config.Artifacts ?? [])
+                    .Select(a => new Core.Models.PushDecision(a.Name, false, policyViolation))
+                    .ToList();
                 return new StepResult(step.Id ?? "push-artifacts", false, 7, TimeSpan.Zero,
-                    new Dictionary<string, object?> { ["error"] = policyViolation });
+                    new Dictionary<string, object?>
+                    {
+                        ["error"] = policyViolation,
+                        ["__pushDecisions"] = deniedDecisions,
+                    });
             }
 
             var manifestEntries = new List<Core.Models.ArtifactManifestEntry>();
+            var pushDecisions = new List<Core.Models.PushDecision>();
 
             foreach (var artifactCfg in config.Artifacts)
             {
@@ -234,25 +242,40 @@ public sealed class ConfigCommandLoader
                     artifactCfg.Settings ?? new Dictionary<string, string>());
 
                 var pushResult = await provider.PushAsync(artifactConfig, ctx, ct);
-                manifestEntries.Add(new Core.Models.ArtifactManifestEntry(
+                var entry = new Core.Models.ArtifactManifestEntry(
                     artifactCfg.Type,
                     artifactCfg.Name,
                     Built: true,
                     Pushed: pushResult.Success,
-                    Tags: pushResult.PublishedReferences));
+                    Tags: pushResult.PublishedReferences);
+                manifestEntries.Add(entry);
+                pushDecisions.Add(new Core.Models.PushDecision(
+                    artifactCfg.Name,
+                    pushResult.Success,
+                    pushResult.Success ? "Push succeeded." : $"Failed to push artifact '{artifactCfg.Name}'."));
 
                 if (!pushResult.Success)
                 {
                     await WriteArtifactManifestAsync(repositoryRoot, manifestEntries, ct);
                     return new StepResult(step.Id ?? "push-artifacts", false, 6, TimeSpan.Zero,
-                        new Dictionary<string, object?> { ["error"] = $"Failed to push artifact '{artifactCfg.Name}'." });
+                        new Dictionary<string, object?>
+                        {
+                            ["error"] = $"Failed to push artifact '{artifactCfg.Name}'.",
+                            ["__artifacts"] = manifestEntries,
+                            ["__pushDecisions"] = pushDecisions,
+                        });
                 }
             }
 
             await WriteArtifactManifestAsync(repositoryRoot, manifestEntries, ct);
 
             return new StepResult(step.Id ?? "push-artifacts", true, 0, TimeSpan.Zero,
-                new Dictionary<string, object?> { ["message"] = "All artifacts pushed." });
+                new Dictionary<string, object?>
+                {
+                    ["message"] = "All artifacts pushed.",
+                    ["__artifacts"] = manifestEntries,
+                    ["__pushDecisions"] = pushDecisions,
+                });
         });
 
         // builtin:test
@@ -454,6 +477,8 @@ public sealed class ConfigCommandLoader
         var stepExecutor = new StepExecutor(commandExecutor, _templateRenderer, _builtinRegistry);
         var stepResults = new List<StepResult>();
         var currentContext = context;
+        var artifactEntries = new List<Core.Models.ArtifactManifestEntry>();
+        var pushDecisionEntries = new List<Core.Models.PushDecision>();
 
         // Group consecutive parallel steps; sequential steps are singleton groups
         var stepGroups = GroupSteps(commandConfig.Steps);
@@ -511,6 +536,18 @@ public sealed class ConfigCommandLoader
                 {
                     currentContext = currentContext.WithVersion(versionResult);
                 }
+
+                if (stepResult.Outputs.TryGetValue("__artifacts", out var artifactsObj) &&
+                    artifactsObj is List<Core.Models.ArtifactManifestEntry> stepArtifacts)
+                {
+                    artifactEntries.AddRange(stepArtifacts);
+                }
+
+                if (stepResult.Outputs.TryGetValue("__pushDecisions", out var decisionsObj) &&
+                    decisionsObj is List<Core.Models.PushDecision> stepDecisions)
+                {
+                    pushDecisionEntries.AddRange(stepDecisions);
+                }
             }
 
             // Fail fast if any step failed and it doesn't have continueOnError
@@ -526,7 +563,12 @@ public sealed class ConfigCommandLoader
                     failed.Result.ExitCode,
                     $"Step '{failed.Result.StepId}' failed with exit code {failed.Result.ExitCode}.",
                     new Dictionary<string, object?>())
-                { Steps = stepResults, Version = currentContext.Version };
+                {
+                    Steps = stepResults,
+                    Version = currentContext.Version,
+                    Artifacts = artifactEntries,
+                    PushDecisions = pushDecisionEntries,
+                };
             }
         }
 
@@ -536,7 +578,12 @@ public sealed class ConfigCommandLoader
             0,
             $"Command '{commandName}' completed successfully.",
             new Dictionary<string, object?>())
-        { Steps = stepResults, Version = currentContext.Version };
+        {
+            Steps = stepResults,
+            Version = currentContext.Version,
+            Artifacts = artifactEntries,
+            PushDecisions = pushDecisionEntries,
+        };
     }
 
     private static async Task WriteSarifIfConfiguredAsync(

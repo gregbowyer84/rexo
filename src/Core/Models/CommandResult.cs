@@ -15,6 +15,12 @@ public sealed record CommandResult(
     /// <summary>Structured errors with machine-readable codes.</summary>
     public IReadOnlyList<RexoError> StructuredErrors { get; init; } = Array.Empty<RexoError>();
 
+    /// <summary>Artifact build/push results produced by <c>builtin:push-artifacts</c>.</summary>
+    public IReadOnlyList<ArtifactManifestEntry> Artifacts { get; init; } = Array.Empty<ArtifactManifestEntry>();
+
+    /// <summary>Push policy decisions produced by <c>builtin:push-artifacts</c>.</summary>
+    public IReadOnlyList<PushDecision> PushDecisions { get; init; } = Array.Empty<PushDecision>();
+
     public static CommandResult Ok(string command, string? message = null) =>
         new(command, true, 0, message, new Dictionary<string, object?>());
 

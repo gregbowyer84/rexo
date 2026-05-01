@@ -97,7 +97,7 @@ Legend:
 - [x] Tag strategy support (semver/branch/sha/latest-on-main variants)
 - [x] Push policy rules enforced via `pushRulesJson` (`noPushInPullRequest`, `requireCleanWorkingTree`)
 - [x] Artifact manifest file output (`artifacts/manifest.json` written after push)
-- [~] Rich artifact metadata capture (manifest written; full run manifest integration partial)
+- [x] Rich artifact metadata capture (manifest written; Artifacts/PushDecisions now flowed into CommandResult and RunManifest)
 
 ## 9) Verification and Analysis
 
@@ -122,7 +122,7 @@ Legend:
 - [x] JSON file output via `--json-file`
 - [x] Run manifest model exists
 - [x] Manifest writing path exists for run invocations
-- [~] Manifest content is partial versus scope (PushDecisions/Artifacts not yet flowed from step results; Branch/CommitSha/RemoteUrl/RepoName/Errors now populated)
+- [x] Manifest content complete: PushDecisions/Artifacts flowed from step results via __artifacts/__pushDecisions outputs; Branch/CommitSha/RemoteUrl/RepoName/Errors populated
 - [x] Stable versioned JSON schema contract documentation (`schemas/1.0/README.md`)
 
 ## 12) Policy and Template Sources

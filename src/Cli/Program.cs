@@ -468,6 +468,8 @@ public static class Program
             Steps = result.Steps
                 .Select(s => new StepManifestEntry(s.StepId, s.Success, s.ExitCode, s.Duration.TotalMilliseconds))
                 .ToArray(),
+            Artifacts = result.Artifacts,
+            PushDecisions = result.PushDecisions,
             Errors = result.StructuredErrors
                 .Select(e => e.Message)
                 .Where(m => m is not null)
