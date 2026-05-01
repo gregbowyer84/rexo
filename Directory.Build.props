@@ -31,7 +31,7 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
 
-  <PropertyGroup Condition="$([System.String]::Copy('$(MSBuildProjectDirectory)').Contains('\\src\\Cli'))">
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Cli'">
     <IsPackable>true</IsPackable>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>$(CliToolCommandName)</ToolCommandName>
