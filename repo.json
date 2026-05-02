@@ -27,8 +27,8 @@
       "name": "MyService.Client",
       "settings": {
         "project": "src/MyService.Client/MyService.Client.csproj",
-        "feed": "https://api.nuget.org/v3/index.json",
-        "apiKeyVariable": "NUGET_API_KEY"
+        "source": "https://api.nuget.org/v3/index.json",
+        "apiKeyEnv": "NUGET_API_KEY"
       }
     }
   ],
