@@ -99,4 +99,132 @@ public sealed class VersioningTests
         var provider = registry.Resolve("fixed");
         Assert.NotNull(provider);
     }
+
+    [Fact]
+    public void VersionProviderRegistryContainsAutoProvider()
+    {
+        var registry = VersionProviderRegistry.CreateDefault();
+        var provider = registry.Resolve("auto");
+        Assert.IsType<AutoVersionProvider>(provider);
+    }
+
+    [Fact]
+    public void AutoDetectReturnsFixedWhenNoEvidence()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"rexo-auto-empty-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var detected = AutoVersionProvider.DetectProvider(dir);
+            Assert.Equal("fixed", detected);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public void AutoDetectReturnsGitWhenDotGitPresent()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"rexo-auto-git-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(dir, ".git"));
+        try
+        {
+            var detected = AutoVersionProvider.DetectProvider(dir);
+            Assert.Equal("git", detected);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public void AutoDetectReturnsNbgvWhenVersionJsonPresent()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"rexo-auto-nbgv-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, "version.json"), "{}");
+            var detected = AutoVersionProvider.DetectProvider(dir);
+            Assert.Equal("nbgv", detected);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public void AutoDetectReturnsGitVersionWhenGitVersionYmlPresent()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"rexo-auto-gitversion-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, "GitVersion.yml"), "mode: ContinuousDelivery");
+            var detected = AutoVersionProvider.DetectProvider(dir);
+            Assert.Equal("gitversion", detected);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public void AutoDetectReturnsMinVerWhenMinverrcPresent()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"rexo-auto-minver-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, ".minverrc"), "tag-prefix: v");
+            var detected = AutoVersionProvider.DetectProvider(dir);
+            Assert.Equal("minver", detected);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public void AutoDetectPrefersNbgvOverGit()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"rexo-auto-priority-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(dir, ".git"));
+        try
+        {
+            // Both .git and version.json present — nbgv should win
+            File.WriteAllText(Path.Combine(dir, "version.json"), "{}");
+            var detected = AutoVersionProvider.DetectProvider(dir);
+            Assert.Equal("nbgv", detected);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public async Task AutoVersionProviderFallsBackToFixedWithNoEvidence()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"rexo-auto-fallback-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var provider = new AutoVersionProvider();
+            var config = new VersioningConfig(Provider: "auto", Fallback: "5.6.7");
+            var result = await provider.ResolveAsync(config, ExecutionContext.Empty(dir), CancellationToken.None);
+
+            Assert.Equal("5.6.7", result.SemVer);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
 }

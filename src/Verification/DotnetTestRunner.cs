@@ -6,6 +6,7 @@ public sealed record VerificationConfig(
     bool Enabled,
     string[]? Projects,
     string Configuration,
+    string? OutputRoot,
     string? ResultsOutput,
     string? CoverageOutput,
     int? LineCoverageThreshold,
@@ -33,7 +34,10 @@ public static class DotnetTestRunner
             return new VerificationResult(true, 0, 0, 0, 0, null, null, null);
         }
 
-        var outputDir = config.ResultsOutput ?? "artifacts/tests";
+        var outputRoot = string.IsNullOrWhiteSpace(config.OutputRoot)
+            ? "artifacts"
+            : config.OutputRoot;
+        var outputDir = config.ResultsOutput ?? Path.Combine(outputRoot, "tests");
         Directory.CreateDirectory(Path.Combine(repositoryRoot, outputDir));
 
         var projectPattern = config.Projects?.Length > 0

@@ -2,152 +2,182 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
   "title": "Rexo repository configuration schema",
+  "description": "Schema for repo.json, the main Rexo repository runtime configuration file.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "$schema",
     "schemaVersion",
-    "name",
-    "commands",
-    "aliases"
+    "name"
   ],
   "properties": {
     "$schema": {
       "type": "string",
+      "description": "Schema URI/path used by editors and validation. Use the canonical remote URL for shared repositories.",
       "enum": [
         "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
-        "https://raw.githubusercontent.com/agile-north/rexo/release/next/rexo.schema.json",
-        "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
         "rexo.schema.json",
         "./rexo.schema.json",
         "../rexo.schema.json",
-        ".rexo/rexo.schema.json",
-        "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/schemas/1.0/schema.json",
-        "https://raw.githubusercontent.com/agile-north/rexo/release/next/schemas/1.0/schema.json",
-        "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/schema.json",
-        "schema.json",
-        "./schema.json",
-        "../schema.json",
-        ".rexo/schema.json"
+        ".rexo/rexo.schema.json"
       ]
     },
     "schemaVersion": {
       "type": "string",
+      "description": "Schema contract version for this config file. Currently only 1.0 is supported.",
       "const": "1.0"
     },
     "name": {
       "type": "string",
+      "description": "Human-friendly repository/runtime name shown in command output.",
       "minLength": 1
     },
     "description": {
-      "type": "string"
+      "type": "string",
+      "description": "Optional longer description of the repository runtime.
+"
     },
     "version": {
-      "type": "string"
+      "type": "string",
+      "description": "Optional static version string. Most repositories should prefer the versioning section instead."
     },
     "extends": {
       "type": "array",
+      "description": "Reserved for future configuration composition/merge support.",
       "items": {
         "type": "string"
       }
     },
     "commands": {
       "type": "object",
-      "minProperties": 1,
+      "description": "Command map exposed by rx. Keys are command names and values define arguments, options, and steps.",
       "additionalProperties": {
         "$ref": "#/$defs/repoCommand"
       }
     },
     "aliases": {
       "type": "object",
+      "description": "Simple command aliases. Key is alias name, value is the target command string.",
       "additionalProperties": {
         "type": "string"
       }
     },
     "versioning": {
+      "description": "Version provider configuration used by builtin:resolve-version.",
       "$ref": "#/$defs/versioning"
     },
     "artifacts": {
       "type": "array",
+      "description": "Artifact definitions used by builtin:build-artifacts, builtin:tag-artifacts, and builtin:push-artifacts.",
       "items": {
         "$ref": "#/$defs/artifact"
       }
     },
+    "runtime": {
+      "description": "Cross-cutting runtime policy configuration for output and push behavior.",
+      "$ref": "#/$defs/runtime"
+    },
     "tests": {
+      "description": "Test execution configuration used by builtin:test.",
       "$ref": "#/$defs/tests"
     },
     "analysis": {
+      "description": "Static analysis configuration used by builtin:analyze.",
       "$ref": "#/$defs/analysis"
-    },
-    "pushRulesJson": {
-      "type": "string"
     }
   },
   "$defs": {
     "repoCommand": {
       "type": "object",
+      "description": "Reusable command definition for both repository and policy commands.",
       "additionalProperties": false,
       "required": [
         "steps"
       ],
       "properties": {
         "description": {
-          "type": "string"
+          "type": "string",
+          "description": "Human-readable command summary used in help/list output."
         },
         "args": {
           "type": "object",
+          "description": "Positional argument declarations keyed by argument name.",
           "additionalProperties": {
             "$ref": "#/$defs/argConfig"
           }
         },
         "options": {
           "type": "object",
+          "description": "Named option declarations keyed by option name.",
           "additionalProperties": {
             "$ref": "#/$defs/optionConfig"
           }
         },
         "steps": {
           "type": "array",
+          "description": "Ordered execution steps that implement the command.",
           "items": {
             "$ref": "#/$defs/step"
           }
         },
         "maxParallel": {
           "type": "integer",
+          "description": "Maximum concurrent step execution when parallel groups are used.",
           "minimum": 1
         }
       }
     },
     "argConfig": {
       "type": "object",
+      "description": "Configuration for a positional command argument.",
       "additionalProperties": false,
       "required": [
         "required"
       ],
       "properties": {
         "required": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Whether this positional argument must be supplied by the caller."
         },
         "description": {
-          "type": "string"
+          "type": "string",
+          "description": "Help text shown for the argument."
         }
       }
     },
     "optionConfig": {
       "type": "object",
+      "description": "Configuration for a named command option.",
       "additionalProperties": false,
       "required": [
         "type"
       ],
       "properties": {
         "type": {
-          "type": "string"
+          "type": "string",
+          "description": "Option value type identifier.",
+          "enum": [
+            "string",
+            "bool",
+            "boolean",
+            "int",
+            "integer",
+            "number"
+          ],
+          "default": "string"
         },
         "default": {
-          "type": "string"
+          "type": [
+            "string",
+            "boolean",
+            "number",
+            "integer"
+          ],
+          "description": "Default value used when the caller does not provide this option."
         },
         "allowed": {
           "type": "array",
+          "description": "Optional allowed values list enforced at runtime.",
           "items": {
             "type": "string"
           }
@@ -156,43 +186,75 @@
     },
     "step": {
       "type": "object",
+      "description": "Single executable unit in a command pipeline. Exactly one of run, uses, or command must be set.",
       "additionalProperties": false,
       "properties": {
         "id": {
-          "type": "string"
+          "type": "string",
+          "description": "Stable step identifier for logging, dependency wiring, and output references."
         },
         "command": {
-          "type": "string"
+          "type": "string",
+          "description": "Invokes another configured command by name."
         },
         "uses": {
-          "type": "string"
+          "type": "string",
+          "description": "Invokes a built-in primitive (for example builtin:resolve-version)."
         },
         "run": {
-          "type": "string"
+          "type": "string",
+          "description": "Shell command text to execute.",
+          "examples": [
+            "dotnet test -c Release --no-build",
+            "docker build -f Dockerfile -t my-app:local ."
+          ]
         },
         "when": {
-          "type": "string"
+          "type": "string",
+          "description": "Conditional expression that controls whether the step runs."
+        },
+        "with": {
+          "type": "object",
+          "description": "String key/value inputs passed to the selected built-in or command.",
+          "examples": [
+            {
+              "confirm": "{{options.push}}"
+            },
+            {
+              "push": "{{options.push}}",
+              "stage": "{{args.stage | default(publish)}}"
+            }
+          ],
+          "additionalProperties": {
+            "type": "string"
+          }
         },
         "description": {
-          "type": "string"
+          "type": "string",
+          "description": "Optional step summary shown in plan/log output."
         },
         "continueOnError": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Continue executing subsequent steps when this step fails."
         },
         "parallel": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Marks the step as eligible for parallel scheduling with other independent steps."
         },
         "dependsOn": {
           "type": "array",
+          "description": "List of step ids that must complete before this step executes.",
           "items": {
             "type": "string"
           }
         },
         "outputPattern": {
-          "type": "string"
+          "type": "string",
+          "description": "Regex pattern used by compatible steps to capture structured output values."
         },
         "outputFile": {
-          "type": "string"
+          "type": "string",
+          "description": "Path to an output file consumed by compatible steps for captured outputs."
         }
       },
       "anyOf": [
@@ -209,13 +271,27 @@
       ],
       "properties": {
         "provider": {
-          "type": "string"
+          "type": "string",
+          "description": "Version provider to use. 'auto' (default) detects the right provider from config file evidence: version.json/nbgv.json → nbgv; GitVersion.yml → gitversion; .minverrc → minver; .git present → git; otherwise → fixed.",
+          "enum": [
+            "auto",
+            "fixed",
+            "env",
+            "git",
+            "gitversion",
+            "minver",
+            "nbgv"
+          ],
+          "default": "auto"
         },
         "fallback": {
-          "type": "string"
+          "type": "string",
+          "description": "Version string used when the provider cannot resolve a version (e.g. no tags yet).",
+          "default": "0.1.0-local"
         },
         "settings": {
           "type": "object",
+          "description": "Provider-specific settings. Common keys: variable (env), tagPrefix/minimumMajorMinor (minver). Docker fallback keys (all providers except fixed/env/git): useDocker (default true — set false to disable), dockerImage (override the default Docker image).",
           "additionalProperties": {
             "$ref": "#/$defs/settingValue"
           }
@@ -223,6 +299,7 @@
       }
     },
     "artifact": {
+      "description": "Artifact declaration. Choose docker, nuget, or a custom provider type.",
       "oneOf": [
         {
           "$ref": "#/$defs/dockerArtifact"
@@ -237,6 +314,7 @@
     },
     "dockerArtifact": {
       "type": "object",
+      "description": "Docker image artifact configuration.",
       "additionalProperties": false,
       "required": [
         "type",
@@ -244,18 +322,22 @@
       ],
       "properties": {
         "type": {
-          "const": "docker"
+          "const": "docker",
+          "description": "Selects the docker artifact provider."
         },
         "name": {
-          "type": "string"
+          "type": "string",
+          "description": "Logical artifact name used in logs and manifests."
         },
         "settings": {
+          "description": "Provider-specific docker build, tag, and push settings.",
           "$ref": "#/$defs/dockerArtifactSettings"
         }
       }
     },
     "nugetArtifact": {
       "type": "object",
+      "description": "NuGet package artifact configuration.",
       "additionalProperties": false,
       "required": [
         "type",
@@ -263,18 +345,22 @@
       ],
       "properties": {
         "type": {
-          "const": "nuget"
+          "const": "nuget",
+          "description": "Selects the nuget artifact provider."
         },
         "name": {
-          "type": "string"
+          "type": "string",
+          "description": "Logical artifact name used in logs and manifests."
         },
         "settings": {
+          "description": "Provider-specific nuget pack/push settings.",
           "$ref": "#/$defs/nugetArtifactSettings"
         }
       }
     },
     "genericArtifact": {
       "type": "object",
+      "description": "Fallback artifact shape for custom providers not explicitly modeled in this schema.",
       "additionalProperties": false,
       "required": [
         "type",
@@ -283,6 +369,7 @@
       "properties": {
         "type": {
           "type": "string",
+          "description": "Custom provider type key.",
           "not": {
             "enum": [
               "docker",
@@ -291,10 +378,12 @@
           }
         },
         "name": {
-          "type": "string"
+          "type": "string",
+          "description": "Logical artifact name used in logs and manifests."
         },
         "settings": {
           "type": "object",
+          "description": "Provider-specific arbitrary settings for custom artifact providers.",
           "additionalProperties": {
             "$ref": "#/$defs/artifactSettingValue"
           }
@@ -302,6 +391,7 @@
       }
     },
     "stringOrStringArray": {
+      "description": "Convenience type that accepts either a single string value or a string array.",
       "oneOf": [
         {
           "type": "string"
@@ -314,7 +404,37 @@
         }
       ]
     },
+    "tagKind": {
+      "type": "string",
+      "description": "Supported Docker tag strategy kind.",
+      "enum": [
+        "full",
+        "semver",
+        "majorMinor",
+        "majorminor",
+        "major-minor",
+        "major",
+        "branch",
+        "sha",
+        "latest-on-main"
+      ]
+    },
+    "tagKindOrTagKindArray": {
+      "description": "One Docker tag strategy kind or a list of tag strategy kinds.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/tagKind"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/tagKind"
+          }
+        }
+      ]
+    },
     "buildArgValue": {
+      "description": "Supported primitive value for a single Docker build argument.",
       "oneOf": [
         {
           "type": "string"
@@ -331,6 +451,7 @@
       ]
     },
     "buildArgsValue": {
+      "description": "Accepted forms for Docker build arguments: inline string, key/value object, or list.",
       "oneOf": [
         {
           "type": "string"
@@ -351,13 +472,16 @@
     },
     "secretSpec": {
       "type": "object",
+      "description": "Docker build secret source. Provide either env or file.",
       "additionalProperties": false,
       "properties": {
         "env": {
-          "type": "string"
+          "type": "string",
+          "description": "Environment variable name that contains the secret value."
         },
         "file": {
-          "type": "string"
+          "type": "string",
+          "description": "Path to a file containing the secret value."
         }
       },
       "oneOf": [
@@ -375,6 +499,7 @@
     },
     "aliasesRule": {
       "type": "object",
+      "description": "Conditional docker alias tag rule applied to the current branch name.",
       "additionalProperties": false,
       "required": [
         "match",
@@ -382,13 +507,16 @@
       ],
       "properties": {
         "match": {
-          "type": "string"
+          "type": "string",
+          "description": "Branch match expression (wildcard or regex:... syntax)."
         },
         "template": {
-          "type": "string"
+          "type": "string",
+          "description": "Alias template supporting tokens such as $BRANCH and capture groups like $1."
         },
         "sanitize": {
           "type": "string",
+          "description": "Optional alias sanitation mode.",
           "enum": [
             "sanitized"
           ]
@@ -397,16 +525,20 @@
     },
     "dockerStage": {
       "type": "object",
+      "description": "Named multi-stage docker build configuration entry.",
       "additionalProperties": false,
       "properties": {
         "target": {
-          "type": "string"
+          "type": "string",
+          "description": "Dockerfile stage target passed via --target."
         },
         "output": {
+          "description": "Build output destination(s) for this stage.",
           "$ref": "#/$defs/stringOrStringArray"
         },
         "runner": {
           "type": "string",
+          "description": "Docker runner to use for this stage (build, buildx, or auto-detect).",
           "enum": [
             "build",
             "buildx",
@@ -414,83 +546,109 @@
           ]
         },
         "platform": {
-          "type": "string"
+          "type": "string",
+          "description": "Target platform for the stage (for example linux/amd64)."
         }
       }
     },
     "dockerArtifactSettings": {
       "type": "object",
+      "description": "Detailed docker provider settings covering image naming, build, tagging, aliases, and push behavior.",
       "additionalProperties": false,
       "properties": {
         "image": {
-          "type": "string"
+          "type": "string",
+          "description": "Final docker image repository name. If omitted, the artifact name is used."
         },
         "dockerfile": {
-          "type": "string"
+          "type": "string",
+          "description": "Path to the Dockerfile."
         },
         "file": {
-          "type": "string"
+          "type": "string",
+          "description": "Alias of dockerfile for compatibility."
         },
         "context": {
-          "type": "string"
+          "type": "string",
+          "description": "Docker build context path."
         },
         "runner": {
           "type": "string",
+          "description": "Docker command flavor to use for build operations.",
           "enum": [
             "build",
             "buildx",
             "auto"
-          ]
+          ],
+          "default": "build"
         },
         "platform": {
-          "type": "string"
+          "type": "string",
+          "description": "Build platform passed to docker via --platform."
         },
         "buildTarget": {
-          "type": "string"
+          "type": "string",
+          "description": "Dockerfile target stage name.",
+          "examples": [
+            "build",
+            "publish"
+          ]
         },
         "buildOutput": {
+          "description": "Build output option(s) passed to docker --output.",
           "$ref": "#/$defs/stringOrStringArray"
         },
         "buildArgs": {
+          "description": "Build arguments for docker --build-arg.",
           "$ref": "#/$defs/buildArgsValue"
         },
         "secrets": {
           "type": "object",
+          "description": "Named docker build secrets.",
           "additionalProperties": {
             "$ref": "#/$defs/secretSpec"
           }
         },
         "registry": {
-          "type": "string"
+          "type": "string",
+          "description": "Legacy shorthand for target registry host. Prefer target.registry."
         },
         "repository": {
-          "type": "string"
+          "type": "string",
+          "description": "Legacy shorthand for target repository path. Prefer target.repository."
         },
         "target": {
           "type": "object",
+          "description": "Target registry/repository destination used to compose the image name.",
           "additionalProperties": false,
           "properties": {
             "registry": {
-              "type": "string"
+              "type": "string",
+              "description": "Registry host, for example ghcr.io or myregistry.example.com:5000."
             },
             "repository": {
-              "type": "string"
+              "type": "string",
+              "description": "Repository namespace/name within the registry."
             }
           }
         },
         "loginRegistry": {
-          "type": "string"
+          "type": "string",
+          "description": "Registry host used for docker login when different from target registry."
         },
         "login": {
           "type": "object",
+          "description": "Login override settings for docker authentication.",
           "additionalProperties": false,
           "properties": {
             "registry": {
-              "type": "string"
+              "type": "string",
+              "description": "Registry host used for login."
             }
           }
         },
         "cleanupLocal": {
+          "description": "Legacy cleanup switch. true/false or auto (auto cleans up in CI). Prefer cleanup.local.",
           "oneOf": [
             {
               "type": "boolean"
@@ -507,9 +665,11 @@
         },
         "cleanup": {
           "type": "object",
+          "description": "Post-build local cleanup settings.",
           "additionalProperties": false,
           "properties": {
             "local": {
+              "description": "Controls local image cleanup after build: true, false, or auto.",
               "oneOf": [
                 {
                   "type": "boolean"
@@ -527,129 +687,180 @@
           }
         },
         "pushEnabled": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Legacy push enable flag. Prefer push.enabled.",
+          "default": true
         },
         "pushBranches": {
+          "description": "Legacy push branch allow-list. Prefer push.branches.",
           "$ref": "#/$defs/stringOrStringArray"
         },
         "denyNonPublicPush": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Legacy switch to prevent pushes from non-public build classifications. Prefer push.denyNonPublicPush.",
+          "default": false
         },
         "push": {
           "type": "object",
+          "description": "Push policy for this docker artifact.",
+          "examples": [
+            {
+              "enabled": true,
+              "branches": ["main", "release/*"],
+              "denyNonPublicPush": true
+            }
+          ],
           "additionalProperties": false,
           "properties": {
             "enabled": {
-              "type": "boolean"
+              "type": "boolean",
+              "description": "Enables docker push for this artifact.",
+              "default": true
             },
             "branches": {
+              "description": "Allowed branch patterns for pushing this artifact.",
+              "examples": [
+                ["main", "release/*"],
+                "main,release/*"
+              ],
               "$ref": "#/$defs/stringOrStringArray"
             },
             "branchesShortcut": {
-              "type": "string"
+              "type": "string",
+              "description": "Shortcut CSV/string form for branches; merged with push.branches."
             },
             "denyNonPublicPush": {
-              "type": "boolean"
+              "type": "boolean",
+              "description": "Blocks push when build classification resolves to non-public.",
+              "default": false
             }
           }
         },
         "latest": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Legacy switch to emit latest tag. Prefer tags.latest via tag policy settings.",
+          "default": false
         },
         "tags": {
-          "oneOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          ]
+          "description": "Tag strategy names (for example full, majorMinor, major, branch, sha) or a custom list.",
+          "examples": [
+            ["full", "majorMinor", "major"],
+            ["full", "branch", "sha"],
+            "full"
+          ],
+          "$ref": "#/$defs/tagKindOrTagKindArray"
         },
         "publicBuild": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Legacy explicit build classification as public/non-public. Prefer build.public."
         },
         "build": {
           "type": "object",
+          "description": "Build classification controls.",
           "additionalProperties": false,
           "properties": {
             "public": {
-              "type": "boolean"
+              "type": "boolean",
+              "description": "When set, forces public/non-public build classification."
             }
           }
         },
         "publicBranches": {
+          "description": "Legacy branch patterns classified as public builds. Prefer classification.publicBranches.",
           "$ref": "#/$defs/stringOrStringArray"
         },
         "publicBranchesShortcut": {
-          "type": "string"
+          "type": "string",
+          "description": "Legacy shortcut string for publicBranches."
         },
         "nonPublicBranches": {
+          "description": "Legacy branch patterns classified as non-public builds. Prefer classification.nonPublicBranches.",
           "$ref": "#/$defs/stringOrStringArray"
         },
         "nonPublicBranchesShortcut": {
-          "type": "string"
+          "type": "string",
+          "description": "Legacy shortcut string for nonPublicBranches."
         },
         "classification": {
           "type": "object",
+          "description": "Branch-based build classification rules.",
           "additionalProperties": false,
           "properties": {
             "publicBranches": {
+              "description": "Branch patterns treated as public builds.",
               "$ref": "#/$defs/stringOrStringArray"
             },
             "publicBranchesShortcut": {
-              "type": "string"
+              "type": "string",
+              "description": "Shortcut string for publicBranches.",
+              "examples": [
+                "main,release/*"
+              ]
             },
             "nonPublicBranches": {
+              "description": "Branch patterns treated as non-public builds.",
               "$ref": "#/$defs/stringOrStringArray"
             },
             "nonPublicBranchesShortcut": {
-              "type": "string"
+              "type": "string",
+              "description": "Shortcut string for nonPublicBranches."
             }
           }
         },
         "tagPolicy": {
           "type": "object",
+          "description": "Default tag kinds applied by build classification when explicit tags are not set.",
           "additionalProperties": false,
           "properties": {
             "public": {
-              "$ref": "#/$defs/stringOrStringArray"
+              "description": "Tag kinds for public builds.",
+              "$ref": "#/$defs/tagKindOrTagKindArray"
             },
             "nonPublic": {
-              "$ref": "#/$defs/stringOrStringArray"
+              "description": "Tag kinds for non-public builds.",
+              "$ref": "#/$defs/tagKindOrTagKindArray"
             }
           }
         },
         "nonPublicMode": {
-          "type": "string"
+          "type": "string",
+          "description": "Optional mode override for non-public tagging behavior.",
+          "enum": [
+            "full-only"
+          ]
         },
         "aliases": {
           "type": "object",
+          "description": "Additional human-friendly alias tags generated from branch names.",
           "additionalProperties": false,
           "properties": {
             "branch": {
-              "type": "boolean"
+              "type": "boolean",
+              "description": "Emit alias from raw branch name."
             },
             "sanitizedBranch": {
-              "type": "boolean"
+              "type": "boolean",
+              "description": "Emit alias from slug/sanitized branch name."
             },
             "sanitize": {
-              "type": "boolean"
+              "type": "boolean",
+              "description": "Sanitize alias output strings by default."
             },
             "prefix": {
-              "type": "string"
+              "type": "string",
+              "description": "Prefix added to generated aliases."
             },
             "suffix": {
-              "type": "string"
+              "type": "string",
+              "description": "Suffix added to generated aliases."
             },
             "nonPublicPrefix": {
-              "type": "string"
+              "type": "string",
+              "description": "Prefix used when build classification is non-public."
             },
             "rules": {
               "type": "array",
+              "description": "Ordered alias mapping rules; first matching rule is applied.",
               "items": {
                 "$ref": "#/$defs/aliasesRule"
               }
@@ -658,34 +869,43 @@
         },
         "stages": {
           "type": "object",
+          "description": "Named build stage definitions for multi-stage Dockerfile workflows.",
           "additionalProperties": {
             "$ref": "#/$defs/dockerStage"
           }
         },
         "stageFallback": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "When true, run a final full build after configured stages to produce final tags.",
+          "default": true
         }
       }
     },
     "nugetArtifactSettings": {
       "type": "object",
+      "description": "Settings for dotnet pack and dotnet nuget push operations.",
       "additionalProperties": false,
       "properties": {
         "project": {
-          "type": "string"
+          "type": "string",
+          "description": "Path to the .csproj/.fsproj to pack."
         },
         "output": {
-          "type": "string"
+          "type": "string",
+          "description": "Package output directory for generated .nupkg files."
         },
         "source": {
-          "type": "string"
+          "type": "string",
+          "description": "NuGet source/feed URL or name used for push."
         },
         "apiKeyEnv": {
-          "type": "string"
+          "type": "string",
+          "description": "Environment variable name containing the NuGet API key."
         }
       }
     },
     "artifactSettingValue": {
+      "description": "Recursive value type for arbitrary custom artifact settings.",
       "oneOf": [
         {
           "type": "string"
@@ -714,6 +934,7 @@
       ]
     },
     "settingValue": {
+      "description": "Allowed primitive/array value types for generic settings maps.",
       "oneOf": [
         { "type": "string" },
         { "type": "number" },
@@ -730,28 +951,118 @@
       "additionalProperties": false,
       "properties": {
         "enabled": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Enable or disable test execution for builtin:test."
         },
         "projects": {
           "type": "array",
+          "description": "Optional project globs passed to dotnet test; when omitted, dotnet test runs from the repository root.",
           "items": {
             "type": "string"
           }
         },
         "configuration": {
-          "type": "string"
+          "type": "string",
+          "description": "dotnet test build configuration.",
+          "default": "Release"
         },
         "resultsOutput": {
-          "type": "string"
+          "type": "string",
+          "description": "Results directory for TRX output. When omitted, defaults to <runtime.output.root>/tests."
         },
         "coverageOutput": {
-          "type": "string"
+          "type": "string",
+          "description": "Directory for XPlat Code Coverage output. Coverage collection is enabled when this is set."
         },
         "collectCoverage": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Reserved compatibility flag. Coverage behavior is driven by coverageOutput."
         },
         "coverageThreshold": {
-          "type": "integer"
+          "type": "integer",
+          "description": "Minimum required line coverage percent (0-100)."
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "emitRuntimeFiles": {
+          "type": "boolean",
+          "description": "Controls whether runtime-generated files (for example artifact manifest files) are written.",
+          "default": true
+        },
+        "root": {
+          "type": "string",
+          "description": "Root folder for runtime outputs.",
+          "default": "artifacts"
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "examples": [
+        {
+          "output": {
+            "emitRuntimeFiles": true,
+            "root": "artifacts"
+          },
+          "push": {
+            "enabled": true,
+            "branches": ["main", "release/*"]
+          }
+        }
+      ],
+      "properties": {
+        "output": {
+          "description": "Runtime output controls applied across tests, analysis, and artifact runtime files.",
+          "$ref": "#/$defs/output"
+        },
+        "push": {
+          "description": "Global push policy merged with per-artifact push overrides.",
+          "$ref": "#/$defs/pushRules"
+        }
+      }
+    },
+    "pushRules": {
+      "type": "object",
+      "additionalProperties": false,
+      "examples": [
+        {
+          "enabled": true,
+          "noPushInPullRequest": true,
+          "requireCleanWorkingTree": true,
+          "branches": ["main", "release/*"]
+        }
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enables or disables push globally.",
+          "default": true
+        },
+        "noPushInPullRequest": {
+          "type": "boolean",
+          "description": "Rejects push when CI context indicates a pull request build.",
+          "default": false
+        },
+        "requireCleanWorkingTree": {
+          "type": "boolean",
+          "description": "Rejects push when the git working tree has uncommitted changes.",
+          "default": false
+        },
+        "branches": {
+          "type": "array",
+          "description": "Allowed branch patterns for push. Empty means no branch restriction.",
+          "examples": [
+            ["main", "release/*", "hotfix/*"]
+          ],
+          "default": [],
+          "items": {
+            "type": "string"
+          }
         }
       }
     },
@@ -760,19 +1071,25 @@
       "additionalProperties": false,
       "properties": {
         "enabled": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Enable or disable analysis execution for builtin:analyze."
         },
         "failOnIssues": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Fail the command when analysis tools report issues.",
+          "default": true
         },
         "tools": {
           "type": "array",
+          "description": "Optional additional analysis tool commands to execute after dotnet format.",
+          "default": [],
           "items": {
             "type": "string"
           }
         },
         "configuration": {
-          "type": "string"
+          "type": "string",
+          "description": "Analysis output/configuration path. If omitted, SARIF defaults to <runtime.output.root>/analysis.sarif.json."
         }
       }
     }

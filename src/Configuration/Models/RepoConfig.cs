@@ -5,8 +5,8 @@ using System.Text.Json.Serialization;
 
 public sealed record RepoConfig(
     string Name,
-    Dictionary<string, RepoCommandConfig> Commands,
-    Dictionary<string, string> Aliases)
+    Dictionary<string, RepoCommandConfig>? Commands,
+    Dictionary<string, string>? Aliases)
 {
     [JsonPropertyName("$schema")]
     public string? Schema { get; init; }
@@ -16,9 +16,9 @@ public sealed record RepoConfig(
     public List<string>? Extends { get; init; }
     public RepoVersioningConfig? Versioning { get; init; }
     public List<RepoArtifactConfig>? Artifacts { get; init; }
+    public RepoRuntimeConfig? Runtime { get; init; }
     public RepoTestsConfig? Tests { get; init; }
     public RepoAnalysisConfig? Analysis { get; init; }
-    public string? PushRulesJson { get; init; }
 
     /// <summary>
     /// Controls how list fields are merged when combining configs via <c>extends</c>.
@@ -48,7 +48,7 @@ public sealed record RepoArgConfig(
 
 public sealed record RepoOptionConfig(
     string Type,
-    string? Default = null,
+    JsonElement? Default = null,
     string[]? Allowed = null);
 
 public sealed record RepoStepConfig(
@@ -57,6 +57,7 @@ public sealed record RepoStepConfig(
     string? Uses = null,
     string? Run = null,
     string? When = null,
+    Dictionary<string, string>? With = null,
     string? Description = null,
     bool? ContinueOnError = null,
     bool? Parallel = null,
@@ -73,6 +74,20 @@ public sealed record RepoArtifactConfig(
     string Type,
     string Name,
     Dictionary<string, JsonElement>? Settings = null);
+
+public sealed record RepoOutputConfig(
+    bool? EmitRuntimeFiles = null,
+    string? Root = null);
+
+public sealed record RepoRuntimeConfig(
+    RepoOutputConfig? Output = null,
+    RepoPushConfig? Push = null);
+
+public sealed record RepoPushConfig(
+    bool? Enabled = null,
+    bool? NoPushInPullRequest = null,
+    bool? RequireCleanWorkingTree = null,
+    string[]? Branches = null);
 
 public sealed record RepoTestsConfig(
     bool Enabled,

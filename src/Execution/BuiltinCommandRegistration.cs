@@ -13,8 +13,8 @@ public static class BuiltinCommandRegistration
 {
     private static readonly JsonSerializerOptions IndentedJsonOptions = new() { WriteIndented = true };
     private static readonly HttpClient HttpClient = new();
-    private static readonly string[] InitTemplateChoices = ["auto", "dotnet", "node", "generic"];
-    private static readonly string[] InitSchemaSourceChoices = ["local", "remote"];
+    private static readonly string[] InitTemplateChoices = ["dotnet", "node", "generic"];
+    private static readonly string[] InitSchemaSourceChoices = ["remote", "local"];
     private static readonly string[] InitYesNoChoices = ["yes", "no"];
     private const string DefaultInstructionsPath = ".github/instructions/rexo.instructions.md";
     private const string InstructionsTemplateUrl = "https://raw.githubusercontent.com/agile-north/rexo/release/next/docs/rexo.instructions.md";
@@ -97,15 +97,12 @@ public static class BuiltinCommandRegistration
         if (configPath is not null)
         {
             var configDirectory = Path.GetDirectoryName(configPath) ?? invocation.WorkingDirectory;
-            var schemaPathCandidates = new[]
-            {
+            string[] schemaPathCandidates =
+            [
                 Path.Combine(configDirectory, RepoConfigurationLoader.SupportedRexoSchemaPath),
                 Path.Combine(configDirectory, "..", RepoConfigurationLoader.SupportedRexoSchemaPath),
                 Path.Combine(configDirectory, ".rexo", RepoConfigurationLoader.SupportedRexoSchemaPath),
-                Path.Combine(configDirectory, RepoConfigurationLoader.LegacySchemaPath),
-                Path.Combine(configDirectory, "..", RepoConfigurationLoader.LegacySchemaPath),
-                Path.Combine(configDirectory, ".rexo", RepoConfigurationLoader.LegacySchemaPath),
-            };
+            ];
             var schemaPath = schemaPathCandidates.FirstOrDefault(File.Exists);
 
             checks.Add(schemaPath is not null
@@ -144,22 +141,22 @@ public static class BuiltinCommandRegistration
         lines.Add("  help            Show help");
         lines.Add("  ui              Open the interactive UI");
 
-        if (config is not null && config.Commands.Count > 0)
+        if (config is not null && config.Commands?.Count > 0)
         {
             lines.Add(string.Empty);
             lines.Add("Config-defined commands:");
-            foreach (var (name, cmd) in config.Commands)
+            foreach (var (name, cmd) in config.Commands!)
             {
                 var desc = cmd.Description ?? string.Empty;
                 lines.Add($"  {name,-20} {desc}");
             }
         }
 
-        if (config is not null && config.Aliases.Count > 0)
+        if (config is not null && config.Aliases?.Count > 0)
         {
             lines.Add(string.Empty);
             lines.Add("Aliases:");
-            foreach (var (alias, target) in config.Aliases)
+            foreach (var (alias, target) in config.Aliases!)
             {
                 lines.Add($"  {alias,-20} -> {target}");
             }
@@ -184,7 +181,7 @@ public static class BuiltinCommandRegistration
         }
 
         // Check config commands
-        if (config?.Commands.TryGetValue(commandName, out var cmd) == true && cmd is not null)
+        if (config?.Commands?.TryGetValue(commandName, out var cmd) == true && cmd is not null)
         {
             var lines = new List<string>();
             lines.Add($"Command: {commandName}");
@@ -209,7 +206,9 @@ public static class BuiltinCommandRegistration
                 lines.Add("  Options:");
                 foreach (var (optName, optCfg) in cmd.Options)
                 {
-                    var def = optCfg.Default is not null ? $" [default: {optCfg.Default}]" : string.Empty;
+                    var def = optCfg.Default is not null
+                        ? $" [default: {FormatOptionDefault(optCfg.Default.Value)}]"
+                        : string.Empty;
                     var allowed = optCfg.Allowed is { Length: > 0 }
                         ? $" [allowed: {string.Join(", ", optCfg.Allowed)}]"
                         : string.Empty;
@@ -258,20 +257,25 @@ public static class BuiltinCommandRegistration
             }
 
             // Push eligibility information
-            if (config.PushRulesJson is not null)
+            if (config.Runtime?.Push is not null)
             {
                 lines.Add("  Push rules:");
-                try
+                var push = config.Runtime.Push;
+                if (push.Enabled is not null)
                 {
-                    using var doc = System.Text.Json.JsonDocument.Parse(config.PushRulesJson);
-                    foreach (var prop in doc.RootElement.EnumerateObject())
-                    {
-                        lines.Add($"    {prop.Name}: {prop.Value}");
-                    }
+                    lines.Add($"    enabled: {push.Enabled.Value.ToString().ToLowerInvariant()}");
                 }
-                catch (System.Text.Json.JsonException)
+                if (push.NoPushInPullRequest is not null)
                 {
-                    lines.Add("    (unable to parse push rules)");
+                    lines.Add($"    noPushInPullRequest: {push.NoPushInPullRequest.Value.ToString().ToLowerInvariant()}");
+                }
+                if (push.RequireCleanWorkingTree is not null)
+                {
+                    lines.Add($"    requireCleanWorkingTree: {push.RequireCleanWorkingTree.Value.ToString().ToLowerInvariant()}");
+                }
+                if (push.Branches is { Length: > 0 })
+                {
+                    lines.Add($"    branches: [{string.Join(", ", push.Branches)}]");
                 }
             }
 
@@ -288,6 +292,13 @@ public static class BuiltinCommandRegistration
 
         return CommandResult.Fail("explain", 8, $"Command '{commandName}' not found.");
     }
+
+    private static string FormatOptionDefault(System.Text.Json.JsonElement value) =>
+        value.ValueKind switch
+        {
+            System.Text.Json.JsonValueKind.String => value.GetString() ?? string.Empty,
+            _ => value.ToString(),
+        };
 
     private static CommandResult RunConfigResolved(RepoConfig? config)
     {
@@ -368,7 +379,7 @@ public static class BuiltinCommandRegistration
         {
             return CommandResult.Ok("explain version",
                 "No versioning configuration found in rexo configuration.\n" +
-                "Available providers: fixed, env, git, gitversion, minver, nbgv");
+                "Available providers: auto, fixed, env, git, gitversion, minver, nbgv");
         }
 
         var v = config.Versioning;
@@ -389,7 +400,7 @@ public static class BuiltinCommandRegistration
         }
 
         lines.Add(string.Empty);
-        lines.Add("Available providers: fixed, env, git, gitversion, minver, nbgv");
+        lines.Add("Available providers: auto, fixed, env, git, gitversion, minver, nbgv");
 
         return CommandResult.Ok("explain version", string.Join("\n", lines));
     }
@@ -442,7 +453,7 @@ public static class BuiltinCommandRegistration
         var detectedTemplate = DetectTemplate(workingDir);
         var requestedLocation = ReadOption(options, "location");
         var template = ReadOption(options, "template") ?? detectedTemplate;
-        var schemaSource = ReadOption(options, "schema-source") ?? "local";
+        var schemaSource = ReadOption(options, "schema-source") ?? "remote";
         var withPolicy = IsTrue(options, "with-policy");
         var policyTemplate = ReadOption(options, "policy-template");
         var instructionsPathOption = ReadOption(options, "instructions-path");
@@ -466,22 +477,17 @@ public static class BuiltinCommandRegistration
             template = PromptChoice(
                 "Choose starter template:",
                 InitTemplateChoices,
-                "auto");
+                detectedTemplate);
 
             schemaSource = PromptChoice(
                 "Schema source?",
                 InitSchemaSourceChoices,
-                "local");
-
-            if (template.Equals("auto", StringComparison.OrdinalIgnoreCase))
-            {
-                template = detectedTemplate;
-            }
+                "remote");
 
             var createPolicyAnswer = PromptChoice(
-                "Create a starter policy file?",
+                "Create a starter policy file? (embedded policy is used automatically if none exists)",
                 InitYesNoChoices,
-                "yes");
+                "no");
             withPolicy = createPolicyAnswer.Equals("yes", StringComparison.OrdinalIgnoreCase);
 
             var createInstructionsAnswer = PromptChoice(
@@ -752,42 +758,30 @@ public static class BuiltinCommandRegistration
         {
             "dotnet" => new Dictionary<string, object>
             {
-                ["build"] = new
+                ["compile"] = new
                 {
-                    description = "Build the solution",
-                    options = new Dictionary<string, object>(),
+                    description = "Restore and compile the solution",
                     steps = new object[]
                     {
                         new { id = "restore", run = "dotnet restore" },
-                        new { id = "build", run = "dotnet build -c Release --no-restore" },
-                    },
-                },
-                ["test"] = new
-                {
-                    description = "Run tests",
-                    options = new Dictionary<string, object>(),
-                    steps = new object[]
-                    {
-                        new { run = "dotnet test -c Release --no-build" },
+                        new { id = "compile", run = "dotnet build -c Release --no-restore" },
                     },
                 },
             },
             "node" => new Dictionary<string, object>
             {
-                ["build"] = new
+                ["compile"] = new
                 {
-                    description = "Install and build",
-                    options = new Dictionary<string, object>(),
+                    description = "Install and compile",
                     steps = new object[]
                     {
                         new { run = "npm ci" },
                         new { run = "npm run build" },
                     },
                 },
-                ["test"] = new
+                ["run-tests"] = new
                 {
                     description = "Run tests",
-                    options = new Dictionary<string, object>(),
                     steps = new object[]
                     {
                         new { run = "npm test" },
@@ -796,10 +790,9 @@ public static class BuiltinCommandRegistration
             },
             _ => new Dictionary<string, object>
             {
-                ["build"] = new
+                ["compile"] = new
                 {
                     description = "Starter build command",
-                    options = new Dictionary<string, object>(),
                     steps = new object[]
                     {
                         new { run = "echo TODO: replace with real build command" },
@@ -819,9 +812,15 @@ public static class BuiltinCommandRegistration
             ["schemaVersion"] = "1.0",
             ["name"] = string.IsNullOrWhiteSpace(repoName) ? "my-repo" : repoName,
             ["description"] = "Generated by rx init",
+            ["extends"] = new[] { "embedded:standard" },
+            ["versioning"] = new { provider = "auto", fallback = "0.1.0" },
             ["commands"] = commands,
-            ["aliases"] = new Dictionary<string, string>(),
         };
+
+        if (template == "dotnet")
+        {
+            doc["tests"] = new { enabled = true, configuration = "Release" };
+        }
 
         return JsonSerializer.Serialize(doc, IndentedJsonOptions);
     }

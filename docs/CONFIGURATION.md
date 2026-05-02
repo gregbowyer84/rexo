@@ -1,5 +1,11 @@
 # Configuration Reference
 
+For embedded templates, built-in lifecycle defaults, options, and usage examples,
+see [Embedded Items Reference](EMBEDDED.md).
+
+For runtime builtin contracts (inputs, calls, outputs, exit behavior),
+see [Builtins Reference](BUILTINS.md).
+
 Default repository configuration file: **`rexo.json`**
 
 Supported config locations (first match wins):
@@ -56,22 +62,99 @@ When `rx init --schema-source local --with-policy` is used, both schema files ar
   "aliases": { ... },
   "versioning": { ... },
   "artifacts": [ ... ],
+  "runtime": { ... },
   "tests": { ... },
-  "analysis": { ... },
-  "pushRulesJson": "{ ... }"
+  "analysis": { ... }
 }
 ```
+
+## Fully Emitted Effective Defaults
+
+When optional fields are omitted, runtime behavior applies defaults. The example below
+shows the effective values used by built-ins (not a requirement to persist every field in your file).
+
+```jsonc
+{
+  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+  "schemaVersion": "1.0",
+  "name": "my-repo",
+
+  "commands": {},
+  "aliases": {},
+  "artifacts": [],
+
+  "versioning": {
+    "provider": "auto",
+    "fallback": "0.1.0-local",
+    "settings": {}
+  },
+
+  "runtime": {
+    "output": {
+      "emitRuntimeFiles": true,
+      "root": "artifacts"
+    },
+    "push": {
+      "enabled": true,
+      "noPushInPullRequest": false,
+      "requireCleanWorkingTree": false,
+      "branches": []
+    }
+  },
+
+  "tests": {
+    "enabled": true,
+    "projects": null,
+    "configuration": "Release",
+    "resultsOutput": "<runtime.output.root>/tests",
+    "coverageOutput": null,
+    "collectCoverage": null,
+    "coverageThreshold": null
+  },
+
+  "analysis": {
+    "enabled": true,
+    "failOnIssues": true,
+    "tools": [],
+    "configuration": "<runtime.output.root>/analysis.sarif.json"
+  }
+}
+```
+
+Notes:
+
+- `versioning` defaults are used by `builtin:resolve-version` when `versioning` is omitted.
+- `tests.resultsOutput` and `analysis.configuration` are computed from `runtime.output.root` when omitted.
+- `collectCoverage` only becomes active when coverage output collection is configured.
+- `commands`, `aliases`, and `artifacts` are shown as empty here for completeness; they are optional in config files.
 
 ---
 
 ## `extends` — Config Merge Pipeline
 
-`extends` accepts an array of local file paths. Configs are merged breadth-first;
-child properties win over base properties. Commands and aliases are merged (child
-additions take priority). Circular references are detected and rejected.
+`extends` accepts an array containing either local file paths or embedded policy
+template references.
+
+Supported entry types:
+
+- Local path: `./base/rexo.json`
+- Embedded template: `embedded:standard`, `embedded:dotnet`
+
+Merge behavior:
+
+- Configs are merged breadth-first.
+- Child properties win over base properties.
+- Commands and aliases are merged (child additions take priority).
+- Circular references are detected and rejected.
+
+Examples:
 
 ```json
-{ "extends": ["../../shared/rexo.json"] }
+{ "extends": ["embedded:standard"] }
+```
+
+```json
+{ "extends": ["embedded:dotnet", "../../shared/rexo.json"] }
 ```
 
 ---
@@ -98,6 +181,23 @@ Each key is a command name (spaces allowed for multi-word commands).
 }
 ```
 
+### Command option typing (strongly defined)
+
+For `commands.<name>.options.<option>.type`, allowed values are:
+
+- `string`
+- `bool`
+- `boolean`
+- `int`
+- `integer`
+- `number`
+
+Schema default:
+
+- `type` defaults to `string` when omitted
+
+`default` may be a string, boolean, integer, or number value.
+
 ### Steps
 
 Each step has one of `run`, `uses`, or `command`:
@@ -107,6 +207,9 @@ Each step has one of `run`, `uses`, or `command`:
   "id": "my-step",             // optional; enables output referencing
   "run": "echo {{args.name}}", // shell command (template-expanded)
   "when": "{{options.flag}}",  // skip step if value is falsey after rendering
+  "with": {                      // optional; per-step option overrides
+    "push": "{{options.push}}"
+  },
   "continueOnError": true,     // don't fail the command if this step fails
   "parallel": true,            // run concurrently with adjacent parallel steps
   "outputPattern": "v(?P<version>[\\d.]+)", // regex: named groups → step outputs
@@ -128,6 +231,20 @@ Command-level concurrency is controlled with `maxParallel`:
 ```jsonc
 {
   "uses": "builtin:resolve-version"  // built-in primitive
+}
+
+`with` is most useful when invoking reusable built-ins. It lets a command map its
+own option names into step-local option names consumed by that builtin.
+
+Example:
+
+```json
+{
+  "id": "push",
+  "uses": "builtin:push-artifacts",
+  "with": {
+    "confirm": "{{options.push}}"
+  }
 }
 ```
 
@@ -155,23 +272,63 @@ the group (they cannot see each other's outputs within the same group).
 
 ```jsonc
 "versioning": {
-  "provider": "gitversion",  // fixed | env | gitversion | minver | nbgv
+  "provider": "auto",   // auto | fixed | env | gitversion | minver | nbgv | git
+  "fallback": "0.1.0-local",
   "settings": {
     "variable": "MY_VERSION_VAR",     // for env provider
-    "fallback": "0.1.0",
     "tagPrefix": "v",                 // for minver provider
-    "minimumMajorMinor": "1.0"        // for minver provider
+    "minimumMajorMinor": "1.0",       // for minver provider
+    "useDocker": "true",              // gitversion/nbgv/minver — enable Docker fallback (default true)
+    "dockerImage": "gittools/gitversion:6.0.0"  // override the Docker image for this provider
   }
 }
 ```
 
 | Provider | Tool | Notes |
 | --- | --- | --- |
-| `fixed` | — | Returns `settings.version` |
-| `env` | — | Reads `settings.variable` env var; falls back to `settings.fallback` |
-| `gitversion` | `gitversion /output json` | Parses SemVer2 fields from JSON output |
-| `minver` | `dotnet minver` | Single-line SemVer output; supports `tagPrefix`, `minimumMajorMinor` |
-| `nbgv` | `nbgv get-version -f json` | Parses `SemVer2`, `Version`, `GitCommitId` from JSON |
+| `auto` | — | **Default.** Detects provider by config file evidence (see below). |
+| `fixed` | — | Returns the configured `fallback` version string |
+| `env` | — | Reads `settings.variable` env var; falls back to `fallback` |
+| `git` | `git describe` | Resolves from the most recent SemVer git tag |
+| `gitversion` | `gitversion /output json` | Parses SemVer2 fields from JSON output; Docker fallback via `gittools/gitversion:6.0.0` |
+| `minver` | `dotnet minver` | Single-line SemVer output; Docker fallback via .NET SDK image |
+| `nbgv` | `nbgv get-version -f json` | Parses `SemVer2`, `Version`, `GitCommitId`; Docker fallback via .NET SDK image |
+
+### `auto` detection order
+
+When `provider` is `auto`, Rexo scans the repository root for versioning config file evidence in this order:
+
+1. `version.json` or `nbgv.json` present → uses **nbgv**
+2. `GitVersion.yml` or `GitVersion.yaml` present → uses **gitversion**
+3. `.minverrc` present → uses **minver**
+4. `.git` directory present → uses **git** (tag-based)
+5. None of the above → uses **fixed** with the configured `fallback` version
+
+### Docker fallback
+
+`gitversion`, `nbgv`, and `minver` all support a Docker fallback for environments where
+the CLI tool is not installed. The fallback is **enabled by default** and is tried after
+the host tool fails (tool not found, non-zero exit, or empty output).
+
+| Provider | Default image | Container command |
+| --- | --- | --- |
+| `gitversion` | `gittools/gitversion:6.0.0` | `docker run --rm -v <repo>:/repo -w /repo <image> /output json` |
+| `nbgv` | `mcr.microsoft.com/dotnet/sdk:latest` | `dotnet tool restore && dotnet nbgv get-version --format json` |
+| `minver` | `mcr.microsoft.com/dotnet/sdk:latest` | `dotnet tool restore && dotnet minver [args]` |
+
+For `nbgv` and `minver` Docker, the tool must be present in the repo's `.config/dotnet-tools.json` manifest so `dotnet tool restore` can install it inside the container.
+
+Disable Docker for a specific provider with:
+
+```jsonc
+{ "versioning": { "provider": "nbgv", "settings": { "useDocker": "false" } } }
+```
+
+Override the Docker image:
+
+```jsonc
+{ "versioning": { "provider": "gitversion", "settings": { "dockerImage": "gittools/gitversion:5.12.0" } } }
+```
 
 ---
 
@@ -200,8 +357,30 @@ the group (they cannot see each other's outputs within the same group).
 ```
 
 After `builtin:push-artifacts` completes, a manifest is written to
-`artifacts/manifest.json` listing each artifact's type, name, push status, and
-published references.
+`<runtime.output.root>/manifest.json` (default: `artifacts/manifest.json`) listing each
+artifact's type, name, push status, and published references.
+
+## `runtime.output`
+
+Controls filesystem artifact emission and the root output folder.
+
+```jsonc
+"runtime": {
+  "output": {
+    "emitRuntimeFiles": true,
+    "root": "artifacts"
+  }
+}
+```
+
+- `emitRuntimeFiles` (default: `true`): when `false`, runtime-generated files (for example artifact manifest files) are not written.
+- `root` (default: `artifacts`): root folder used by runtime artifact outputs.
+
+Notes:
+
+- `builtin:clean` removes this folder.
+- `builtin:test` defaults `resultsOutput` to `<runtime.output.root>/tests` when not explicitly set.
+- NuGet artifacts default `settings.output` to `<runtime.output.root>/packages` when not explicitly set.
 
 ### Docker artifact settings (`type: "docker"`)
 
@@ -227,16 +406,57 @@ The schema now validates Docker settings explicitly. Supported keys:
 | `push.branchesShortcut` | `string` | Delimited branch shortcut |
 | `denyNonPublicPush` / `push.denyNonPublicPush` | `bool` | Block non-public branch push |
 | `latest` / `tags.latest` | `bool` | Add `latest` tag |
-| `tags` | `string \| string[]` | Explicit tag strategy kinds |
+| `tags` | `tagKind \| tagKind[]` | Explicit tag strategy kinds (`full`, `semver`, `majorMinor`, `majorminor`, `major-minor`, `major`, `branch`, `sha`, `latest-on-main`) |
 | `publicBuild` / `build.public` | `bool` | Explicit classification override |
 | `publicBranches*`, `nonPublicBranches*` | `string \| string[]` | Branch classification rules |
 | `classification.*` | `object` | Nested branch classification settings |
-| `tagPolicy.public` / `tagPolicy.nonPublic` | `string \| string[]` | Tag strategy policy by classification |
-| `nonPublicMode` | `string` | Non-public behavior mode (e.g. `full-only`) |
+| `tagPolicy.public` / `tagPolicy.nonPublic` | `tagKind \| tagKind[]` | Tag strategy policy by classification (same allowed values as `tags`) |
+| `nonPublicMode` | `full-only` | Optional stricter non-public behavior mode |
 | `aliases.*` | `object` | Branch alias generation settings |
 | `aliases.rules[]` | `array` | Match/template alias rules |
 | `stages` | `object` | Named stage definitions |
 | `stageFallback` | `bool` | Fallback behavior for stage requests |
+
+### Docker option defaults (when omitted)
+
+- `runner`: `build`
+- `push.enabled` / `pushEnabled`: `true`
+- `push.denyNonPublicPush` / `denyNonPublicPush`: `false`
+- `latest`: `false`
+- `stageFallback`: `true`
+
+Tag policy defaults are intentionally symmetric:
+
+- Public and non-public both default to: `full + majorMinor + major`
+- You can diverge behavior by setting `tagPolicy.public` and `tagPolicy.nonPublic` differently
+
+### Tag defaults and strong options
+
+Supported tag strategy options are strongly constrained to:
+
+- `full`
+- `semver`
+- `majorMinor` (canonical)
+- `majorminor` (compatibility alias)
+- `major-minor` (compatibility alias)
+- `major`
+- `branch`
+- `sha`
+- `latest-on-main`
+
+If `tags` is omitted:
+
+- effective default strategy is `full + majorMinor + major`
+- for pre-release versions, major and major.minor tags are emitted with the prerelease suffix appended
+  (example: `0.1.0-local` -> `0.1-local`, `0-local`)
+
+If `tagPolicy` is omitted:
+
+- the same default strategy behavior above is applied by classification fallback
+
+If you want stricter non-public behavior:
+
+- set `nonPublicMode: "full-only"` to force non-public builds to emit only the `full` tag
 
 ### Docker environment variable overrides
 
@@ -286,9 +506,9 @@ Supported Docker environment variables:
 | `DOCKER_LOGIN_USERNAME` | Registry login username | Falls back to `DOCKER_AUTH_USERNAME` |
 | `DOCKER_LOGIN_PASSWORD` | Registry login password/token | Falls back to `DOCKER_AUTH_PASSWORD` |
 | `DOCKER_LOGIN_REGISTRY` | Registry host for login | Falls back to `DOCKER_AUTH_REGISTRY`, then settings/inferred image registry |
-| `DOCKER_AUTH_USERNAME` | Legacy alias for login username | Used if `DOCKER_LOGIN_USERNAME` not set |
-| `DOCKER_AUTH_PASSWORD` | Legacy alias for login password/token | Used if `DOCKER_LOGIN_PASSWORD` not set |
-| `DOCKER_AUTH_REGISTRY` | Legacy alias for login registry | Used if `DOCKER_LOGIN_REGISTRY` not set |
+| `DOCKER_AUTH_USERNAME` | Alternate alias for login username | Used if `DOCKER_LOGIN_USERNAME` not set |
+| `DOCKER_AUTH_PASSWORD` | Alternate alias for login password/token | Used if `DOCKER_LOGIN_PASSWORD` not set |
+| `DOCKER_AUTH_REGISTRY` | Alternate alias for login registry | Used if `DOCKER_LOGIN_REGISTRY` not set |
 
 Login behavior:
 
@@ -393,6 +613,9 @@ The stage value can be provided via `args.stage` or `--stage`.
 }
 ```
 
+If `resultsOutput` is omitted, the default path is `<runtime.output.root>/tests`
+(or `artifacts/tests` when `runtime.output.root` is omitted).
+
 Coverage is parsed from Cobertura XML written by `XPlat Code Coverage`.
 
 ---
@@ -408,20 +631,42 @@ Coverage is parsed from Cobertura XML written by `XPlat Code Coverage`.
 
 Runs `dotnet format --verify-no-changes` and a build-only pass.
 
+SARIF behavior:
+
+- If `analysis.configuration` is provided and ends with `.sarif` or `.sarif.json`, SARIF is written there.
+- If `analysis.configuration` is omitted, SARIF defaults to `<runtime.output.root>/analysis.sarif.json`
+  (fallback root: `artifacts`, so default file is `artifacts/analysis.sarif.json`).
+
 ---
 
-## `pushRulesJson`
+## `runtime`
 
-A JSON string encoding push policy rules enforced by `builtin:push-artifacts`:
+Cross-cutting runtime policy configuration.
 
-```json
-"pushRulesJson": "{\"noPushInPullRequest\": true, \"requireCleanWorkingTree\": true}"
+```jsonc
+"runtime": {
+  "output": {
+    "emitRuntimeFiles": true,
+    "root": "artifacts"
+  },
+  "push": {
+    "enabled": true,
+    "noPushInPullRequest": true,
+    "requireCleanWorkingTree": true,
+    "branches": ["main", "release/*"]
+  }
+}
 ```
+
+`builtin:push-artifacts` enforces these rules globally, then merges per-artifact
+overrides from `artifacts[].settings.push.*`.
 
 | Rule | Effect |
 | --- | --- |
+| `enabled` | Enables/disables push globally |
 | `noPushInPullRequest` | Rejects push when the CI environment reports a PR build |
 | `requireCleanWorkingTree` | Rejects push when the git working tree has uncommitted changes |
+| `branches` | Allows push only when branch matches listed patterns |
 
 ---
 
@@ -464,7 +709,7 @@ Use as `uses: builtin:<name>` in a step:
 | `builtin:verify` | Run test + analyze |
 | `builtin:build-artifacts` | Build all configured artifacts |
 | `builtin:tag-artifacts` | Tag all artifacts |
-| `builtin:push-artifacts` | Push artifacts; enforce push rules; write `artifacts/manifest.json` |
+| `builtin:push-artifacts` | Push artifacts; enforce push rules; write `<runtime.output.root>/manifest.json` when `runtime.output.emitRuntimeFiles=true` |
 | `builtin:plan-artifacts` | Plan all configured artifacts and emit plan JSON |
 | `builtin:ship-artifacts` | Tag + push all configured artifacts |
 | `builtin:all-artifacts` | Build + tag + push all configured artifacts |
@@ -594,7 +839,7 @@ The following features are defined in the product scope but not yet implemented:
 
 - The run manifest (written via `--json-file`) includes steps, version, CI context, git context, and errors.
 - **Push decisions and artifact entries** are propagated from `builtin:push-artifacts` into command results and JSON output.
-- The artifact manifest file `artifacts/manifest.json` is still written separately by `builtin:push-artifacts` for file-based consumption.
+- The artifact manifest file `<runtime.output.root>/manifest.json` is written separately by `builtin:push-artifacts` when `runtime.output.emitRuntimeFiles=true` for file-based consumption.
 
 ### Config Inspection Commands
 

@@ -11,6 +11,7 @@ using Rexo.Versioning;
 
 public sealed class ConfigCommandLoader
 {
+    private const string DefaultOutputRoot = "artifacts";
     private static readonly System.Text.Json.JsonSerializerOptions IndentedJsonOptions =
         new() { WriteIndented = true };
 
@@ -39,7 +40,7 @@ public sealed class ConfigCommandLoader
     {
         RegisterBuiltins(config, repositoryRoot);
 
-        foreach (var (commandName, commandConfig) in config.Commands)
+        foreach (var (commandName, commandConfig) in config.Commands ?? [])
         {
             var name = commandName;
             var cmd = commandConfig;
@@ -48,7 +49,7 @@ public sealed class ConfigCommandLoader
                 ExecuteConfigCommandAsync(name, cmd, config, invocation, repositoryRoot, commandExecutor, ct));
         }
 
-        foreach (var (alias, target) in config.Aliases)
+        foreach (var (alias, target) in config.Aliases ?? [])
         {
             var aliasName = alias;
             var targetName = target;
@@ -111,7 +112,7 @@ public sealed class ConfigCommandLoader
                     config.Versioning.Provider,
                     config.Versioning.Fallback,
                     config.Versioning.Settings)
-                : new VersioningConfig("fixed", "0.1.0-local");
+                : new VersioningConfig("auto", "0.1.0-local");
 
             var provider = _versionProviders.Resolve(versioningConfig.Provider);
             var versionResult = await provider.ResolveAsync(versioningConfig, ctx, ct);
@@ -174,6 +175,8 @@ public sealed class ConfigCommandLoader
                 step.Id ?? "push-artifacts",
                 config,
                 repositoryRoot,
+                ResolveOutputRoot(config),
+                ShouldEmitRuntimeFiles(config),
                 ctx,
                 includePredicate: static _ => true,
                 successMessage: "Artifact push phase completed.",
@@ -185,6 +188,9 @@ public sealed class ConfigCommandLoader
             Task.FromResult(PlanArtifacts(
                 step.Id ?? "plan-artifacts",
                 config,
+                ctx,
+                _artifactProviders,
+                pushRequested: TryGetOptionBoolean(ctx.Options, "push") == true,
                 includePredicate: static _ => true,
                 successMessage: "Planned all artifacts.",
                 emptyMessage: "No artifacts configured.")));
@@ -210,6 +216,8 @@ public sealed class ConfigCommandLoader
                 step.Id ?? "ship-artifacts",
                 config,
                 repositoryRoot,
+                ResolveOutputRoot(config),
+                ShouldEmitRuntimeFiles(config),
                 ctx,
                 includePredicate: static _ => true,
                 successMessage: "Ship completed.",
@@ -252,6 +260,8 @@ public sealed class ConfigCommandLoader
                 step.Id ?? "all-artifacts",
                 config,
                 repositoryRoot,
+                ResolveOutputRoot(config),
+                ShouldEmitRuntimeFiles(config),
                 ctx,
                 includePredicate: static _ => true,
                 successMessage: "All workflow completed.",
@@ -264,6 +274,9 @@ public sealed class ConfigCommandLoader
             Task.FromResult(PlanArtifacts(
                 step.Id ?? "plan",
                 config,
+                ctx,
+                _artifactProviders,
+                pushRequested: TryGetOptionBoolean(ctx.Options, "push") == true,
                 includePredicate: static _ => true,
                 successMessage: "Planned all artifacts.",
                 emptyMessage: "No artifacts configured.")));
@@ -285,6 +298,9 @@ public sealed class ConfigCommandLoader
             Task.FromResult(PlanArtifacts(
                 step.Id ?? "docker-plan",
                 config,
+                ctx,
+                _artifactProviders,
+                pushRequested: TryGetOptionBoolean(ctx.Options, "push") == true,
                 includePredicate: static a => string.Equals(a.Type, "docker", StringComparison.OrdinalIgnoreCase),
                 successMessage: "Planned docker artifacts.",
                 emptyMessage: "No docker artifacts configured.")));
@@ -310,6 +326,8 @@ public sealed class ConfigCommandLoader
                 step.Id ?? "docker-ship",
                 config,
                 repositoryRoot,
+                ResolveOutputRoot(config),
+                ShouldEmitRuntimeFiles(config),
                 ctx,
                 includePredicate: static a => string.Equals(a.Type, "docker", StringComparison.OrdinalIgnoreCase),
                 successMessage: "Docker ship completed.",
@@ -352,6 +370,8 @@ public sealed class ConfigCommandLoader
                 step.Id ?? "docker-all",
                 config,
                 repositoryRoot,
+                ResolveOutputRoot(config),
+                ShouldEmitRuntimeFiles(config),
                 ctx,
                 includePredicate: static a => string.Equals(a.Type, "docker", StringComparison.OrdinalIgnoreCase),
                 successMessage: "Docker all completed.",
@@ -461,6 +481,7 @@ public sealed class ConfigCommandLoader
                 Enabled: testsConfig?.Enabled ?? true,
                 Projects: testsConfig?.Projects,
                 Configuration: testsConfig?.Configuration ?? "Release",
+                OutputRoot: ResolveOutputRoot(config),
                 ResultsOutput: testsConfig?.ResultsOutput,
                 CoverageOutput: testsConfig?.CoverageOutput,
                 LineCoverageThreshold: testsConfig?.CoverageThreshold,
@@ -538,6 +559,39 @@ public sealed class ConfigCommandLoader
                 0,
                 TimeSpan.Zero,
                 new Dictionary<string, object?> { ["message"] = "Configuration is valid." }));
+        });
+
+        // builtin:clean — remove generated output (artifacts/, .rexo/generated/)
+        _builtinRegistry.Register("builtin:clean", (step, ctx, ct) =>
+        {
+            Console.WriteLine("  Cleaning generated output...");
+            var artifactsDir = Path.Combine(repositoryRoot, ResolveOutputRoot(config));
+            var cleaned = new List<string>();
+
+            if (Directory.Exists(artifactsDir))
+            {
+                try
+                {
+                    Directory.Delete(artifactsDir, true);
+                    cleaned.Add(artifactsDir);
+                    Console.WriteLine($"    Removed: {artifactsDir}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"    Failed to clean {artifactsDir}: {ex.Message}");
+                }
+            }
+
+            return Task.FromResult(new StepResult(
+                step.Id ?? "clean",
+                true,
+                0,
+                TimeSpan.Zero,
+                new Dictionary<string, object?>
+                {
+                    ["message"] = cleaned.Count > 0 ? $"Cleaned {cleaned.Count} directory(ies)." : "Nothing to clean.",
+                    ["cleaned"] = cleaned,
+                }));
         });
 
         // builtin:verify = test + analyze
@@ -746,20 +800,28 @@ public sealed class ConfigCommandLoader
         RepoConfig config,
         CancellationToken cancellationToken)
     {
-        // Write SARIF output when an analysis configuration is present and specifies a configuration path
-        if (config.Analysis?.Configuration is not null)
+        if (config.Analysis?.Enabled == false)
         {
-            var sarifPath = System.IO.Path.IsPathRooted(config.Analysis.Configuration)
-                ? config.Analysis.Configuration
-                : System.IO.Path.Combine(repositoryRoot, config.Analysis.Configuration);
+            return;
+        }
 
-            // Only write SARIF if the path ends with .sarif or .json (to avoid overwriting arbitrary paths)
-            if (sarifPath.EndsWith(".sarif", StringComparison.OrdinalIgnoreCase) ||
-                sarifPath.EndsWith(".sarif.json", StringComparison.OrdinalIgnoreCase))
-            {
-                await Analysis.DotnetAnalysisRunner.WriteSarifReportAsync(results, sarifPath, cancellationToken);
-                Console.WriteLine($"  SARIF report written to: {sarifPath}");
-            }
+        // Write SARIF output to configured path, or a sensible default under the output root.
+        var configuredPath = config.Analysis?.Configuration;
+        var defaultPath = Path.Combine(ResolveOutputRoot(config), "analysis.sarif.json");
+        var pathSetting = string.IsNullOrWhiteSpace(configuredPath)
+            ? defaultPath
+            : configuredPath;
+
+        var sarifPath = Path.IsPathRooted(pathSetting)
+            ? pathSetting
+            : Path.Combine(repositoryRoot, pathSetting);
+
+        // Only write SARIF if the path ends with .sarif or .sarif.json (to avoid overwriting arbitrary paths)
+        if (sarifPath.EndsWith(".sarif", StringComparison.OrdinalIgnoreCase) ||
+            sarifPath.EndsWith(".sarif.json", StringComparison.OrdinalIgnoreCase))
+        {
+            await Analysis.DotnetAnalysisRunner.WriteSarifReportAsync(results, sarifPath, cancellationToken);
+            Console.WriteLine($"  SARIF report written to: {sarifPath}");
         }
     }
 
@@ -791,7 +853,7 @@ public sealed class ConfigCommandLoader
                 continue;
             }
 
-            var artifactConfig = ToArtifactConfig(artifactCfg);
+            var artifactConfig = ToArtifactConfig(artifactCfg, ResolveOutputRoot(config));
             var result = await provider.BuildAsync(artifactConfig, ctx, cancellationToken);
             if (!result.Success)
             {
@@ -831,7 +893,7 @@ public sealed class ConfigCommandLoader
                 continue;
             }
 
-            await provider.TagAsync(ToArtifactConfig(artifactCfg), ctx, cancellationToken);
+            await provider.TagAsync(ToArtifactConfig(artifactCfg, ResolveOutputRoot(config)), ctx, cancellationToken);
         }
 
         return new StepResult(stepId, true, 0, TimeSpan.Zero,
@@ -842,6 +904,8 @@ public sealed class ConfigCommandLoader
         string stepId,
         RepoConfig config,
         string repositoryRoot,
+        string outputRoot,
+        bool emitRuntimeFiles,
         ExecutionContext ctx,
         Func<RepoArtifactConfig, bool> includePredicate,
         string successMessage,
@@ -860,7 +924,37 @@ public sealed class ConfigCommandLoader
 
         var manifestEntries = new List<Core.Models.ArtifactManifestEntry>();
         var pushDecisions = new List<Core.Models.PushDecision>();
-        var globalPolicy = ParsePushPolicyRules(config.PushRulesJson);
+        var globalPolicy = ParsePushPolicyRules(config);
+        var confirmRequested = ResolveConfirmRequested(ctx.Options);
+
+        if (!ctx.IsCi && !confirmRequested)
+        {
+            foreach (var artifactCfg in artifacts)
+            {
+                manifestEntries.Add(new Core.Models.ArtifactManifestEntry(
+                    artifactCfg.Type,
+                    artifactCfg.Name,
+                    Built: true,
+                    Pushed: false,
+                    Tags: Array.Empty<string>()));
+                pushDecisions.Add(new Core.Models.PushDecision(
+                    artifactCfg.Name,
+                    false,
+                    "Push skipped: use --confirm locally, or use release --push."));
+            }
+
+            if (emitRuntimeFiles)
+            {
+                await WriteArtifactManifestAsync(repositoryRoot, outputRoot, manifestEntries, cancellationToken);
+            }
+            return new StepResult(stepId, true, 0, TimeSpan.Zero,
+                new Dictionary<string, object?>
+                {
+                    ["message"] = "Push skipped: use --confirm locally, or use release --push.",
+                    ["__artifacts"] = manifestEntries,
+                    ["__pushDecisions"] = pushDecisions,
+                });
+        }
 
         foreach (var artifactCfg in artifacts)
         {
@@ -883,7 +977,7 @@ public sealed class ConfigCommandLoader
                 continue;
             }
 
-            var pushResult = await provider.PushAsync(ToArtifactConfig(artifactCfg), ctx, cancellationToken);
+            var pushResult = await provider.PushAsync(ToArtifactConfig(artifactCfg, outputRoot), ctx, cancellationToken);
             var pushPerformed = pushResult.PublishedReferences.Count > 0;
             manifestEntries.Add(new Core.Models.ArtifactManifestEntry(
                 artifactCfg.Type,
@@ -900,7 +994,10 @@ public sealed class ConfigCommandLoader
 
             if (!pushResult.Success)
             {
-                await WriteArtifactManifestAsync(repositoryRoot, manifestEntries, cancellationToken);
+                if (emitRuntimeFiles)
+                {
+                    await WriteArtifactManifestAsync(repositoryRoot, outputRoot, manifestEntries, cancellationToken);
+                }
                 return new StepResult(stepId, false, 6, TimeSpan.Zero,
                     new Dictionary<string, object?>
                     {
@@ -911,7 +1008,10 @@ public sealed class ConfigCommandLoader
             }
         }
 
-        await WriteArtifactManifestAsync(repositoryRoot, manifestEntries, cancellationToken);
+        if (emitRuntimeFiles)
+        {
+            await WriteArtifactManifestAsync(repositoryRoot, outputRoot, manifestEntries, cancellationToken);
+        }
         return new StepResult(stepId, true, 0, TimeSpan.Zero,
             new Dictionary<string, object?>
             {
@@ -924,6 +1024,9 @@ public sealed class ConfigCommandLoader
     private static StepResult PlanArtifacts(
         string stepId,
         RepoConfig config,
+        ExecutionContext ctx,
+        Artifacts.ArtifactProviderRegistry artifactProviders,
+        bool pushRequested,
         Func<RepoArtifactConfig, bool> includePredicate,
         string successMessage,
         string emptyMessage)
@@ -938,6 +1041,12 @@ public sealed class ConfigCommandLoader
                 new Dictionary<string, object?> { ["message"] = emptyMessage });
         }
 
+        var version = ctx.Version?.SemVer;
+        var branch = ctx.Branch ?? ctx.Version?.Branch;
+        var commitSha = ctx.CommitSha;
+        var isPullRequest = ctx.IsPullRequest;
+        var isCleanTree = ctx.IsCleanWorkingTree;
+
         var plans = artifacts.Select(a => new
         {
             a.Type,
@@ -947,24 +1056,159 @@ public sealed class ConfigCommandLoader
             Context = TryGetArtifactSettingString(a.Settings, "context") ?? ".",
             Runner = TryGetArtifactSettingString(a.Settings, "runner") ?? "build",
             Stages = TryGetArtifactSettingObject(a.Settings, "stages")?.Select(p => p.Name).ToArray() ?? Array.Empty<string>(),
+            Version = version,
+            Branch = branch,
         }).ToList();
 
+        // Generate human-readable plan output
+        var planLines = new List<string>();
+        planLines.Add("");
+        planLines.Add("Rexo plan");
+        planLines.Add("");
+
+        // Version section
+        if (version is not null)
+        {
+            planLines.Add("Version:");
+            planLines.Add($"  semver:  {version}");
+            if (branch is not null)
+                planLines.Add($"  branch:  {branch}");
+            if (commitSha is not null)
+                planLines.Add($"  commit:  {commitSha}");
+            planLines.Add("");
+        }
+
+        // Artifacts section
+        planLines.Add("Artifacts:");
+        foreach (var a in artifacts)
+        {
+            var image = TryGetArtifactSettingString(a.Settings, "image") ?? a.Name;
+            planLines.Add($"  [{a.Type}] {a.Name}");
+            planLines.Add($"    image: {image}");
+            planLines.Add($"    build: yes");
+
+            var provider = artifactProviders.Resolve(a.Type);
+            if (provider is not null)
+            {
+                var tags = provider.GetPlannedTags(new ArtifactConfig(a.Type, a.Name, a.Settings ?? new Dictionary<string, System.Text.Json.JsonElement>(StringComparer.Ordinal)), ctx);
+                if (tags.Count > 0)
+                {
+                    planLines.Add($"    tags:");
+                    foreach (var tag in tags)
+                        planLines.Add($"      - {tag}");
+                }
+            }
+        }
+        planLines.Add("");
+
+        // Push eligibility section
+        var (canPush, skipReasons) = pushRequested
+            ? EvaluatePushEligibility(config, isPullRequest, isCleanTree)
+            : (false, new List<string>());
+        planLines.Add("Push:");
+        planLines.Add($"  requested: {(pushRequested ? "yes" : "no")}");
+        if (pushRequested)
+        {
+            planLines.Add($"  eligible: {(canPush ? "yes" : "no")}");
+        }
+        else
+        {
+            planLines.Add("  eligible: not requested");
+        }
+
+        if (pushRequested && !canPush && skipReasons.Count > 0)
+        {
+            planLines.Add("  skip reasons:");
+            foreach (var reason in skipReasons)
+                planLines.Add($"    - {reason}");
+        }
+        planLines.Add("");
+
+        var planOutput = string.Join(Environment.NewLine, planLines);
+        Console.WriteLine(planOutput);
+
         var json = JsonSerializer.Serialize(plans, IndentedJsonOptions);
-        Console.WriteLine(json);
 
         return new StepResult(stepId, true, 0, TimeSpan.Zero,
             new Dictionary<string, object?>
             {
                 ["message"] = successMessage,
                 ["plan"] = json,
+                ["pushRequested"] = pushRequested,
+                ["canPush"] = canPush,
+                ["skipReasons"] = skipReasons,
             });
     }
 
-    private static ArtifactConfig ToArtifactConfig(RepoArtifactConfig artifactCfg) =>
-        new(
+    private static bool ResolveConfirmRequested(IReadOnlyDictionary<string, string?> options) =>
+        TryGetOptionBoolean(options, "confirm")
+        ?? TryGetOptionBoolean(options, "push")
+        ?? false;
+
+    private static bool? TryGetOptionBoolean(IReadOnlyDictionary<string, string?> options, string key)
+    {
+        if (!options.TryGetValue(key, out var value) || string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return bool.TryParse(value, out var parsed) ? parsed : null;
+    }
+
+    private static (bool canPush, List<string> skipReasons) EvaluatePushEligibility(
+        RepoConfig config,
+        bool isPullRequest,
+        bool isCleanTree)
+    {
+        var skipReasons = new List<string>();
+        var canPush = true;
+
+        var pushPolicy = ParsePushPolicyRules(config);
+        if (!pushPolicy.Enabled)
+        {
+            skipReasons.Add("Push disabled by policy");
+            canPush = false;
+        }
+
+        if (pushPolicy.NoPushInPullRequest)
+        {
+            if (isPullRequest)
+            {
+                skipReasons.Add("Pull request: push blocked");
+                canPush = false;
+            }
+        }
+
+        if (pushPolicy.RequireCleanWorkingTree)
+        {
+            if (!isCleanTree)
+            {
+                skipReasons.Add("Uncommitted changes: push blocked");
+                canPush = false;
+            }
+        }
+
+        return (canPush, skipReasons);
+    }
+
+    private static ArtifactConfig ToArtifactConfig(RepoArtifactConfig artifactCfg, string outputRoot)
+    {
+        var settings = artifactCfg.Settings is not null
+            ? CloneSettings(artifactCfg.Settings)
+            : new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+
+        if (string.Equals(artifactCfg.Type, "nuget", StringComparison.OrdinalIgnoreCase) &&
+            !settings.ContainsKey("output"))
+        {
+            var nugetOutput = Path.Combine(outputRoot, "packages");
+            settings["output"] = JsonSerializer.SerializeToElement(nugetOutput);
+        }
+
+        return new ArtifactConfig(
             artifactCfg.Type,
             artifactCfg.Name,
-            artifactCfg.Settings ?? new Dictionary<string, JsonElement>());
+            settings);
+    }
 
     private static string? TryGetArtifactSettingString(Dictionary<string, JsonElement>? settings, string key)
     {
@@ -1012,12 +1256,22 @@ public sealed class ConfigCommandLoader
         {
             if (!result.ContainsKey(optName) && optConfig.Default is not null)
             {
-                result[optName] = optConfig.Default;
+                result[optName] = OptionDefaultToString(optConfig.Default.Value);
             }
         }
 
         return result;
     }
+
+    private static string? OptionDefaultToString(JsonElement value) =>
+        value.ValueKind switch
+        {
+            JsonValueKind.Null or JsonValueKind.Undefined => null,
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            JsonValueKind.String => value.GetString(),
+            _ => value.ToString(),
+        };
 
     private static RepoCommandConfig NormalizeCommandConfig(RepoCommandConfig commandConfig) =>
         new(
@@ -1031,10 +1285,11 @@ public sealed class ConfigCommandLoader
 
     private static async Task WriteArtifactManifestAsync(
         string repositoryRoot,
+        string outputRoot,
         IReadOnlyList<Core.Models.ArtifactManifestEntry> entries,
         CancellationToken cancellationToken)
     {
-        var artifactsDir = Path.Combine(repositoryRoot, "artifacts");
+        var artifactsDir = Path.Combine(repositoryRoot, outputRoot);
         Directory.CreateDirectory(artifactsDir);
         var manifestPath = Path.Combine(artifactsDir, "manifest.json");
 
@@ -1050,33 +1305,26 @@ public sealed class ConfigCommandLoader
         Console.WriteLine($"  Artifact manifest written to {manifestPath}");
     }
 
-    private static PushPolicyRules ParsePushPolicyRules(string? pushRulesJson)
+    private static string ResolveOutputRoot(RepoConfig config) =>
+        string.IsNullOrWhiteSpace(config.Runtime?.Output?.Root)
+            ? DefaultOutputRoot
+            : config.Runtime.Output.Root!;
+
+    private static bool ShouldEmitRuntimeFiles(RepoConfig config) =>
+        config.Runtime?.Output?.EmitRuntimeFiles ?? true;
+
+    private static PushPolicyRules ParsePushPolicyRules(RepoConfig config)
     {
-        if (string.IsNullOrWhiteSpace(pushRulesJson))
+        if (config.Runtime?.Push is not { } structuredPush)
         {
             return PushPolicyRules.Default;
         }
 
-        try
-        {
-            using var doc = JsonDocument.Parse(pushRulesJson);
-            var root = doc.RootElement;
-            if (root.ValueKind != JsonValueKind.Object)
-            {
-                return PushPolicyRules.Default;
-            }
-
-            return new PushPolicyRules(
-                Enabled: ReadBoolean(root, "enabled") ?? true,
-                NoPushInPullRequest: ReadBoolean(root, "noPushInPullRequest") ?? false,
-                RequireCleanWorkingTree: ReadBoolean(root, "requireCleanWorkingTree") ?? false,
-                Branches: ReadStringList(root, "branches") ?? []);
-        }
-        catch (JsonException)
-        {
-            // Malformed rules JSON — fall back to defaults.
-            return PushPolicyRules.Default;
-        }
+        return new PushPolicyRules(
+            Enabled: structuredPush.Enabled ?? true,
+            NoPushInPullRequest: structuredPush.NoPushInPullRequest ?? false,
+            RequireCleanWorkingTree: structuredPush.RequireCleanWorkingTree ?? false,
+            Branches: structuredPush.Branches?.ToList() ?? []);
     }
 
     private static PushPolicyRules BuildEffectivePushPolicy(
@@ -1271,6 +1519,7 @@ public sealed class ConfigCommandLoader
             Command: stepConfig.Command,
             When: stepConfig.When)
         {
+            With = stepConfig.With,
             Parallel = stepConfig.Parallel ?? false,
             ContinueOnError = stepConfig.ContinueOnError ?? false,
             OutputPattern = stepConfig.OutputPattern,

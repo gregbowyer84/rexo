@@ -20,4 +20,7 @@ public interface IArtifactProvider
         ArtifactConfig artifact,
         ExecutionContext context,
         CancellationToken cancellationToken);
+
+    IReadOnlyList<string> GetPlannedTags(ArtifactConfig artifact, ExecutionContext context) =>
+        Array.Empty<string>();
 }

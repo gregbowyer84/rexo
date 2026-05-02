@@ -51,8 +51,8 @@ public sealed class RepoConfigurationLoaderYamlTests
             var config = await RepoConfigurationLoader.LoadAsync(configPath, CancellationToken.None);
 
             Assert.Equal("yaml-sample", config.Name);
-            Assert.True(config.Commands.ContainsKey("build"));
-        }
+      Assert.True(config.Commands!.ContainsKey("build"));
+    }
         finally
         {
           Environment.SetEnvironmentVariable("REXO_OVERLAY", originalOverlay);

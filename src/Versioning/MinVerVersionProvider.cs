@@ -1,75 +1,102 @@
 namespace Rexo.Versioning;
 
-using System.Diagnostics;
 using Rexo.Core.Abstractions;
 using Rexo.Core.Models;
 
 /// <summary>
-/// Resolves the version by shelling out to the <c>minver</c> dotnet tool.
-/// MinVer outputs a single SemVer 2.0 string (e.g. "1.2.3-alpha.0.1").
-/// Falls back to <see cref="FixedVersionProvider"/> if minver is not installed
-/// or the working directory is not a git repository.
+/// Resolves the version using the MinVer dotnet tool.
+/// <para>
+/// Resolution order:
+/// <list type="number">
+///   <item>Host <c>dotnet minver</c></item>
+///   <item>Docker — mounts the repository into <c>mcr.microsoft.com/dotnet/sdk:latest</c>
+///     and runs <c>dotnet tool restore &amp;&amp; dotnet minver</c>.
+///     Requires <c>minver-cli</c> to be present in the repo's
+///     <c>.config/dotnet-tools.json</c> manifest.
+///     Skipped when <c>settings["useDocker"] = "false"</c>.</item>
+///   <item>Fallback version</item>
+/// </list>
+/// </para>
+/// Supported settings: <c>tagPrefix</c>, <c>minimumMajorMinor</c>,
+/// <c>useDocker</c>, <c>dockerImage</c>.
 /// </summary>
 public sealed class MinVerVersionProvider : IVersionProvider
 {
+    private const string DefaultDockerImage = "mcr.microsoft.com/dotnet/sdk:latest";
+
     public async Task<VersionResult> ResolveAsync(
         VersioningConfig config,
         ExecutionContext context,
         CancellationToken cancellationToken)
     {
         var workingDir = context.RepositoryRoot;
-        var tagPrefix = config.Settings?.TryGetValue("tagPrefix", out var p) == true ? p : null;
-        var minMajor = config.Settings?.TryGetValue("minimumMajorMinor", out var m) == true ? m : null;
+        var tagPrefix = config.Settings?.GetValueOrDefault("tagPrefix");
+        var minMajor = config.Settings?.GetValueOrDefault("minimumMajorMinor");
 
-        try
+        // 1. Try host dotnet minver
+        var result = await TryRunOnHostAsync(workingDir, tagPrefix, minMajor, context, cancellationToken);
+        if (result is not null)
+            return result;
+
+        // 2. Try Docker fallback
+        if (VersionProcessHelper.UseDockerFallback(config))
         {
-            var arguments = "minver";
-            if (!string.IsNullOrEmpty(tagPrefix)) arguments += $" --tag-prefix {tagPrefix}";
-            if (!string.IsNullOrEmpty(minMajor)) arguments += $" --minimum-major-minor {minMajor}";
-
-            var (exitCode, output) = await RunProcessAsync(
-                "dotnet",
-                arguments,
-                workingDir,
-                cancellationToken);
-
-            if (exitCode != 0 || string.IsNullOrWhiteSpace(output))
-            {
-                return Fallback(config, context);
-            }
-
-            var version = output.Trim();
-            return FixedVersionProvider.ParseSemVer(version, context);
+            var image = VersionProcessHelper.GetDockerImage(config, DefaultDockerImage);
+            result = await TryRunDockerAsync(image, workingDir, tagPrefix, minMajor, context, cancellationToken);
+            if (result is not null)
+                return result;
         }
-        catch (Exception)
-        {
-            return Fallback(config, context);
-        }
+
+        return Fallback(config, context);
     }
 
-    private static async Task<(int exitCode, string output)> RunProcessAsync(
-        string fileName,
-        string arguments,
-        string workingDirectory,
+    private static async Task<VersionResult?> TryRunOnHostAsync(
+        string workingDir,
+        string? tagPrefix,
+        string? minMajor,
+        ExecutionContext context,
         CancellationToken cancellationToken)
     {
-        var psi = new ProcessStartInfo(fileName, arguments)
-        {
-            WorkingDirectory = workingDirectory,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
+        var arguments = BuildMinVerArguments(tagPrefix, minMajor);
 
-        using var process = new Process { StartInfo = psi };
-        process.Start();
+        var (exitCode, output) = await VersionProcessHelper.RunAsync(
+            "dotnet", arguments, workingDir, cancellationToken);
 
-        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken);
-        var output = await outputTask;
+        if (exitCode == 0 && !string.IsNullOrWhiteSpace(output))
+            return FixedVersionProvider.ParseSemVer(output.Trim(), context);
 
-        return (process.ExitCode, output);
+        return null;
+    }
+
+    private static async Task<VersionResult?> TryRunDockerAsync(
+        string image,
+        string workingDir,
+        string? tagPrefix,
+        string? minMajor,
+        ExecutionContext context,
+        CancellationToken cancellationToken)
+    {
+        var minverCommand = BuildMinVerArguments(tagPrefix, minMajor);
+        // Restore tools from the repo's tool manifest (non-fatal), then run minver.
+        var script = $"dotnet tool restore 1>&2 || true && {minverCommand}";
+
+        var (exitCode, output) = await VersionProcessHelper.RunSdkDockerScriptAsync(
+            image, workingDir, script, cancellationToken);
+
+        if (exitCode == 0 && !string.IsNullOrWhiteSpace(output))
+            return FixedVersionProvider.ParseSemVer(output.Trim(), context);
+
+        return null;
+    }
+
+    private static string BuildMinVerArguments(string? tagPrefix, string? minMajor)
+    {
+        var arguments = "minver";
+        if (!string.IsNullOrEmpty(tagPrefix))
+            arguments += $" --tag-prefix {tagPrefix}";
+        if (!string.IsNullOrEmpty(minMajor))
+            arguments += $" --minimum-major-minor {minMajor}";
+        return arguments;
     }
 
     private static VersionResult Fallback(VersioningConfig config, ExecutionContext context) =>

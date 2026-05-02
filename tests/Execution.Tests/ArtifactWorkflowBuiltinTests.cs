@@ -175,7 +175,7 @@ public sealed class ArtifactWorkflowBuiltinTests
             commandName,
             new CommandInvocation(
                 new Dictionary<string, string>(),
-                new Dictionary<string, string?>(),
+                new Dictionary<string, string?> { ["confirm"] = "true" },
                 Json: false,
                 JsonFile: null,
                 WorkingDirectory: Path.GetTempPath()),

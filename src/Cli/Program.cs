@@ -10,6 +10,7 @@ using Rexo.Configuration.Models;
 using Rexo.Core.Models;
 using Rexo.Execution;
 using Rexo.Git;
+using Rexo.Policies;
 using Rexo.Templating;
 using Rexo.Ui;
 using Rexo.Versioning;
@@ -30,7 +31,7 @@ public static class Program
         // No args (or only global flags) — launch interactive TUI picker
         if (cleanArgs.Count == 0)
         {
-            var (_, uiExecutor, uiConfig) = await BuildServicesAsync(workingDir, debug, cancellationToken);
+            var (_, uiExecutor, uiConfig) = await CliBootstrapper.BuildServicesAsync(workingDir, debug, cancellationToken);
             return await RunUiAsync(uiExecutor, uiConfig, workingDir, cancellationToken);
         }
 
@@ -44,7 +45,7 @@ public static class Program
         }
 
         // Set up the full service graph
-        var (registry, executor, config) = await BuildServicesAsync(workingDir, debug, cancellationToken);
+        var (registry, executor, config) = await CliBootstrapper.BuildServicesAsync(workingDir, debug, cancellationToken);
 
         return command switch
         {
@@ -55,7 +56,7 @@ public static class Program
             "explain" => await RunExplainAsync(executor, cleanArgs, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
             "config" => await RunConfigSubcommandAsync(cleanArgs, executor, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
             "ui" => await RunUiAsync(executor, config, workingDir, cancellationToken),
-            "run" => await RunConfiguredAsync(cleanArgs, executor, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
+            "run" => await RunConfiguredAsync(cleanArgs, executor, config, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
             _ => await RunDirectAsync(command, cleanArgs, executor, config, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
         };
     }
@@ -84,6 +85,7 @@ public static class Program
 
         if (config is not null)
         {
+            var embeddedPolicy = LoadEmbeddedPolicyTemplate("standard", debug);
             var policyPath = ConfigFileLocator.FindPolicyPath(workingDir);
             if (policyPath is not null)
             {
@@ -97,6 +99,8 @@ public static class Program
                     if (debug) Console.WriteLine($"[debug] Policy load skipped ({policyPath}): {ex.Message}");
                 }
             }
+
+            policyConfig = MergePolicies(embeddedPolicy, policyConfig);
         }
 
         var effectiveConfig = MergePolicyIntoEffectiveConfig(config, policyConfig);
@@ -122,11 +126,7 @@ public static class Program
                 artifactProviders);
 
             configLoader.LoadInto(registry, config, workingDir, executor);
-
-            if (policyConfig is not null)
-            {
-                configLoader.LoadPolicyCommandsInto(registry, policyConfig, config, workingDir, executor);
-            }
+            configLoader.LoadPolicyCommandsInto(registry, policyConfig ?? new PolicyConfig(), config, workingDir, executor);
         }
 
         return (registry, executor, effectiveConfig);
@@ -153,7 +153,7 @@ public static class Program
             }
         }
 
-        foreach (var (name, command) in config.Commands)
+        foreach (var (name, command) in config.Commands ?? [])
         {
             commands[name] = NormalizeCommandConfig(command);
         }
@@ -167,7 +167,7 @@ public static class Program
             }
         }
 
-        foreach (var (alias, target) in config.Aliases)
+        foreach (var (alias, target) in config.Aliases ?? [])
         {
             aliases[alias] = target;
         }
@@ -177,6 +177,98 @@ public static class Program
             Commands = commands,
             Aliases = aliases,
         };
+    }
+
+    private static PolicyConfig MergePolicies(PolicyConfig? baseline, PolicyConfig? overridePolicy)
+    {
+        var commands = new Dictionary<string, RepoCommandConfig>(StringComparer.OrdinalIgnoreCase);
+        var aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        if (baseline?.Commands is { Count: > 0 })
+        {
+            foreach (var (name, command) in baseline.Commands)
+            {
+                commands[name] = NormalizeCommandConfig(command);
+            }
+        }
+
+        if (overridePolicy?.Commands is { Count: > 0 })
+        {
+            foreach (var (name, command) in overridePolicy.Commands)
+            {
+                commands[name] = NormalizeCommandConfig(command);
+            }
+        }
+
+        if (baseline?.Aliases is { Count: > 0 })
+        {
+            foreach (var (alias, target) in baseline.Aliases)
+            {
+                aliases[alias] = target;
+            }
+        }
+
+        if (overridePolicy?.Aliases is { Count: > 0 })
+        {
+            foreach (var (alias, target) in overridePolicy.Aliases)
+            {
+                aliases[alias] = target;
+            }
+        }
+
+        return new PolicyConfig(commands, aliases);
+    }
+
+    private static PolicyConfig LoadEmbeddedPolicyTemplate(string templateName, bool debug)
+    {
+        try
+        {
+            var json = EmbeddedPolicyTemplates.ReadTemplate(templateName);
+            using var document = JsonDocument.Parse(json);
+            var root = document.RootElement;
+
+            var commands = new Dictionary<string, RepoCommandConfig>(StringComparer.OrdinalIgnoreCase);
+            if (root.TryGetProperty("commands", out var commandsElement) && commandsElement.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var commandProperty in commandsElement.EnumerateObject())
+                {
+                    var command = JsonSerializer.Deserialize<RepoCommandConfig>(commandProperty.Value.GetRawText());
+                    if (command is not null)
+                    {
+                        commands[commandProperty.Name] = NormalizeCommandConfig(command);
+                    }
+                }
+            }
+
+            var aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (root.TryGetProperty("aliases", out var aliasesElement) && aliasesElement.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var aliasProperty in aliasesElement.EnumerateObject())
+                {
+                    var value = aliasProperty.Value.GetString();
+                    if (!string.IsNullOrWhiteSpace(value))
+                    {
+                        aliases[aliasProperty.Name] = value;
+                    }
+                }
+            }
+
+            if (debug)
+            {
+                Console.WriteLine($"[debug] Loaded embedded policy template: {templateName}");
+            }
+
+            return new PolicyConfig(commands, aliases);
+        }
+        catch (Exception ex) when (ex is JsonException or ArgumentException)
+        {
+            if (debug)
+            {
+                Console.WriteLine($"[debug] Embedded policy '{templateName}' load failed: {ex.Message}");
+            }
+
+            return new PolicyConfig();
+        }
     }
 
     private static RepoCommandConfig NormalizeCommandConfig(RepoCommandConfig command) =>
@@ -279,9 +371,9 @@ public static class Program
                 .Select(name =>
                 {
                     string? desc = null;
-                    if (config.Commands.TryGetValue(name, out var cmd))
+                    if (config.Commands!.TryGetValue(name, out var cmd))
                         desc = cmd.Description;
-                    else if (config.Aliases.TryGetValue(name, out var target))
+                    else if (config.Aliases?.TryGetValue(name, out var target) == true)
                         desc = $"→ {target}";
                     return (Name: name, Description: desc);
                 })
@@ -303,6 +395,7 @@ public static class Program
     private static async Task<int> RunConfiguredAsync(
         IReadOnlyList<string> args,
         DefaultCommandExecutor executor,
+        RepoConfig? config,
         string workingDir,
         bool json,
         string? jsonFile,
@@ -316,42 +409,54 @@ public static class Program
             return 1;
         }
 
-        // Collect multi-word command: run branch feature [name]
-        // Everything after "run" up to the first option is the command name
-        var commandParts = new List<string>();
-        var remainingArgs = new List<string>();
-        var collectingCommand = true;
+        // args[0] == "run" — resolve using same longest-match as direct invocation
+        var candidateArgs = args.Skip(1).ToList();
 
-        for (var i = 1; i < args.Count; i++)
+        for (var wordCount = candidateArgs.Count; wordCount >= 1; wordCount--)
         {
-            if (collectingCommand && !args[i].StartsWith("--", StringComparison.Ordinal))
+            var candidateName = string.Join(" ", candidateArgs.Take(wordCount));
+            if (!executor.Registry.TryResolve(candidateName, out _)) continue;
+
+            var remainingArgs = candidateArgs.Skip(wordCount).ToList();
+            var (parsedArgs, parsedOptions) = ParseArgsAndOptions(remainingArgs);
+
+            // Map positional args to declared arg names when config defines them
+            if (config?.Commands?.TryGetValue(candidateName, out var cmdConfig) == true &&
+                cmdConfig.Args is { Count: > 0 })
             {
-                commandParts.Add(args[i]);
+                var argNames = cmdConfig.Args.Keys.ToArray();
+                var positionalArgs = remainingArgs
+                    .Where(a => !a.StartsWith("--", StringComparison.Ordinal))
+                    .ToArray();
+
+                for (var i = 0; i < Math.Min(argNames.Length, positionalArgs.Length); i++)
+                {
+                    parsedArgs = new Dictionary<string, string>(parsedArgs)
+                    {
+                        [argNames[i]] = positionalArgs[i]
+                    };
+                }
             }
-            else
+
+            var invocation = new CommandInvocation(parsedArgs, parsedOptions, json, jsonFile, workingDir);
+            var startedAt = DateTimeOffset.UtcNow;
+            var result = await executor.ExecuteAsync(candidateName, invocation, cancellationToken);
+            var completedAt = DateTimeOffset.UtcNow;
+
+            var exitCode = await WriteResultAsync(result, invocation, verbose, quiet, cancellationToken);
+
+            // Write run manifest if --json-file specified
+            if (!string.IsNullOrEmpty(jsonFile))
             {
-                collectingCommand = false;
-                remainingArgs.Add(args[i]);
+                await WriteRunManifestAsync(result, candidateName, workingDir, startedAt, completedAt, jsonFile, cancellationToken);
             }
+
+            return exitCode;
         }
 
-        var commandName = string.Join(" ", commandParts);
-        var (parsedArgs, parsedOptions) = ParseArgsAndOptions(remainingArgs);
-        var invocation = new CommandInvocation(parsedArgs, parsedOptions, json, jsonFile, workingDir);
-
-        var startedAt = DateTimeOffset.UtcNow;
-        var result = await executor.ExecuteAsync(commandName, invocation, cancellationToken);
-        var completedAt = DateTimeOffset.UtcNow;
-
-        var exitCode = await WriteResultAsync(result, invocation, verbose, quiet, cancellationToken);
-
-        // Write run manifest if --json-file specified
-        if (!string.IsNullOrEmpty(jsonFile))
-        {
-            await WriteRunManifestAsync(result, commandName, workingDir, startedAt, completedAt, jsonFile, cancellationToken);
-        }
-
-        return exitCode;
+        var requestedCommand = string.Join(" ", candidateArgs);
+        ConsoleRenderer.RenderError($"Command '{requestedCommand}' not found. Run '{GetCliCommandName()} list' to see available commands.");
+        return 8;
     }
 
     private static async Task<int> RunInitBuiltinAsync(
@@ -395,7 +500,7 @@ public static class Program
             var (parsedArgs, parsedOptions) = ParseArgsAndOptions(remainingArgs);
 
             // If config defines arg names, map positional args to them
-            if (config?.Commands.TryGetValue(candidateName, out var cmdConfig) == true &&
+            if (config?.Commands?.TryGetValue(candidateName, out var cmdConfig) == true &&
                 cmdConfig.Args is { Count: > 0 })
             {
                 var argNames = cmdConfig.Args.Keys.ToArray();

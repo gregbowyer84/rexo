@@ -4,28 +4,18 @@ using System.Collections;
 using System.Text.Json;
 using NJsonSchema;
 using Rexo.Configuration.Models;
+using Rexo.Policies;
 using YamlDotNet.Serialization;
 
 public sealed class RepoConfigurationLoader
 {
     public const string SupportedSchemaVersion = "1.0";
     public const string SupportedRexoSchemaUri = "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json";
-    public const string DeprecatedRexoSchemaUriReleaseBranch = "https://raw.githubusercontent.com/agile-north/rexo/release/next/rexo.schema.json";
-    public const string DeprecatedRexoSchemaUri = "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json";
     public const string SupportedRexoSchemaPath = "rexo.schema.json";
     public const string SupportedRexoSchemaPathInRexoFolder = ".rexo/rexo.schema.json";
     public const string SupportedPolicySchemaUri = "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json";
-    public const string DeprecatedPolicySchemaUriReleaseBranch = "https://raw.githubusercontent.com/agile-north/rexo/release/next/policy.schema.json";
-    public const string DeprecatedPolicySchemaUri = "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/policy.schema.json";
     public const string SupportedPolicySchemaPath = "policy.schema.json";
     public const string SupportedPolicySchemaPathInRexoFolder = ".rexo/policy.schema.json";
-
-    // Legacy values kept for backward compatibility.
-    public const string LegacySchemaUri = "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/schemas/1.0/schema.json";
-    public const string DeprecatedLegacySchemaUriReleaseBranch = "https://raw.githubusercontent.com/agile-north/rexo/release/next/schemas/1.0/schema.json";
-    public const string DeprecatedLegacySchemaUri = "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/schema.json";
-    public const string LegacySchemaPath = "schema.json";
-    public const string LegacySchemaPathInRexoFolder = ".rexo/schema.json";
 
     private const string EmbeddedRexoSchemaResourceName = "Rexo.Configuration.rexo.schema.1.0.json";
     private const string EmbeddedPolicySchemaResourceName = "Rexo.Configuration.policy.schema.1.0.json";
@@ -99,6 +89,23 @@ public sealed class RepoConfigurationLoader
         RepoConfig? merged = null;
         foreach (var extendPath in config.Extends!)
         {
+            // Handle embedded: URI scheme — loads a named embedded policy template as a base config
+            if (extendPath.StartsWith("embedded:", StringComparison.OrdinalIgnoreCase))
+            {
+                var templateName = extendPath["embedded:".Length..];
+                var templateJson = EmbeddedPolicyTemplates.ReadTemplate(templateName);
+                var policyConfig = JsonSerializer.Deserialize<PolicyConfig>(templateJson, JsonOptions)
+                    ?? throw new InvalidOperationException($"Embedded template '{templateName}' is empty or invalid.");
+
+                var embeddedBase = new RepoConfig(
+                    Name: templateName,
+                    Commands: policyConfig.Commands is { Count: > 0 } ? policyConfig.Commands : null,
+                    Aliases: policyConfig.Aliases is { Count: > 0 } ? policyConfig.Aliases : null);
+
+                merged = merged is null ? embeddedBase : MergeConfigs(merged, embeddedBase);
+                continue;
+            }
+
             var basePath = Path.IsPathRooted(extendPath)
                 ? extendPath
                 : Path.GetFullPath(Path.Combine(configDir, extendPath));
@@ -182,9 +189,9 @@ public sealed class RepoConfigurationLoader
             Extends = null, // consumed — do not propagate
             Versioning = child.Versioning ?? @base.Versioning,
             Artifacts = MergeLists(@base.Artifacts, child.Artifacts, child.MergeStrategy),
+            Runtime = child.Runtime ?? @base.Runtime,
             Tests = child.Tests ?? @base.Tests,
             Analysis = child.Analysis ?? @base.Analysis,
-            PushRulesJson = child.PushRulesJson ?? @base.PushRulesJson,
             MergeStrategy = child.MergeStrategy ?? @base.MergeStrategy,
         };
 
@@ -250,19 +257,10 @@ public sealed class RepoConfigurationLoader
         var allowedSchemaValues = new[]
         {
             SupportedRexoSchemaUri,
-            DeprecatedRexoSchemaUriReleaseBranch,
-            DeprecatedRexoSchemaUri,
             SupportedRexoSchemaPath,
             "./" + SupportedRexoSchemaPath,
             "../" + SupportedRexoSchemaPath,
             SupportedRexoSchemaPathInRexoFolder,
-            LegacySchemaUri,
-            DeprecatedLegacySchemaUriReleaseBranch,
-            DeprecatedLegacySchemaUri,
-            LegacySchemaPath,
-            "./" + LegacySchemaPath,
-            "../" + LegacySchemaPath,
-            LegacySchemaPathInRexoFolder,
         };
 
         if (string.IsNullOrWhiteSpace(schema) || !allowedSchemaValues.Contains(schema, StringComparer.Ordinal))
@@ -293,7 +291,7 @@ public sealed class RepoConfigurationLoader
 
         string schemaJson;
         JsonSchema schema;
-        var schemaPath = FindLocalSchemaPath(configDirectory, SupportedRexoSchemaPath, LegacySchemaPath);
+        var schemaPath = FindLocalSchemaPath(configDirectory, SupportedRexoSchemaPath);
         if (schemaPath is not null)
         {
             schemaJson = await File.ReadAllTextAsync(schemaPath, cancellationToken);
@@ -335,8 +333,6 @@ public sealed class RepoConfigurationLoader
         var allowedSchemaValues = new[]
         {
             SupportedPolicySchemaUri,
-            DeprecatedPolicySchemaUriReleaseBranch,
-            DeprecatedPolicySchemaUri,
             SupportedPolicySchemaPath,
             "./" + SupportedPolicySchemaPath,
             "../" + SupportedPolicySchemaPath,
@@ -398,21 +394,14 @@ public sealed class RepoConfigurationLoader
         }
     }
 
-    private static string? FindLocalSchemaPath(string baseDirectory, string schemaFileName, string? legacySchemaFileName = null)
+    private static string? FindLocalSchemaPath(string baseDirectory, string schemaFileName)
     {
-        var candidates = new List<string>
-        {
+        string[] candidates =
+        [
             Path.Combine(baseDirectory, schemaFileName),
             Path.Combine(baseDirectory, "..", schemaFileName),
             Path.Combine(baseDirectory, ".rexo", schemaFileName),
-        };
-
-        if (!string.IsNullOrWhiteSpace(legacySchemaFileName))
-        {
-            candidates.Add(Path.Combine(baseDirectory, legacySchemaFileName));
-            candidates.Add(Path.Combine(baseDirectory, "..", legacySchemaFileName));
-            candidates.Add(Path.Combine(baseDirectory, ".rexo", legacySchemaFileName));
-        }
+        ];
 
         return candidates.FirstOrDefault(File.Exists);
     }

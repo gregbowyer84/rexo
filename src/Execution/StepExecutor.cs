@@ -27,11 +27,12 @@ public sealed class StepExecutor : IStepExecutor
     {
         var stepId = stepDefinition.Id ?? GenerateStepId(stepDefinition);
         var sw = System.Diagnostics.Stopwatch.StartNew();
+        var stepContext = ApplyWithOverrides(stepDefinition, context);
 
         // Evaluate when condition — skip if condition is falsy
         if (!string.IsNullOrEmpty(stepDefinition.When))
         {
-            var condition = _templateRenderer.Render(stepDefinition.When, context);
+            var condition = _templateRenderer.Render(stepDefinition.When, stepContext);
             if (!IsTruthy(condition))
             {
                 sw.Stop();
@@ -48,15 +49,15 @@ public sealed class StepExecutor : IStepExecutor
 
         if (!string.IsNullOrEmpty(stepDefinition.Run))
         {
-            result = await ExecuteRunAsync(stepId, stepDefinition.Run, stepDefinition, context, sw, cancellationToken);
+            result = await ExecuteRunAsync(stepId, stepDefinition.Run, stepDefinition, stepContext, sw, cancellationToken);
         }
         else if (!string.IsNullOrEmpty(stepDefinition.Uses))
         {
-            result = await ExecuteUsesAsync(stepId, stepDefinition.Uses, stepDefinition, context, sw, cancellationToken);
+            result = await ExecuteUsesAsync(stepId, stepDefinition.Uses, stepDefinition, stepContext, sw, cancellationToken);
         }
         else if (!string.IsNullOrEmpty(stepDefinition.Command))
         {
-            result = await ExecuteCommandStepAsync(stepId, stepDefinition.Command, context, sw, cancellationToken);
+            result = await ExecuteCommandStepAsync(stepId, stepDefinition.Command, stepContext, sw, cancellationToken);
         }
         else
         {
@@ -204,6 +205,22 @@ public sealed class StepExecutor : IStepExecutor
          !value.Equals("false", StringComparison.OrdinalIgnoreCase) &&
          value != "0" &&
          !value.Equals("no", StringComparison.OrdinalIgnoreCase));
+
+    private ExecutionContext ApplyWithOverrides(StepDefinition stepDefinition, ExecutionContext context)
+    {
+        if (stepDefinition.With is not { Count: > 0 })
+        {
+            return context;
+        }
+
+        var mergedOptions = new Dictionary<string, string?>(context.Options, StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, templateValue) in stepDefinition.With)
+        {
+            mergedOptions[key] = _templateRenderer.Render(templateValue, context);
+        }
+
+        return context with { Options = mergedOptions };
+    }
 
     private static string GenerateStepId(StepDefinition step)
     {

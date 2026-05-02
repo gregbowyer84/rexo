@@ -16,6 +16,7 @@ public sealed class VersionProviderRegistry
     public static VersionProviderRegistry CreateDefault()
     {
         var registry = new VersionProviderRegistry();
+        registry.Register("auto", new AutoVersionProvider());
         registry.Register("fixed", new FixedVersionProvider());
         registry.Register("env", new EnvVersionProvider());
         registry.Register("git", new GitTagVersionProvider());

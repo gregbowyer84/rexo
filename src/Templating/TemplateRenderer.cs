@@ -25,19 +25,24 @@ public sealed class TemplateRenderer : ITemplateRenderer
         if (expr.Contains(" == ", StringComparison.Ordinal))
         {
             var idx = expr.IndexOf(" == ", StringComparison.Ordinal);
-            var left = ResolveValue(expr[..idx].Trim(), root, context);
-            var right = ResolveValue(expr[(idx + 4)..].Trim(), root, context);
+            var left = ResolveOperand(expr[..idx].Trim(), root, context);
+            var right = ResolveOperand(expr[(idx + 4)..].Trim(), root, context);
             return string.Equals(left, right, StringComparison.Ordinal) ? "true" : "false";
         }
 
         if (expr.Contains(" != ", StringComparison.Ordinal))
         {
             var idx = expr.IndexOf(" != ", StringComparison.Ordinal);
-            var left = ResolveValue(expr[..idx].Trim(), root, context);
-            var right = ResolveValue(expr[(idx + 4)..].Trim(), root, context);
+            var left = ResolveOperand(expr[..idx].Trim(), root, context);
+            var right = ResolveOperand(expr[(idx + 4)..].Trim(), root, context);
             return !string.Equals(left, right, StringComparison.Ordinal) ? "true" : "false";
         }
 
+        return ResolveOperand(expr, root, context);
+    }
+
+    private static string ResolveOperand(string expr, Dictionary<string, object?> root, ExecutionContext context)
+    {
         var pipeIndex = expr.IndexOf('|', StringComparison.Ordinal);
         string path;
         string? filter = null;
@@ -64,6 +69,7 @@ public sealed class TemplateRenderer : ITemplateRenderer
         else
         {
             path = expr;
+            return ResolveValue(path.Trim(), root, context);
         }
 
         var value = ResolvePath(path, root, context);
@@ -122,6 +128,21 @@ public sealed class TemplateRenderer : ITemplateRenderer
     /// </summary>
     private static string ResolveValue(string expr, Dictionary<string, object?> root, ExecutionContext context)
     {
+        if (expr.Equals("true", StringComparison.OrdinalIgnoreCase))
+        {
+            return "true";
+        }
+
+        if (expr.Equals("false", StringComparison.OrdinalIgnoreCase))
+        {
+            return "false";
+        }
+
+        if (expr.Equals("null", StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Empty;
+        }
+
         if (expr.Length >= 2 &&
             ((expr[0] == '\'' && expr[^1] == '\'') ||
              (expr[0] == '"' && expr[^1] == '"')))

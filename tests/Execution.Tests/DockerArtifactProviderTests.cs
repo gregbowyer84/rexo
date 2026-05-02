@@ -138,6 +138,51 @@ public sealed class DockerArtifactProviderTests
     }
 
     [Fact]
+    public async Task BuildAsyncEmitsPrereleaseMajorAndMajorMinorTagsWithSuffix()
+    {
+        var invocations = new List<DockerInvocation>();
+        var provider = new DockerArtifactProvider(
+            runDockerAsync: (args, workingDirectory, envOverrides, standardInput, cancellationToken) =>
+            {
+                invocations.Add(new DockerInvocation(args.ToArray(), envOverrides, standardInput));
+                return Task.FromResult((0, string.Empty));
+            },
+            isBuildxAvailableAsync: (_, _, _) => Task.FromResult(true));
+
+        var artifact = new ArtifactConfig(
+            "docker",
+            "sample",
+            JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
+                """
+                {
+                  "image": "ghcr.io/acme/widget",
+                  "tags": ["full", "majorMinor", "major"]
+                }
+                """)!);
+
+        var context = new ExecutionContext(
+            RepositoryRoot: Path.GetTempPath(),
+            Branch: "feature/prerelease-tags",
+            CommitSha: "abcdef123456",
+            Values: new Dictionary<string, object?>())
+        {
+            Version = new VersionResult("0.1.0-local", 0, 1, 0, "local", "abcdef123456", "abcdef", true, false)
+            {
+                DockerVersion = "0.1.0-local",
+            },
+            ShortSha = "abcdef",
+        };
+
+        var result = await provider.BuildAsync(artifact, context, CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Single(invocations);
+        Assert.Contains("ghcr.io/acme/widget:0.1.0-local", invocations[0].Arguments);
+        Assert.Contains("ghcr.io/acme/widget:0.1-local", invocations[0].Arguments);
+        Assert.Contains("ghcr.io/acme/widget:0-local", invocations[0].Arguments);
+    }
+
+    [Fact]
     public async Task BuildAsyncFailsWhenSecretsRequireBuildx()
     {
         var provider = new DockerArtifactProvider(

@@ -1,0 +1,77 @@
+namespace Rexo.Cli;
+
+using System.Text.Json;
+using Rexo.Artifacts;
+using Rexo.Artifacts.Docker;
+using Rexo.Artifacts.NuGet;
+using Rexo.Configuration;
+using Rexo.Configuration.Models;
+using Rexo.Core.Models;
+using Rexo.Execution;
+using Rexo.Policies;
+using Rexo.Templating;
+using Rexo.Versioning;
+
+/// <summary>
+/// Bootstraps the CLI service graph: registry, executor, and effective configuration.
+/// Handles config loading, policy loading, service composition, and command registration.
+/// </summary>
+internal static class CliBootstrapper
+{
+    public static async Task<(CommandRegistry registry, DefaultCommandExecutor executor, RepoConfig? config)>
+        BuildServicesAsync(string workingDir, bool debug, CancellationToken cancellationToken)
+    {
+        if (debug) Console.WriteLine($"[debug] Loading configuration from {workingDir}");
+
+        // Load config
+        RepoConfig? config = await ConfigBuilder.LoadConfigAsync(workingDir, debug, cancellationToken);
+
+        // Load and merge policies
+        PolicyConfig? policyConfig = null;
+        if (config is not null)
+        {
+            policyConfig = await ConfigBuilder.LoadAndMergePoliciesAsync(config, workingDir, debug, cancellationToken);
+        }
+
+        var effectiveConfig = ConfigBuilder.MergePolicyIntoEffectiveConfig(config, policyConfig);
+
+        // Create command registry
+        var configPath = ConfigFileLocator.FindConfigPath(workingDir)
+            ?? ConfigFileLocator.GetDefaultConfigPath(workingDir);
+        var registry = BuiltinCommandRegistration.CreateDefault(effectiveConfig, File.Exists(configPath) ? configPath : null);
+        var executor = new DefaultCommandExecutor(registry);
+
+        // Register config commands if config is present
+        if (config is not null)
+        {
+            RegisterConfigCommands(registry, config, workingDir, executor, policyConfig ?? new PolicyConfig());
+        }
+
+        return (registry, executor, effectiveConfig);
+    }
+
+    private static void RegisterConfigCommands(
+        CommandRegistry registry,
+        RepoConfig config,
+        string workingDir,
+        DefaultCommandExecutor executor,
+        PolicyConfig policyConfig)
+    {
+        // Set up provider registries
+        var templateRenderer = new TemplateRenderer();
+        var versionProviders = VersionProviderRegistry.CreateDefault();
+        var artifactProviders = new ArtifactProviderRegistry();
+        artifactProviders.Register("docker", new DockerArtifactProvider());
+        artifactProviders.Register("nuget", new NuGetArtifactProvider());
+
+        var builtinRegistry = new BuiltinRegistry();
+        var configLoader = new ConfigCommandLoader(
+            builtinRegistry,
+            templateRenderer,
+            versionProviders,
+            artifactProviders);
+
+        configLoader.LoadInto(registry, config, workingDir, executor);
+        configLoader.LoadPolicyCommandsInto(registry, policyConfig, config, workingDir, executor);
+    }
+}

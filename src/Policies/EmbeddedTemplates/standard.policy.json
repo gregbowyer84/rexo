@@ -2,41 +2,198 @@
   "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json",
   "schemaVersion": "1.0",
   "name": "standard-policy",
-  "description": "Standard policy template — provides sensible defaults for most repositories.",
+  "description": "Standard lifecycle policy template with user-facing commands.",
   "commands": {
-    "ci": {
-      "description": "Run the full CI pipeline: validate, test, and build artifacts.",
+    "plan": {
+      "description": "Validate and show what would be built/pushed.",
+      "options": {
+        "push": {
+          "type": "bool",
+          "default": false
+        }
+      },
+      "steps": [
+        {
+          "id": "validate",
+          "uses": "builtin:validate"
+        },
+        {
+          "id": "version",
+          "uses": "builtin:resolve-version"
+        },
+        {
+          "id": "plan",
+          "uses": "builtin:plan-artifacts",
+          "with": {
+            "push": "{{options.push}}"
+          }
+        }
+      ]
+    },
+    "validate": {
+      "description": "Validate repository configuration.",
       "options": {},
       "steps": [
-        { "uses": "builtin:validate",         "description": "Validate repo.json" },
-        { "uses": "builtin:resolve-version",  "description": "Resolve version" },
-        { "uses": "builtin:test",             "description": "Run tests" },
-        { "uses": "builtin:analyze",          "description": "Run analysis" },
-        { "uses": "builtin:build-artifacts",  "description": "Build artifacts" }
+        {
+          "id": "validate",
+          "uses": "builtin:validate"
+        }
+      ]
+    },
+    "version": {
+      "description": "Resolve repository version.",
+      "options": {},
+      "steps": [
+        {
+          "id": "version",
+          "uses": "builtin:resolve-version"
+        }
+      ]
+    },
+    "test": {
+      "description": "Run configured tests.",
+      "options": {},
+      "steps": [
+        {
+          "id": "test",
+          "uses": "builtin:test"
+        }
+      ]
+    },
+    "analyze": {
+      "description": "Run configured analysis.",
+      "options": {},
+      "steps": [
+        {
+          "id": "analyze",
+          "uses": "builtin:analyze"
+        }
+      ]
+    },
+    "verify": {
+      "description": "Run validation, tests, and analysis.",
+      "options": {},
+      "steps": [
+        {
+          "id": "validate",
+          "uses": "builtin:validate"
+        },
+        {
+          "id": "test",
+          "uses": "builtin:test"
+        },
+        {
+          "id": "analyze",
+          "uses": "builtin:analyze"
+        }
+      ]
+    },
+    "build": {
+      "description": "Build and tag configured artifacts locally.",
+      "options": {},
+      "steps": [
+        {
+          "id": "validate",
+          "uses": "builtin:validate"
+        },
+        {
+          "id": "version",
+          "uses": "builtin:resolve-version"
+        },
+        {
+          "id": "build",
+          "uses": "builtin:build-artifacts"
+        },
+        {
+          "id": "tag",
+          "uses": "builtin:tag-artifacts"
+        }
+      ]
+    },
+    "tag": {
+      "description": "Tag configured artifacts.",
+      "options": {},
+      "steps": [
+        {
+          "id": "version",
+          "uses": "builtin:resolve-version"
+        },
+        {
+          "id": "tag",
+          "uses": "builtin:tag-artifacts"
+        }
+      ]
+    },
+    "push": {
+      "description": "Push configured artifacts when explicitly confirmed.",
+      "options": {
+        "confirm": {
+          "type": "bool",
+          "default": false
+        }
+      },
+      "steps": [
+        {
+          "id": "push",
+          "uses": "builtin:push-artifacts",
+          "with": {
+            "confirm": "{{options.confirm}}"
+          }
+        }
       ]
     },
     "release": {
-      "description": "Run CI then push artifacts. Only runs outside of pull requests.",
+      "description": "Validate, verify, build, tag, and optionally push configured artifacts.",
       "options": {
-        "push": { "type": "bool", "default": "false" }
+        "push": {
+          "type": "bool",
+          "default": false
+        }
       },
       "steps": [
-        { "uses": "builtin:validate",         "description": "Validate repo.json" },
-        { "uses": "builtin:resolve-version",  "description": "Resolve version" },
-        { "uses": "builtin:test",             "description": "Run tests" },
-        { "uses": "builtin:analyze",          "description": "Run analysis" },
-        { "uses": "builtin:build-artifacts",  "description": "Build artifacts" },
-        { "uses": "builtin:tag-artifacts",    "description": "Tag artifacts" },
         {
+          "id": "validate",
+          "uses": "builtin:validate"
+        },
+        {
+          "id": "version",
+          "uses": "builtin:resolve-version"
+        },
+        {
+          "id": "verify",
+          "uses": "builtin:verify"
+        },
+        {
+          "id": "build",
+          "uses": "builtin:build-artifacts"
+        },
+        {
+          "id": "tag",
+          "uses": "builtin:tag-artifacts"
+        },
+        {
+          "id": "push",
           "uses": "builtin:push-artifacts",
-          "description": "Push artifacts",
-          "when": "{{options.push}} == true"
+          "when": "{{options.push}}",
+          "with": {
+            "confirm": "{{options.push}}"
+          }
+        }
+      ]
+    },
+    "clean": {
+      "description": "Remove generated Rexo output (artifacts/)",
+      "options": {},
+      "steps": [
+        {
+          "id": "clean",
+          "uses": "builtin:clean"
         }
       ]
     }
   },
   "aliases": {
-    "build": "ci",
-    "publish": "release"
+    "all": "release",
+    "ship": "push"
   }
 }

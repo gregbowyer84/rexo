@@ -112,7 +112,8 @@ Built-in primitives are step types used as `uses: builtin:my-primitive`.
    });
    ```
 
-2. Document the new primitive in `docs/CONFIGURATION.md`.
+2. Document the new primitive contract in `docs/BUILTINS.md` (and reference it from
+   `docs/CONFIGURATION.md` when needed).
 
 ---
 

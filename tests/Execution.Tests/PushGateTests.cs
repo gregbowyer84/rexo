@@ -43,14 +43,11 @@ public sealed class PushGateTests
                             }
                             """)!),
                 ],
-                PushRulesJson = """
-                    {
-                      "enabled": false
-                    }
-                    """,
+                Runtime = new RepoRuntimeConfig(
+                    Push: new RepoPushConfig(Enabled: false)),
             });
 
-        var result = await ExecuteAsync(executor, "push");
+        var result = await ExecuteAsync(executor, "push", new Dictionary<string, string?> { ["confirm"] = "true" }, Path.GetTempPath());
 
         Assert.True(result.Success);
         Assert.Single(provider.PushedArtifacts);
@@ -97,14 +94,11 @@ public sealed class PushGateTests
                             }
                             """)!),
                 ],
-                PushRulesJson = """
-                    {
-                      "branches": ["main"]
-                    }
-                    """,
+                Runtime = new RepoRuntimeConfig(
+                    Push: new RepoPushConfig(Branches: ["main"])),
             });
 
-        var result = await ExecuteAsync(executor, "push");
+        var result = await ExecuteAsync(executor, "push", new Dictionary<string, string?> { ["confirm"] = "true" }, Path.GetTempPath());
 
         Assert.True(result.Success);
         Assert.Single(provider.PushedArtifacts);
@@ -120,7 +114,8 @@ public sealed class PushGateTests
 
     private static (DefaultCommandExecutor Executor, BuiltinRegistry Builtins) CreateExecutor(
         IArtifactProvider provider,
-        RepoConfig config)
+        RepoConfig config,
+        string? repositoryRoot = null)
     {
         var builtins = new BuiltinRegistry();
         var providerRegistry = new ArtifactProviderRegistry();
@@ -134,20 +129,147 @@ public sealed class PushGateTests
 
         var registry = new CommandRegistry();
         var executor = new DefaultCommandExecutor(registry);
-        loader.LoadInto(registry, config, Path.GetTempPath(), executor);
+        loader.LoadInto(registry, config, repositoryRoot ?? Path.GetTempPath(), executor);
         return (executor, builtins);
     }
 
     private static Task<CommandResult> ExecuteAsync(DefaultCommandExecutor executor, string commandName) =>
+        ExecuteAsync(executor, commandName, new Dictionary<string, string?>(), Path.GetTempPath());
+
+    private static Task<CommandResult> ExecuteAsync(
+        DefaultCommandExecutor executor,
+        string commandName,
+        IReadOnlyDictionary<string, string?> options,
+        string workingDirectory) =>
         executor.ExecuteAsync(
             commandName,
             new CommandInvocation(
                 new Dictionary<string, string>(),
-                new Dictionary<string, string?>(),
+                options,
                 Json: false,
                 JsonFile: null,
-                WorkingDirectory: Path.GetTempPath()),
+                WorkingDirectory: workingDirectory),
             CancellationToken.None);
+
+    [Fact]
+    public async Task PushRequiresExplicitConfirmationLocally()
+    {
+        var provider = new RecordingArtifactProvider("docker");
+        var (executor, _) = CreateExecutor(
+            provider,
+            new RepoConfig(
+                Name: "test",
+                Commands: new Dictionary<string, RepoCommandConfig>
+                {
+                    ["push"] = new RepoCommandConfig(
+                        Description: "push",
+                        Options: new Dictionary<string, RepoOptionConfig>(),
+                        Steps: [new RepoStepConfig(Id: "push", Uses: "builtin:push-artifacts")]),
+                },
+                Aliases: new Dictionary<string, string>())
+            {
+                Artifacts = [new RepoArtifactConfig("docker", "a")],
+            });
+
+        var result = await ExecuteAsync(executor, "push");
+
+        Assert.True(result.Success);
+        Assert.Empty(provider.PushedArtifacts);
+        Assert.Single(result.PushDecisions);
+        Assert.Contains("use --confirm locally", result.PushDecisions[0].Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task PushWritesManifestToConfiguredOutputRoot()
+    {
+        var provider = new RecordingArtifactProvider("docker");
+        var repoRoot = Path.Combine(Path.GetTempPath(), $"rexo-output-root-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(repoRoot);
+
+        try
+        {
+            var (executor, _) = CreateExecutor(
+                provider,
+                new RepoConfig(
+                    Name: "test",
+                    Commands: new Dictionary<string, RepoCommandConfig>
+                    {
+                        ["push"] = new RepoCommandConfig(
+                            Description: "push",
+                            Options: new Dictionary<string, RepoOptionConfig>(),
+                            Steps: [new RepoStepConfig(Id: "push", Uses: "builtin:push-artifacts")]),
+                    },
+                    Aliases: new Dictionary<string, string>())
+                {
+                    Artifacts = [new RepoArtifactConfig("docker", "a")],
+                    Runtime = new RepoRuntimeConfig(
+                        Output: new RepoOutputConfig(EmitRuntimeFiles: true, Root: "output")),
+                },
+                repoRoot);
+
+            var result = await ExecuteAsync(
+                executor,
+                "push",
+                new Dictionary<string, string?> { ["confirm"] = "true" },
+                repoRoot);
+
+            Assert.True(result.Success);
+            Assert.True(File.Exists(Path.Combine(repoRoot, "output", "manifest.json")));
+        }
+        finally
+        {
+            if (Directory.Exists(repoRoot))
+            {
+                Directory.Delete(repoRoot, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task PushDoesNotWriteManifestWhenEmitRuntimeFilesDisabled()
+    {
+        var provider = new RecordingArtifactProvider("docker");
+        var repoRoot = Path.Combine(Path.GetTempPath(), $"rexo-emit-off-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(repoRoot);
+
+        try
+        {
+            var (executor, _) = CreateExecutor(
+                provider,
+                new RepoConfig(
+                    Name: "test",
+                    Commands: new Dictionary<string, RepoCommandConfig>
+                    {
+                        ["push"] = new RepoCommandConfig(
+                            Description: "push",
+                            Options: new Dictionary<string, RepoOptionConfig>(),
+                            Steps: [new RepoStepConfig(Id: "push", Uses: "builtin:push-artifacts")]),
+                    },
+                    Aliases: new Dictionary<string, string>())
+                {
+                    Artifacts = [new RepoArtifactConfig("docker", "a")],
+                    Runtime = new RepoRuntimeConfig(
+                        Output: new RepoOutputConfig(EmitRuntimeFiles: false, Root: "output")),
+                },
+                repoRoot);
+
+            var result = await ExecuteAsync(
+                executor,
+                "push",
+                new Dictionary<string, string?> { ["confirm"] = "true" },
+                repoRoot);
+
+            Assert.True(result.Success);
+            Assert.False(File.Exists(Path.Combine(repoRoot, "output", "manifest.json")));
+        }
+        finally
+        {
+            if (Directory.Exists(repoRoot))
+            {
+                Directory.Delete(repoRoot, true);
+            }
+        }
+    }
 
     private sealed class RecordingArtifactProvider(string type) : IArtifactProvider
     {

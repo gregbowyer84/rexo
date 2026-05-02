@@ -116,6 +116,13 @@ public sealed class DockerArtifactProvider : IArtifactProvider
         return new ArtifactTagResult(artifact.Name, true, tags);
     }
 
+    public IReadOnlyList<string> GetPlannedTags(ArtifactConfig artifact, ExecutionContext context)
+    {
+        var dotEnv = RepositoryEnvironmentFiles.Load(context.RepositoryRoot);
+        var settings = ResolveBuildSettings(artifact, dotEnv, context);
+        return BuildTags(settings.Image, artifact, context);
+    }
+
     public async Task<ArtifactPushResult> PushAsync(
         ArtifactConfig artifact,
         ExecutionContext context,
@@ -193,8 +200,8 @@ public sealed class DockerArtifactProvider : IArtifactProvider
                 "majorminor" when context.Version is not null => $"{image}:{FormatMajorMinorTag(context.Version, settings.Classification)}",
                 "majorMinor" when context.Version is not null => $"{image}:{FormatMajorMinorTag(context.Version, settings.Classification)}",
                 "semver" when versionTag is not null => $"{image}:{versionTag}",
-                "major-minor" when context.Version is not null => $"{image}:{context.Version.Major}.{context.Version.Minor}",
-                "major" when context.Version is not null => $"{image}:{context.Version.Major}",
+                "major-minor" when context.Version is not null => $"{image}:{FormatMajorMinorTag(context.Version, settings.Classification)}",
+                "major" when context.Version is not null => $"{image}:{FormatMajorTag(context.Version)}",
                 "branch" when context.Branch is not null => $"{image}:{Slug(context.Branch)}",
                 "sha" when context.ShortSha is not null => $"{image}:sha-{context.ShortSha}",
                 "latest-on-main" when context.Branch == "main" => $"{image}:latest",
@@ -955,10 +962,20 @@ public sealed class DockerArtifactProvider : IArtifactProvider
     private static string FormatMajorMinorTag(VersionResult version, BuildClassification classification)
     {
         var value = $"{version.Major}.{version.Minor}";
+        if (!string.IsNullOrWhiteSpace(version.PreRelease))
+        {
+            return value + "-" + version.PreRelease;
+        }
+
         return classification == BuildClassification.NonPublic && string.IsNullOrWhiteSpace(version.PreRelease)
             ? value + "-pre"
             : value;
     }
+
+    private static string FormatMajorTag(VersionResult version) =>
+        !string.IsNullOrWhiteSpace(version.PreRelease)
+            ? $"{version.Major}-{version.PreRelease}"
+            : version.Major.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     private static bool BranchMatches(string pattern, string branch)
     {

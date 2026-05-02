@@ -161,6 +161,26 @@ public sealed class TemplateRendererTests
     }
 
     [Fact]
+    public void EqualityExpressionSupportsBooleanLiteral()
+    {
+        var renderer = new TemplateRenderer();
+        var ctx = MakeContext(options: new Dictionary<string, string?> { ["confirm"] = "true" });
+        var result = renderer.Render("{{options.confirm == true}}", ctx);
+        Assert.Equal("true", result);
+    }
+
+    [Fact]
+    public void EqualityExpressionSupportsFilterOperands()
+    {
+        var renderer = new TemplateRenderer();
+        var missing = MakeContext();
+        var confirmed = MakeContext(options: new Dictionary<string, string?> { ["confirm"] = "true" });
+
+        Assert.Equal("true", renderer.Render("{{options.confirm | default(false) == false}}", missing));
+        Assert.Equal("false", renderer.Render("{{options.confirm | default(false) == false}}", confirmed));
+    }
+
+    [Fact]
     public void EqualityExpressionComparesLiteralToLiteral()
     {
         var renderer = new TemplateRenderer();

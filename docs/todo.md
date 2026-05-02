@@ -1,6 +1,6 @@
 # repoOS Implementation TODO
 
-Last updated: 2026-05-02
+Last updated: 2026-05-09
 
 This checklist maps the current implementation against the project scope in `docs/scope.md`.
 
@@ -101,7 +101,7 @@ Legend:
 - [x] Docker provider: build/tag/push
 - [x] NuGet provider: pack/push
 - [x] Tag strategy support (semver/branch/sha/latest-on-main variants)
-- [x] Push policy rules enforced via `pushRulesJson` (`noPushInPullRequest`, `requireCleanWorkingTree`)
+- [x] Push policy rules enforced via `runtime.push` (`noPushInPullRequest`, `requireCleanWorkingTree`)
 - [x] Artifact manifest file output (`artifacts/manifest.json` written after push)
 - [x] Rich artifact metadata capture (manifest written; Artifacts/PushDecisions now flowed into CommandResult and RunManifest)
 
@@ -151,7 +151,7 @@ Legend:
 
 ## 14) Safety and Governance
 
-- [x] Push rule engine enforced in `builtin:push-artifacts` via `pushRulesJson`
+- [x] Push rule engine enforced in `builtin:push-artifacts` via `runtime.push`
 - [x] Skip push on PR enforcement (noPushInPullRequest rule)
 - [x] Require clean working tree enforcement (requireCleanWorkingTree rule)
 - [x] Secret masking/redaction in logs and outputs (auto-masks env vars containing SECRET, TOKEN, PASSWORD, KEY, APIKEY)

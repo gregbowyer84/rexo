@@ -1,8 +1,8 @@
-# `repo` CLI – Comprehensive Build Plan
+# `rx` CLI – Comprehensive Build Plan
 
 ## 1. Product Summary
 
-`repo` is a repository-native automation CLI.
+`rx` is a repository-native automation CLI.
 
 It provides a single standard interface for:
 
@@ -21,7 +21,7 @@ It provides a single standard interface for:
 The core idea:
 
 ```text
-repo = repository operating system
+rx = repository execution engine
 ```
 
 The tool should allow every repository to define its behaviour through configuration, policy templates, and provider templates, while keeping the CLI interface minimal and stable.
@@ -63,25 +63,25 @@ CI is only a runner.
 ### Local
 
 ```bash
-repo list
-repo explain release
-repo release
-repo release --push
-repo branch feature customer-search
-repo ui
+rx list
+rx explain release
+rx release
+rx release --push
+rx branch feature customer-search
+rx ui
 ```
 
 ### CI
 
 ```bash
-repo release --push --json-file artifacts/manifests/release.json
+rx release --push --json-file artifacts/manifests/release.json
 ```
 
 ### With explicit run command
 
 ```bash
-repo run release --push
-repo run branch feature customer-search
+rx run release --push
+rx run branch feature customer-search
 ```
 
 ---
@@ -91,28 +91,28 @@ repo run branch feature customer-search
 The fixed CLI should remain small.
 
 ```bash
-repo run <command>
-repo list
-repo explain <command>
-repo doctor
-repo version
-repo help
-repo ui
+rx run <command>
+rx list
+rx explain <command>
+rx doctor
+rx version
+rx help
+rx ui
 ```
 
 Optional direct command execution:
 
 ```bash
-repo <configured-command>
+rx <configured-command>
 ```
 
 Examples:
 
 ```bash
-repo release --push
-repo verify
-repo branch feature my-change
-repo config resolved
+rx release --push
+rx verify
+rx branch feature my-change
+rx config resolved
 ```
 
 These are resolved from config, not hardcoded.
@@ -134,7 +134,7 @@ Command resolution order:
 Example:
 
 ```bash
-repo branch feature customer-search
+rx branch feature customer-search
 ```
 
 Could resolve to the configured command:
@@ -410,11 +410,11 @@ Support explicit append later.
 ## 12. Config Inspection Commands
 
 ```bash
-repo config resolved
-repo config sources
-repo config materialize
-repo explain config
-repo explain version
+rx config resolved
+rx config sources
+rx config materialize
+rx explain config
+rx explain version
 ```
 
 These can be config-defined, but the engine should provide built-in primitives for them.
@@ -511,7 +511,7 @@ Example:
 Usage:
 
 ```bash
-repo branch feature customer-search
+rx branch feature customer-search
 ```
 
 ---
@@ -543,7 +543,7 @@ Example:
 Usage:
 
 ```bash
-repo release --push --environment prod
+rx release --push --environment prod
 ```
 
 Supported option types:
@@ -1343,11 +1343,11 @@ errors
 Support:
 
 ```bash
-repo run release --json
-repo run release --json-file artifacts/manifests/release.json
-repo list --json
-repo explain release --json
-repo config resolved --json
+rx run release --json
+rx run release --json-file artifacts/manifests/release.json
+rx list --json
+rx explain release --json
+rx config resolved --json
 ```
 
 JSON output should be stable and versioned.
@@ -1386,13 +1386,13 @@ The same command must work locally and in CI.
 Local:
 
 ```bash
-repo release --push
+rx release --push
 ```
 
 CI:
 
 ```bash
-repo release --push --json-file artifacts/manifests/release.json
+rx release --push --json-file artifacts/manifests/release.json
 ```
 
 CI config should be thin:
@@ -1519,18 +1519,18 @@ UI = rich local presentation
 CLI examples:
 
 ```bash
-repo release --push
-repo explain release
-repo list
+rx release --push
+rx explain release
+rx list
 ```
 
 UI examples:
 
 ```bash
-repo ui
-repo init --interactive
-repo release --interactive
-repo explain release --interactive
+rx ui
+rx init --interactive
+rx release --interactive
+rx explain release --interactive
 ```
 
 UI features:
@@ -1932,10 +1932,10 @@ silent
 Global flags:
 
 ```bash
-repo release --verbose
-repo release --debug
-repo release --quiet
-repo release --json
+rx release --verbose
+rx release --debug
+rx release --quiet
+rx release --json
 ```
 
 Human output via Spectre.Console.
@@ -1993,7 +1993,7 @@ This is essential for trust.
 Although not a kernel command, most policies should expose:
 
 ```bash
-repo plan
+rx plan
 ```
 
 `plan` should show:
@@ -2063,11 +2063,11 @@ NuGet package policy source
 Deliver:
 
 ```text
-repo version
-repo help
-repo doctor
-repo list
-repo run <command>
+rx version
+rx help
+rx doctor
+rx list
+rx run <command>
 direct config command dispatch
 ```
 
@@ -2259,7 +2259,7 @@ Run:
 
 ```bash
 dotnet tool restore
-repo release --push
+rx release --push
 ```
 
 ---
@@ -2348,16 +2348,16 @@ steps:
   - script: dotnet tool restore
     displayName: Restore tools
 
-  - script: repo release --push --json-file artifacts/manifests/release.json
+  - script: rx release --push --json-file artifacts/manifests/release.json
     displayName: Release
 ```
 
 Planned scaffolding command:
 
 ```text
-repo init ci --provider azdo
-repo init ci --provider github
-repo init ci --provider both
+rx init ci --provider azdo
+rx init ci --provider github
+rx init ci --provider both
 ```
 
 ---

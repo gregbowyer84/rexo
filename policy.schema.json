@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json",
   "title": "Rexo policy configuration schema",
+  "description": "Schema for policy files that provide shared command and alias baselines.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -14,6 +15,7 @@
   "properties": {
     "$schema": {
       "type": "string",
+      "description": "Schema URI/path used by editors and validators for policy files.",
       "enum": [
         "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json",
         "https://raw.githubusercontent.com/agile-north/rexo/release/next/policy.schema.json",
@@ -26,24 +28,29 @@
     },
     "schemaVersion": {
       "type": "string",
+      "description": "Policy schema contract version. Currently only 1.0 is supported.",
       "const": "1.0"
     },
     "name": {
       "type": "string",
+      "description": "Human-friendly policy name shown in diagnostics/output.",
       "minLength": 1
     },
     "description": {
-      "type": "string"
+      "type": "string",
+      "description": "Optional longer description of what the policy provides."
     },
     "commands": {
       "type": "object",
       "minProperties": 1,
+      "description": "Policy-defined commands merged into repository command space.",
       "additionalProperties": {
         "$ref": "#/$defs/repoCommand"
       }
     },
     "aliases": {
       "type": "object",
+      "description": "Policy-defined command aliases. Key is alias name, value is command target.",
       "additionalProperties": {
         "type": "string"
       }
@@ -52,28 +59,33 @@
   "$defs": {
     "repoCommand": {
       "type": "object",
+      "description": "Command definition contributed by a policy.",
       "additionalProperties": false,
       "required": [
         "steps"
       ],
       "properties": {
         "description": {
-          "type": "string"
+          "type": "string",
+          "description": "Human-readable command summary shown in help/list output."
         },
         "args": {
           "type": "object",
+          "description": "Positional argument declarations keyed by argument name.",
           "additionalProperties": {
             "$ref": "#/$defs/argConfig"
           }
         },
         "options": {
           "type": "object",
+          "description": "Named option declarations keyed by option name.",
           "additionalProperties": {
             "$ref": "#/$defs/optionConfig"
           }
         },
         "steps": {
           "type": "array",
+          "description": "Ordered execution steps for this command.",
           "items": {
             "$ref": "#/$defs/step"
           }
@@ -82,34 +94,55 @@
     },
     "argConfig": {
       "type": "object",
+      "description": "Configuration for a positional command argument.",
       "additionalProperties": false,
       "required": [
         "required"
       ],
       "properties": {
         "required": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Whether this positional argument must be provided by the user."
         },
         "description": {
-          "type": "string"
+          "type": "string",
+          "description": "Help text shown for the argument."
         }
       }
     },
     "optionConfig": {
       "type": "object",
+      "description": "Configuration for a named command option.",
       "additionalProperties": false,
       "required": [
         "type"
       ],
       "properties": {
         "type": {
-          "type": "string"
+          "type": "string",
+          "description": "Option value type identifier.",
+          "enum": [
+            "string",
+            "bool",
+            "boolean",
+            "int",
+            "integer",
+            "number"
+          ],
+          "default": "string"
         },
         "default": {
-          "type": "string"
+          "type": [
+            "string",
+            "boolean",
+            "number",
+            "integer"
+          ],
+          "description": "Default value applied when the option is omitted."
         },
         "allowed": {
           "type": "array",
+          "description": "Optional allowed values list enforced at runtime.",
           "items": {
             "type": "string"
           }
@@ -118,31 +151,60 @@
     },
     "step": {
       "type": "object",
+      "description": "Single executable unit in a command pipeline. Exactly one of run, uses, or command must be set.",
       "additionalProperties": false,
       "properties": {
         "id": {
-          "type": "string"
+          "type": "string",
+          "description": "Stable step identifier for logging and dependency wiring."
         },
         "command": {
-          "type": "string"
+          "type": "string",
+          "description": "Invokes another configured command by name."
         },
         "uses": {
-          "type": "string"
+          "type": "string",
+          "description": "Invokes a built-in primitive (for example builtin:verify)."
         },
         "run": {
-          "type": "string"
+          "type": "string",
+          "description": "Shell command text to execute.",
+          "examples": [
+            "dotnet format --verify-no-changes",
+            "npm test"
+          ]
         },
         "when": {
-          "type": "string"
+          "type": "string",
+          "description": "Conditional expression that controls whether the step executes."
+        },
+        "with": {
+          "type": "object",
+          "description": "String key/value inputs passed to the selected built-in or command.",
+          "examples": [
+            {
+              "confirm": "{{options.push}}"
+            },
+            {
+              "push": "{{options.push}}",
+              "stage": "{{args.stage | default(publish)}}"
+            }
+          ],
+          "additionalProperties": {
+            "type": "string"
+          }
         },
         "description": {
-          "type": "string"
+          "type": "string",
+          "description": "Optional step summary shown in plan/log output."
         },
         "continueOnError": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Continue executing later steps when this step fails."
         },
         "dependsOn": {
           "type": "array",
+          "description": "List of step ids that must complete before this step can run.",
           "items": {
             "type": "string"
           }

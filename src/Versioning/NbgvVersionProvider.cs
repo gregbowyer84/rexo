@@ -1,18 +1,29 @@
 namespace Rexo.Versioning;
 
-using System.Diagnostics;
 using System.Text.Json;
 using Rexo.Core.Abstractions;
 using Rexo.Core.Models;
 
 /// <summary>
-/// Resolves the version by shelling out to the <c>nbgv</c> (Nerdbank.GitVersioning) CLI tool.
-/// Runs <c>nbgv get-version -f json</c> and parses the JSON output.
-/// Falls back to <see cref="FixedVersionProvider"/> if nbgv is not installed
-/// or the working directory is not a git repository.
+/// Resolves the version using the Nerdbank.GitVersioning (<c>nbgv</c>) CLI tool.
+/// <para>
+/// Resolution order:
+/// <list type="number">
+///   <item>Host <c>nbgv get-version -f json</c></item>
+///   <item>Docker — mounts the repository into <c>mcr.microsoft.com/dotnet/sdk:latest</c>
+///     and runs <c>dotnet tool restore &amp;&amp; dotnet nbgv get-version --format json</c>.
+///     Requires <c>nbgv</c> (or an alias) to be present in the repo's
+///     <c>.config/dotnet-tools.json</c> manifest.
+///     Skipped when <c>settings["useDocker"] = "false"</c>.</item>
+///   <item>Fallback version</item>
+/// </list>
+/// </para>
+/// Override the Docker image with <c>settings["dockerImage"]</c>.
 /// </summary>
 public sealed class NbgvVersionProvider : IVersionProvider
 {
+    private const string DefaultDockerImage = "mcr.microsoft.com/dotnet/sdk:latest";
+
     public async Task<VersionResult> ResolveAsync(
         VersioningConfig config,
         ExecutionContext context,
@@ -20,50 +31,57 @@ public sealed class NbgvVersionProvider : IVersionProvider
     {
         var workingDir = context.RepositoryRoot;
 
-        try
-        {
-            var (exitCode, output) = await RunProcessAsync(
-                "nbgv",
-                "get-version -f json",
-                workingDir,
-                cancellationToken);
+        // 1. Try host nbgv
+        var result = await TryRunOnHostAsync(workingDir, context, cancellationToken);
+        if (result is not null)
+            return result;
 
-            if (exitCode != 0 || string.IsNullOrWhiteSpace(output))
-            {
-                return Fallback(config, context);
-            }
-
-            return ParseNbgvOutput(output, context) ?? Fallback(config, context);
-        }
-        catch (Exception)
+        // 2. Try Docker fallback
+        if (VersionProcessHelper.UseDockerFallback(config))
         {
-            return Fallback(config, context);
+            var image = VersionProcessHelper.GetDockerImage(config, DefaultDockerImage);
+            result = await TryRunDockerAsync(image, workingDir, context, cancellationToken);
+            if (result is not null)
+                return result;
         }
+
+        return Fallback(config, context);
     }
 
-    private static async Task<(int exitCode, string output)> RunProcessAsync(
-        string fileName,
-        string arguments,
-        string workingDirectory,
+    private static async Task<VersionResult?> TryRunOnHostAsync(
+        string workingDir,
+        ExecutionContext context,
         CancellationToken cancellationToken)
     {
-        var psi = new ProcessStartInfo(fileName, arguments)
-        {
-            WorkingDirectory = workingDirectory,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
+        var (exitCode, output) = await VersionProcessHelper.RunAsync(
+            "nbgv", "get-version -f json", workingDir, cancellationToken);
 
-        using var process = new Process { StartInfo = psi };
-        process.Start();
+        if (exitCode == 0 && !string.IsNullOrWhiteSpace(output))
+            return ParseNbgvOutput(output, context);
 
-        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken);
-        var output = await outputTask;
+        return null;
+    }
 
-        return (process.ExitCode, output);
+    private static async Task<VersionResult?> TryRunDockerAsync(
+        string image,
+        string workingDir,
+        ExecutionContext context,
+        CancellationToken cancellationToken)
+    {
+        // Restore from the repo tool manifest first, then run nbgv.
+        // dotnet tool restore is non-fatal (|| true) so the command doesn't abort
+        // when a manifest is missing or has no nbgv entry; the nbgv call itself will
+        // then fail and return a non-zero exit code.
+        const string script =
+            "dotnet tool restore 1>&2 || true && dotnet nbgv get-version --format json";
+
+        var (exitCode, output) = await VersionProcessHelper.RunSdkDockerScriptAsync(
+            image, workingDir, script, cancellationToken);
+
+        if (exitCode == 0 && !string.IsNullOrWhiteSpace(output))
+            return ParseNbgvOutput(output, context);
+
+        return null;
     }
 
     private static VersionResult? ParseNbgvOutput(string json, ExecutionContext context)

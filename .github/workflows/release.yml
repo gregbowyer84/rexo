@@ -123,7 +123,10 @@ jobs:
           target_commitish: ${{ github.sha }}
           prerelease: ${{ contains(steps.gitversion.outputs.semVer, '-') }}
           generate_release_notes: true
-          files: artifacts/packages/*.nupkg
+          files: |
+            artifacts/packages/*.nupkg
+            rexo.schema.json
+            policy.schema.json
 
       - name: Publish to GitHub Packages
         env:

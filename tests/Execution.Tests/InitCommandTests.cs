@@ -26,11 +26,12 @@ public sealed class InitCommandTests
 
             Assert.True(result.Success);
             var configPath = Path.Combine(dir, ".rexo", "rexo.json");
-            var schemaPath = Path.Combine(dir, ".rexo", "rexo.schema.json");
             Assert.True(File.Exists(configPath));
-            Assert.True(File.Exists(schemaPath));
+            // Default schema source is remote — no local schema file written.
+            var schemaPath = Path.Combine(dir, ".rexo", "rexo.schema.json");
+            Assert.False(File.Exists(schemaPath));
             var content = await File.ReadAllTextAsync(configPath);
-            Assert.Contains("\"$schema\": \"rexo.schema.json\"", content, StringComparison.Ordinal);
+            Assert.Contains("\"$schema\": \"https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json\"", content, StringComparison.Ordinal);
             Assert.Contains("\"schemaVersion\": \"1.0\"", content, StringComparison.Ordinal);
             Assert.Contains("\"commands\"", content, StringComparison.Ordinal);
         }
@@ -110,7 +111,7 @@ public sealed class InitCommandTests
             var configPath = Path.Combine(dir, ".rexo", "rexo.json");
             var configContent = await File.ReadAllTextAsync(configPath);
             Assert.DoesNotContain("\"build\":", configContent, StringComparison.Ordinal);
-            Assert.Contains("\"local build\":", configContent, StringComparison.Ordinal);
+            Assert.Contains("\"compile\":", configContent, StringComparison.Ordinal);
         }
         finally
         {
@@ -147,7 +148,7 @@ public sealed class InitCommandTests
             var configPath = Path.Combine(dir, ".rexo", "rexo.json");
             var content = await File.ReadAllTextAsync(configPath);
             Assert.DoesNotContain("\"build\":", content, StringComparison.Ordinal);
-            Assert.Contains("\"local build\":", content, StringComparison.Ordinal);
+            Assert.Contains("\"compile\":", content, StringComparison.Ordinal);
         }
         finally
         {

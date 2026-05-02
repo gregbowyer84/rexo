@@ -1,17 +1,27 @@
 namespace Rexo.Versioning;
 
-using System.Diagnostics;
 using System.Text.Json;
 using Rexo.Core.Abstractions;
 using Rexo.Core.Models;
 
 /// <summary>
-/// Resolves the version by shelling out to the <c>gitversion</c> CLI tool.
-/// Falls back to <see cref="FixedVersionProvider"/> if gitversion is not installed
-/// or the working directory is not a git repository.
+/// Resolves the version using the GitVersion CLI tool.
+/// <para>
+/// Resolution order:
+/// <list type="number">
+///   <item>Host <c>gitversion /output json</c></item>
+///   <item>Host <c>dotnet-gitversion /output json</c> (some environments install this alias)</item>
+///   <item>Docker — <c>docker run --rm -v &lt;repo&gt;:/repo gittools/gitversion:6.0.0 /output json</c>
+///     (skipped when <c>settings["useDocker"] = "false"</c>)</item>
+///   <item>Fallback version</item>
+/// </list>
+/// </para>
+/// Override the Docker image with <c>settings["dockerImage"]</c>.
 /// </summary>
 public sealed class GitVersionVersionProvider : IVersionProvider
 {
+    private const string DefaultDockerImage = "gittools/gitversion:6.0.0";
+
     public async Task<VersionResult> ResolveAsync(
         VersioningConfig config,
         ExecutionContext context,
@@ -19,50 +29,58 @@ public sealed class GitVersionVersionProvider : IVersionProvider
     {
         var workingDir = context.RepositoryRoot;
 
-        try
-        {
-            var (exitCode, output) = await RunProcessAsync(
-                "gitversion",
-                "/output json",
-                workingDir,
-                cancellationToken);
+        // 1. Try host gitversion
+        var result = await TryRunOnHostAsync(workingDir, context, cancellationToken);
+        if (result is not null)
+            return result;
 
-            if (exitCode != 0 || string.IsNullOrWhiteSpace(output))
-            {
-                return FallbackVersion(config, context);
-            }
-
-            return ParseGitVersionOutput(output, context) ?? FallbackVersion(config, context);
-        }
-        catch (Exception)
+        // 2. Try Docker fallback
+        if (VersionProcessHelper.UseDockerFallback(config))
         {
-            return FallbackVersion(config, context);
+            var image = VersionProcessHelper.GetDockerImage(config, DefaultDockerImage);
+            result = await TryRunDockerAsync(image, workingDir, context, cancellationToken);
+            if (result is not null)
+                return result;
         }
+
+        return FallbackVersion(config, context);
     }
 
-    private static async Task<(int exitCode, string output)> RunProcessAsync(
-        string fileName,
-        string arguments,
-        string workingDirectory,
+    private static async Task<VersionResult?> TryRunOnHostAsync(
+        string workingDir,
+        ExecutionContext context,
         CancellationToken cancellationToken)
     {
-        var psi = new ProcessStartInfo(fileName, arguments)
+        // Try the native gitversion command first, then the dotnet global tool alias
+        foreach (var exe in new[] { "gitversion", "dotnet-gitversion" })
         {
-            WorkingDirectory = workingDirectory,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
+            var (exitCode, output) = await VersionProcessHelper.RunAsync(
+                exe, "/output json", workingDir, cancellationToken);
 
-        using var process = new Process { StartInfo = psi };
-        process.Start();
+            if (exitCode == 0 && !string.IsNullOrWhiteSpace(output))
+            {
+                var result = ParseGitVersionOutput(output, context);
+                if (result is not null)
+                    return result;
+            }
+        }
 
-        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken);
-        var output = await outputTask;
+        return null;
+    }
 
-        return (process.ExitCode, output);
+    private static async Task<VersionResult?> TryRunDockerAsync(
+        string image,
+        string workingDir,
+        ExecutionContext context,
+        CancellationToken cancellationToken)
+    {
+        var (exitCode, output) = await VersionProcessHelper.RunDockerAsync(
+            image, workingDir, ["/output", "json"], cancellationToken);
+
+        if (exitCode == 0 && !string.IsNullOrWhiteSpace(output))
+            return ParseGitVersionOutput(output, context);
+
+        return null;
     }
 
     private static VersionResult? ParseGitVersionOutput(string json, ExecutionContext context)
