@@ -13,6 +13,7 @@
     <Project Path="src/Git/Git.csproj" />
     <Project Path="src/Policies/Policies.csproj" />
     <Project Path="src/Templating/Templating.csproj" />
+    <Project Path="src/Tui/Tui.csproj" />
     <Project Path="src/Ui/Ui.csproj" />
     <Project Path="src/Verification/Verification.csproj" />
     <Project Path="src/Versioning/Versioning.csproj" />

@@ -1,6 +1,7 @@
 namespace Rexo.Execution.Tests;
 
 using Rexo.Core.Models;
+using YamlDotNet.RepresentationModel;
 
 public sealed class InitCommandTests
 {
@@ -394,8 +395,34 @@ public sealed class InitCommandTests
             var result = await executor.ExecuteAsync("init", invocation, CancellationToken.None);
 
             Assert.True(result.Success);
-            Assert.True(File.Exists(Path.Combine(dir, ".github", "workflows", "rexo-release.yml")));
-            Assert.True(File.Exists(Path.Combine(dir, ".azuredevops", "rexo-release.yml")));
+            var githubPath = Path.Combine(dir, ".github", "workflows", "rexo-release.yml");
+            var azdoPath = Path.Combine(dir, ".azuredevops", "rexo-release.yml");
+            Assert.True(File.Exists(githubPath));
+            Assert.True(File.Exists(azdoPath));
+
+            var githubYaml = await File.ReadAllTextAsync(githubPath);
+            var githubRoot = ParseYamlMapping(githubYaml);
+            Assert.Contains("name: rexo-release", githubYaml, StringComparison.Ordinal);
+            Assert.Contains("- name: Checkout", githubYaml, StringComparison.Ordinal);
+            Assert.Contains("  uses: actions/checkout@v4", githubYaml, StringComparison.Ordinal);
+            Assert.Contains("- name: Setup .NET", githubYaml, StringComparison.Ordinal);
+            Assert.Contains("  uses: actions/setup-dotnet@v4", githubYaml, StringComparison.Ordinal);
+            Assert.Contains("  with:", githubYaml, StringComparison.Ordinal);
+            Assert.Contains("    dotnet-version: '10.0.x'", githubYaml, StringComparison.Ordinal);
+            Assert.True(githubRoot.Children.ContainsKey(new YamlScalarNode("on")));
+            Assert.True(githubRoot.Children.ContainsKey(new YamlScalarNode("jobs")));
+
+            var azdoYaml = await File.ReadAllTextAsync(azdoPath);
+            var azdoRoot = ParseYamlMapping(azdoYaml);
+            Assert.Contains("trigger:", azdoYaml, StringComparison.Ordinal);
+            Assert.Contains("- task: UseDotNet@2", azdoYaml, StringComparison.Ordinal);
+            Assert.Contains("  inputs:", azdoYaml, StringComparison.Ordinal);
+            Assert.Contains("    packageType: sdk", azdoYaml, StringComparison.Ordinal);
+            Assert.Contains("    version: 10.0.x", azdoYaml, StringComparison.Ordinal);
+            Assert.Contains("- script: dotnet tool restore", azdoYaml, StringComparison.Ordinal);
+            Assert.Contains("  displayName: Restore tools", azdoYaml, StringComparison.Ordinal);
+            Assert.True(azdoRoot.Children.ContainsKey(new YamlScalarNode("trigger")));
+            Assert.True(azdoRoot.Children.ContainsKey(new YamlScalarNode("steps")));
         }
         finally
         {
@@ -434,5 +461,17 @@ public sealed class InitCommandTests
         {
             if (Directory.Exists(dir)) Directory.Delete(dir, true);
         }
+    }
+
+    private static YamlMappingNode ParseYamlMapping(string content)
+    {
+        using var reader = new StringReader(content);
+        var stream = new YamlStream();
+        stream.Load(reader);
+
+        var root = stream.Documents.Single().RootNode;
+        var mapping = root as YamlMappingNode;
+        Assert.NotNull(mapping);
+        return mapping!;
     }
 }

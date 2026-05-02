@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <ItemGroup>
+    <ProjectReference Include="..\Core\Core.csproj" />
+    <ProjectReference Include="..\Configuration\Configuration.csproj" />
+    <ProjectReference Include="..\Execution\Execution.csproj" />
+    <ProjectReference Include="..\Git\Git.csproj" />
+    <ProjectReference Include="..\Ci\Ci.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="RazorConsole.Core" />
+  </ItemGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+</Project>

@@ -3,6 +3,7 @@
     <ProjectReference Include="..\\Core\\Core.csproj" />
     <ProjectReference Include="..\\Configuration\\Configuration.csproj" />
     <ProjectReference Include="..\\Execution\\Execution.csproj" />
+    <ProjectReference Include="..\Tui\Tui.csproj" />
     <ProjectReference Include="..\\Ui\\Ui.csproj" />
     <ProjectReference Include="..\Artifacts.Helm\Artifacts.Helm.csproj" />
     <ProjectReference Include="..\\Artifacts.Docker\\Artifacts.Docker.csproj" />

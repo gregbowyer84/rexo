@@ -799,59 +799,63 @@ public static class BuiltinCommandRegistration
                         : null;
         }
 
-        private static string BuildGitHubActionsCiTemplate() =>
-                """
-                name: rexo-release
+    private static string BuildGitHubActionsCiTemplate() =>
+        string.Join(
+            Environment.NewLine,
+            [
+                "name: rexo-release",
+                string.Empty,
+                "on:",
+                "  push:",
+                "    branches:",
+                "      - main",
+                "      - release/*",
+                string.Empty,
+                "jobs:",
+                "  release:",
+                "    runs-on: ubuntu-latest",
+                string.Empty,
+                "    steps:",
+                "      - name: Checkout",
+                "        uses: actions/checkout@v4",
+                string.Empty,
+                "      - name: Setup .NET",
+                "        uses: actions/setup-dotnet@v4",
+                "        with:",
+                "          dotnet-version: '10.0.x'",
+                string.Empty,
+                "      - name: Restore tools",
+                "        run: dotnet tool restore",
+                string.Empty,
+                "      - name: Release",
+                "        run: dotnet tool run rx -- release --push --json-file artifacts/manifests/release.json",
+            ]);
 
-                on:
-                    push:
-                        branches:
-                            - main
-                            - release/*
-
-                jobs:
-                    release:
-                        runs-on: ubuntu-latest
-
-                        steps:
-                            - name: Checkout
-                                uses: actions/checkout@v4
-
-                            - name: Setup .NET
-                                uses: actions/setup-dotnet@v4
-                                with:
-                                    dotnet-version: '10.0.x'
-
-                            - name: Restore tools
-                                run: dotnet tool restore
-
-                            - name: Release
-                                run: dotnet tool run rx -- release --push --json-file artifacts/manifests/release.json
-                """;
-
-        private static string BuildAzureDevOpsCiTemplate() =>
-                """
-                trigger:
-                    branches:
-                        include:
-                            - main
-                            - release/*
-
-                pool:
-                    vmImage: ubuntu-latest
-
-                steps:
-                    - task: UseDotNet@2
-                        inputs:
-                            packageType: sdk
-                            version: 10.0.x
-
-                    - script: dotnet tool restore
-                        displayName: Restore tools
-
-                    - script: dotnet tool run rx -- release --push --json-file artifacts/manifests/release.json
-                        displayName: Release
-                """;
+    private static string BuildAzureDevOpsCiTemplate() =>
+        string.Join(
+            Environment.NewLine,
+            [
+                "trigger:",
+                "  branches:",
+                "    include:",
+                "      - main",
+                "      - release/*",
+                string.Empty,
+                "pool:",
+                "  vmImage: ubuntu-latest",
+                string.Empty,
+                "steps:",
+                "  - task: UseDotNet@2",
+                "    inputs:",
+                "      packageType: sdk",
+                "      version: 10.0.x",
+                string.Empty,
+                "  - script: dotnet tool restore",
+                "    displayName: Restore tools",
+                string.Empty,
+                "  - script: dotnet tool run rx -- release --push --json-file artifacts/manifests/release.json",
+                "    displayName: Release",
+            ]);
 
     private static string? NormalizeTemplate(string value)
     {

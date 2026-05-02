@@ -1,0 +1,137 @@
+@page "/artifacts"
+@inject TuiNavigationService Nav
+
+<Rows>
+    <Panel Title="Artifacts" Border="BoxBorder.Rounded" BorderColor="Color.Purple" Expand="true">
+        <Rows>
+            <Panel Title="Configured" Border="BoxBorder.Rounded" BorderColor="Color.Cyan1" Expand="true">
+                @if (configuredArtifacts.Count == 0)
+                {
+                    <Markup Content="No artifacts configured." Foreground="Color.Grey70" />
+                }
+                else
+                {
+                    <Rows>
+                        @foreach (var line in configuredArtifacts)
+                        {
+                            <Markup Content="@line" Foreground="Color.Grey70" />
+                        }
+                    </Rows>
+                }
+            </Panel>
+
+            <Panel Title="Output" Border="BoxBorder.Rounded" BorderColor="Color.Aqua" Expand="true">
+                <Rows>
+                    <Markup Content="@outputLine" Foreground="Color.Grey70" />
+                    <Markup Content="@emitFilesLine" Foreground="Color.Grey70" />
+                </Rows>
+            </Panel>
+
+            <Panel Title="Last Manifest" Border="BoxBorder.Rounded" BorderColor="Color.Green" Expand="true">
+                @if (manifestLines.Count == 0)
+                {
+                    <Markup Content="No manifest found yet." Foreground="Color.Grey70" />
+                }
+                else
+                {
+                    <Rows>
+                        @foreach (var line in manifestLines)
+                        {
+                            <Markup Content="@line" Foreground="Color.Grey70" />
+                        }
+                    </Rows>
+                }
+            </Panel>
+
+            <Columns Expand="true">
+                <TextButton Content="Refresh" OnClick="Load" BackgroundColor="Color.Grey" FocusedColor="Color.Green" />
+                <TextButton Content="Home" OnClick="GoHome" BackgroundColor="Color.Grey" FocusedColor="Color.Yellow" />
+            </Columns>
+        </Rows>
+    </Panel>
+</Rows>
+
+@code {
+    private readonly List<string> configuredArtifacts = [];
+    private readonly List<string> manifestLines = [];
+    private string outputLine = "output root: artifacts";
+    private string emitFilesLine = "emit runtime files: true";
+
+    protected override void OnInitialized()
+    {
+        Load();
+    }
+
+    private void Load()
+    {
+        configuredArtifacts.Clear();
+        manifestLines.Clear();
+
+        var artifacts = TuiRuntimeContext.Config?.Artifacts ?? [];
+        foreach (var artifact in artifacts)
+        {
+            var name = string.IsNullOrWhiteSpace(artifact.Name) ? "(unnamed)" : artifact.Name;
+            configuredArtifacts.Add($"{artifact.Type} - {name}");
+
+            if (artifact.Settings is { Count: > 0 } settings)
+            {
+                foreach (var key in settings.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase).Take(4))
+                {
+                    configuredArtifacts.Add($"  setting: {key}");
+                }
+            }
+        }
+
+        var outputRoot = TuiRuntimeContext.Config?.Runtime?.Output?.Root;
+        if (string.IsNullOrWhiteSpace(outputRoot))
+        {
+            outputRoot = "artifacts";
+        }
+
+        outputLine = $"output root: {outputRoot}";
+        emitFilesLine = $"emit runtime files: {TuiRuntimeContext.Config?.Runtime?.Output?.EmitRuntimeFiles?.ToString().ToLowerInvariant() ?? "true"}";
+
+        var manifestPath = Path.Combine(TuiRuntimeContext.WorkingDirectory, outputRoot, "manifest.json");
+        if (!File.Exists(manifestPath))
+        {
+            return;
+        }
+
+        try
+        {
+            var json = File.ReadAllText(manifestPath);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+
+            if (doc.RootElement.TryGetProperty("GeneratedAt", out var generatedAt))
+            {
+                manifestLines.Add($"GeneratedAt: {generatedAt}");
+            }
+
+            if (doc.RootElement.TryGetProperty("Artifacts", out var manifestArtifacts) && manifestArtifacts.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var artifact in manifestArtifacts.EnumerateArray())
+                {
+                    var type = artifact.TryGetProperty("Type", out var t) ? t.GetString() : "unknown";
+                    var name = artifact.TryGetProperty("Name", out var n) ? n.GetString() : "unknown";
+                    var built = artifact.TryGetProperty("Built", out var b) && b.GetBoolean() ? "built" : "not-built";
+                    var pushed = artifact.TryGetProperty("Pushed", out var p) && p.GetBoolean() ? "pushed" : "not-pushed";
+                    var tags = artifact.TryGetProperty("Tags", out var tagsElement) && tagsElement.ValueKind == System.Text.Json.JsonValueKind.Array
+                        ? string.Join(", ", tagsElement.EnumerateArray().Select(e => e.GetString()).Where(s => !string.IsNullOrWhiteSpace(s)))
+                        : string.Empty;
+
+                    manifestLines.Add($"{type} - {name} ({built}, {pushed})");
+                    if (!string.IsNullOrWhiteSpace(tags))
+                    {
+                        manifestLines.Add($"  tags: {tags}");
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            manifestLines.Add($"Failed to parse manifest: {ex.Message}");
+        }
+    }
+
+    private void GoHome() => Nav.Navigate("home");
+}

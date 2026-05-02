@@ -1,0 +1,40 @@
+@page "/"
+@inject TuiNavigationService Nav
+
+<Rows>
+    <Figlet Content="rexo" />
+
+    <Panel Title="Dashboard" Border="BoxBorder.Rounded" BorderColor="Color.Blue" Expand="true">
+        <Rows>
+            <Markup Content="Choose an area:" Foreground="Color.Grey70" />
+            <Rows>
+                <TextButton Content="Commands" OnClick="OpenCommands" FocusedColor="Color.Blue" BackgroundColor="Color.Grey" />
+                <TextButton Content="Composer" OnClick="OpenComposer" FocusedColor="Color.DeepSkyBlue1" BackgroundColor="Color.Grey" />
+                <TextButton Content="Init Wizard" OnClick="OpenInitWizard" FocusedColor="Color.Orange1" BackgroundColor="Color.Grey" />
+                <TextButton Content="Config" OnClick="OpenConfig" FocusedColor="Color.Cyan1" BackgroundColor="Color.Grey" />
+                <TextButton Content="Doctor" OnClick="OpenDoctor" FocusedColor="Color.Green" BackgroundColor="Color.Grey" />
+                <TextButton Content="Version" OnClick="OpenVersion" FocusedColor="Color.Yellow" BackgroundColor="Color.Grey" />
+                <TextButton Content="Artifacts" OnClick="OpenArtifacts" FocusedColor="Color.Purple" BackgroundColor="Color.Grey" />
+                <TextButton Content="History" OnClick="OpenHistory" FocusedColor="Color.Aqua" BackgroundColor="Color.Grey" />
+            </Rows>
+        </Rows>
+    </Panel>
+</Rows>
+
+@code {
+    private void OpenCommands() => Nav.Navigate("commands");
+
+    private void OpenComposer() => Nav.Navigate("composer");
+
+    private void OpenInitWizard() => Nav.Navigate("init-wizard");
+
+    private void OpenConfig() => Nav.Navigate("config");
+
+    private void OpenDoctor() => Nav.Navigate("doctor");
+
+    private void OpenVersion() => Nav.Navigate("version");
+
+    private void OpenArtifacts() => Nav.Navigate("artifacts");
+
+    private void OpenHistory() => Nav.Navigate("history");
+}

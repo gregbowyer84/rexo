@@ -1,0 +1,224 @@
+@page "/init-wizard"
+@inject TuiNavigationService Nav
+
+<Rows>
+    <Panel Title="Init Wizard" Border="BoxBorder.Rounded" BorderColor="Color.Orange1" Expand="true">
+        <Rows>
+            <Panel Title="Mode" Border="BoxBorder.Rounded" BorderColor="Color.Cyan1" Expand="true">
+                <Rows>
+                    <TextButton Content="@($"Mode: {mode}")" OnClick="ToggleMode" BackgroundColor="Color.Grey" FocusedColor="Color.DeepSkyBlue1" />
+                    @if (mode == "ci")
+                    {
+                        <TextButton Content="@($"Provider: {ciProvider}")" OnClick="CycleCiProvider" BackgroundColor="Color.Grey" FocusedColor="Color.DeepSkyBlue1" />
+                    }
+                </Rows>
+            </Panel>
+
+            @if (mode == "starter")
+            {
+                <Panel Title="Starter Settings" Border="BoxBorder.Rounded" BorderColor="Color.Green" Expand="true">
+                    <Rows>
+                        <TextButton Content="@($"Template: {template}")" OnClick="CycleTemplate" BackgroundColor="Color.Grey" FocusedColor="Color.DeepSkyBlue1" />
+                        <TextButton Content="@($"Schema source: {schemaSource}")" OnClick="CycleSchemaSource" BackgroundColor="Color.Grey" FocusedColor="Color.DeepSkyBlue1" />
+                        <TextButton Content="@($"With policy: {withPolicy.ToString().ToLowerInvariant()}")" OnClick="ToggleWithPolicy" BackgroundColor="Color.Grey" FocusedColor="Color.DeepSkyBlue1" />
+
+                        @if (withPolicy)
+                        {
+                            <TextButton Content="@($"Policy template: {policyTemplate}")" OnClick="CyclePolicyTemplate" BackgroundColor="Color.Grey" FocusedColor="Color.DeepSkyBlue1" />
+                        }
+
+                        <TextButton Content="@($"With instructions: {withInstructions.ToString().ToLowerInvariant()}")" OnClick="ToggleWithInstructions" BackgroundColor="Color.Grey" FocusedColor="Color.DeepSkyBlue1" />
+
+                        @if (withInstructions)
+                        {
+                            <TextInput Value="@instructionsPath" ValueChanged="OnInstructionsPathChanged" Placeholder=".github/instructions/rexo.instructions.md" Expand="true" />
+                        }
+                    </Rows>
+                </Panel>
+            }
+
+            <Panel Title="Safety" Border="BoxBorder.Rounded" BorderColor="Color.Yellow" Expand="true">
+                <Rows>
+                    <TextButton Content="@($"Force overwrite: {forceOverwrite.ToString().ToLowerInvariant()}")" OnClick="ToggleForce" BackgroundColor="Color.Grey" FocusedColor="Color.DeepSkyBlue1" />
+                    <Markup Content="Wizard always runs init in non-interactive mode." Foreground="Color.Grey70" />
+                </Rows>
+            </Panel>
+
+            <Columns Expand="true">
+                <TextButton Content="Run Init" OnClick="RunAsync" BackgroundColor="Color.Grey" FocusedColor="Color.Green" />
+                <TextButton Content="Go Composer" OnClick="GoComposer" BackgroundColor="Color.Grey" FocusedColor="Color.Cyan1" />
+                <TextButton Content="Home" OnClick="GoHome" BackgroundColor="Color.Grey" FocusedColor="Color.Yellow" />
+            </Columns>
+
+            @if (isRunning)
+            {
+                <Spinner Message="Running init..." />
+            }
+
+            @if (!string.IsNullOrWhiteSpace(errorMessage))
+            {
+                <Markup Content="@errorMessage" Foreground="Color.Red" />
+            }
+
+            @if (result is not null)
+            {
+                <Panel Title="Result" Border="BoxBorder.Rounded" BorderColor="@(result.Success ? Color.Green : Color.Red)" Expand="true">
+                    <Rows>
+                        <Markup Content="@($"exit={result.ExitCode} success={result.Success}")" Foreground="@(result.Success ? Color.Green : Color.Red)" />
+                        @if (!string.IsNullOrWhiteSpace(result.Message))
+                        {
+                            <SyntaxHighlighter Language="text" Code="@result.Message" ShowLineNumbers="false" />
+                        }
+                    </Rows>
+                </Panel>
+            }
+        </Rows>
+    </Panel>
+</Rows>
+
+@code {
+    private static readonly string[] ModeChoices = ["starter", "ci"];
+    private static readonly string[] TemplateChoices = ["auto", "dotnet", "node", "python", "go", "generic"];
+    private static readonly string[] SchemaSourceChoices = ["remote", "local"];
+    private static readonly string[] PolicyTemplateChoices = ["standard", "dotnet"];
+    private static readonly string[] CiProviderChoices = ["both", "github", "azdo"];
+
+    private string mode = "starter";
+    private string template = "auto";
+    private string schemaSource = "remote";
+    private bool withPolicy;
+    private string policyTemplate = "standard";
+    private bool withInstructions;
+    private string instructionsPath = ".github/instructions/rexo.instructions.md";
+    private bool forceOverwrite;
+    private string ciProvider = "both";
+
+    private bool isRunning;
+    private string? errorMessage;
+    private CommandResult? result;
+
+    private async Task RunAsync()
+    {
+        isRunning = true;
+        errorMessage = null;
+        result = null;
+        StateHasChanged();
+
+        var options = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["yes"] = "true",
+        };
+
+        if (forceOverwrite)
+        {
+            options["force"] = "true";
+        }
+
+        if (mode == "ci")
+        {
+            options["mode"] = "ci";
+            options["provider"] = ciProvider;
+        }
+        else
+        {
+            options["template"] = template;
+            options["schema-source"] = schemaSource;
+
+            if (withPolicy)
+            {
+                options["with-policy"] = "true";
+                options["policy-template"] = policyTemplate;
+            }
+
+            if (withInstructions)
+            {
+                options["with-instructions"] = "true";
+                if (!string.IsNullOrWhiteSpace(instructionsPath))
+                {
+                    options["instructions-path"] = instructionsPath;
+                }
+            }
+        }
+
+        var invocation = new CommandInvocation(
+            Args: new Dictionary<string, string>(),
+            Options: options,
+            Json: false,
+            JsonFile: null,
+            WorkingDirectory: TuiRuntimeContext.WorkingDirectory);
+
+        var startedAt = DateTimeOffset.UtcNow;
+        result = await TuiRuntimeContext.Executor.ExecuteAsync("init", invocation, CancellationToken.None);
+        var completedAt = DateTimeOffset.UtcNow;
+
+        TuiRuntimeContext.AddRun(startedAt, completedAt, "init", new Dictionary<string, string>(), options, result);
+
+        if (!result.Success)
+        {
+            errorMessage = result.Message;
+        }
+
+        isRunning = false;
+    }
+
+    private void ToggleMode()
+    {
+        mode = mode == "starter" ? "ci" : "starter";
+    }
+
+    private void CycleTemplate()
+    {
+        template = NextOf(TemplateChoices, template);
+    }
+
+    private void CycleSchemaSource()
+    {
+        schemaSource = NextOf(SchemaSourceChoices, schemaSource);
+    }
+
+    private void ToggleWithPolicy()
+    {
+        withPolicy = !withPolicy;
+    }
+
+    private void CyclePolicyTemplate()
+    {
+        policyTemplate = NextOf(PolicyTemplateChoices, policyTemplate);
+    }
+
+    private void ToggleWithInstructions()
+    {
+        withInstructions = !withInstructions;
+    }
+
+    private Task OnInstructionsPathChanged(string? value)
+    {
+        instructionsPath = value ?? string.Empty;
+        return Task.CompletedTask;
+    }
+
+    private void ToggleForce()
+    {
+        forceOverwrite = !forceOverwrite;
+    }
+
+    private void CycleCiProvider()
+    {
+        ciProvider = NextOf(CiProviderChoices, ciProvider);
+    }
+
+    private static string NextOf(IReadOnlyList<string> choices, string current)
+    {
+        var idx = Array.FindIndex(choices.ToArray(), c => c.Equals(current, StringComparison.OrdinalIgnoreCase));
+        if (idx < 0)
+        {
+            return choices[0];
+        }
+
+        return choices[(idx + 1) % choices.Count];
+    }
+
+    private void GoComposer() => Nav.Navigate("composer");
+
+    private void GoHome() => Nav.Navigate("home");
+}

@@ -1,0 +1,128 @@
+@page "/commands"
+@inject TuiNavigationService Nav
+
+<Rows>
+    <Panel Title="Command Browser" Border="BoxBorder.Rounded" BorderColor="Color.Aqua" Expand="true">
+        <Rows>
+            <TextInput Value="@search" ValueChanged="OnSearchChanged" Placeholder="Search commands" Expand="true" />
+            <Markup Content="@($"{Filtered.Count} command(s)")" Foreground="Color.Grey70" />
+            <Rows>
+                @foreach (var command in Filtered)
+                {
+                    <Panel Border="BoxBorder.Rounded" BorderColor="@GetSourceColor(command.Source)" Expand="true">
+                        <Rows>
+                            <Markup Content="@command.Name" Foreground="Color.Cyan1" Decoration="Decoration.Bold" />
+                            <Markup Content="@($"source: {command.Source} | steps: {command.StepCount}")" Foreground="Color.Grey70" />
+                            @if (!string.IsNullOrWhiteSpace(command.Description))
+                            {
+                                <Markup Content="@command.Description" Foreground="Color.Grey70" />
+                            }
+                            <TextButton Content="Run" OnClick="@(() => OpenCommand(command.Name))" BackgroundColor="Color.Grey" FocusedColor="Color.DeepSkyBlue1" />
+                        </Rows>
+                    </Panel>
+                }
+            </Rows>
+        </Rows>
+    </Panel>
+
+    <TextButton Content="Back" OnClick="GoHome" BackgroundColor="Color.Grey" FocusedColor="Color.Yellow" />
+</Rows>
+
+@code {
+    private string search = string.Empty;
+
+    private static readonly string[] BuiltinCommandNames =
+    [
+        "version", "list", "explain", "doctor", "init", "run", "help", "ui",
+        "config resolved", "config sources", "config materialize",
+    ];
+
+    private sealed record CommandEntry(string Name, string Source, string? Description, int StepCount);
+
+    private IReadOnlyList<CommandEntry> AllCommands => TuiRuntimeContext.Executor.Registry.Names
+        .Select(BuildEntry)
+        .OrderBy(n => n.Name, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
+    private IReadOnlyList<CommandEntry> Filtered => AllCommands
+        .Where(cmd =>
+            string.IsNullOrWhiteSpace(search) ||
+            cmd.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+            (cmd.Description?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            cmd.Source.Contains(search, StringComparison.OrdinalIgnoreCase))
+        .ToArray();
+
+    private Task OnSearchChanged(string? value)
+    {
+        search = value ?? string.Empty;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private void OpenCommand(string command)
+    {
+        Nav.Navigate("execute", command);
+    }
+
+    private CommandEntry BuildEntry(string name)
+    {
+        var config = TuiRuntimeContext.Config;
+
+        if (config?.Commands?.TryGetValue(name, out var cmd) == true)
+        {
+            return new CommandEntry(
+                Name: name,
+                Source: "config",
+                Description: cmd.Description,
+                StepCount: cmd.Steps?.Count ?? 0);
+        }
+
+        if (config?.Aliases?.TryGetValue(name, out var aliasTarget) == true)
+        {
+            var targetStepCount = 0;
+            if (aliasTarget is not null && config.Commands?.TryGetValue(aliasTarget, out var targetCmd) == true)
+            {
+                targetStepCount = targetCmd.Steps?.Count ?? 0;
+            }
+
+            return new CommandEntry(
+                Name: name,
+                Source: "alias",
+                Description: aliasTarget is null ? "alias" : $"-> {aliasTarget}",
+                StepCount: targetStepCount);
+        }
+
+        if (BuiltinCommandNames.Contains(name, StringComparer.OrdinalIgnoreCase))
+        {
+            return new CommandEntry(name, "builtin", GetBuiltinDescription(name), 0);
+        }
+
+        return new CommandEntry(name, "runtime", null, 0);
+    }
+
+    private static string? GetBuiltinDescription(string name) => name switch
+    {
+        "version" => "Show tool version",
+        "list" => "List commands",
+        "explain" => "Explain command details",
+        "doctor" => "Run environment checks",
+        "init" => "Initialize repo config",
+        "run" => "Run configured command",
+        "help" => "Show help",
+        "ui" => "Open interactive TUI",
+        "config resolved" => "Render resolved config",
+        "config sources" => "Show config merge sources",
+        "config materialize" => "Materialize helper files",
+        _ => null,
+    };
+
+    private static Color GetSourceColor(string source) => source switch
+    {
+        "config" => Color.Cyan1,
+        "alias" => Color.Yellow,
+        "builtin" => Color.Green,
+        _ => Color.Grey70,
+    };
+
+    private void GoHome() => Nav.Navigate("home");
+}

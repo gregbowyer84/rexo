@@ -1,0 +1,54 @@
+@page "/history"
+@inject TuiNavigationService Nav
+
+<Rows>
+    <Panel Title="Run History" Border="BoxBorder.Rounded" BorderColor="Color.Green" Expand="true">
+        <Rows>
+            @if (TuiRuntimeContext.RecentRuns.Count == 0)
+            {
+                <Markup Content="No runs recorded in this TUI session." Foreground="Color.Grey70" />
+            }
+            else
+            {
+                @foreach (var run in TuiRuntimeContext.RecentRuns)
+                {
+                    <Panel Border="BoxBorder.Rounded" BorderColor="@(run.Success ? Color.Green : Color.Red)" Expand="true">
+                        <Rows>
+                            <Markup Content="@run.Command" Foreground="Color.Cyan1" Decoration="Decoration.Bold" />
+                            <Markup Content="@($"started {run.StartedAt:HH:mm:ss} | duration {run.Duration.TotalMilliseconds:F0}ms | exit {run.ExitCode}")" Foreground="Color.Grey70" />
+                            @if (run.Args.Count > 0)
+                            {
+                                <Markup Content="@($"args: {string.Join(", ", run.Args.Select(kv => $"{kv.Key}={kv.Value}"))}")" Foreground="Color.Grey70" />
+                            }
+                            @if (run.Options.Count > 0)
+                            {
+                                <Markup Content="@($"options: {string.Join(", ", run.Options.Select(kv => $"{kv.Key}={kv.Value}"))}")" Foreground="Color.Grey70" />
+                            }
+                            @if (!string.IsNullOrWhiteSpace(run.Message))
+                            {
+                                <Markup Content="@run.Message" Foreground="Color.Grey70" />
+                            }
+                            <TextButton Content="Open in Execute" OnClick="@(() => OpenExecute(run.Command))" BackgroundColor="Color.Grey" FocusedColor="Color.DeepSkyBlue1" />
+                        </Rows>
+                    </Panel>
+                }
+            }
+
+            <Columns Expand="true">
+                <TextButton Content="Composer" OnClick="GoComposer" BackgroundColor="Color.Grey" FocusedColor="Color.Cyan1" />
+                <TextButton Content="Home" OnClick="GoHome" BackgroundColor="Color.Grey" FocusedColor="Color.Yellow" />
+            </Columns>
+        </Rows>
+    </Panel>
+</Rows>
+
+@code {
+    private void OpenExecute(string command)
+    {
+        Nav.Navigate("execute", command);
+    }
+
+    private void GoComposer() => Nav.Navigate("composer");
+
+    private void GoHome() => Nav.Navigate("home");
+}

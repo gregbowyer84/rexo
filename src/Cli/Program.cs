@@ -13,6 +13,7 @@ using Rexo.Execution;
 using Rexo.Git;
 using Rexo.Policies;
 using Rexo.Templating;
+using Rexo.Tui;
 using Rexo.Ui;
 using Rexo.Versioning;
 
@@ -301,7 +302,7 @@ public static class Program
         bool quiet,
         CancellationToken cancellationToken)
     {
-        var result = await executor.ExecuteAsync(command, invocation, cancellationToken);
+        var result = await ExecuteCommandAsync(executor, command, invocation, cancellationToken);
         return await WriteResultAsync(result, invocation, verbose, quiet, cancellationToken);
     }
 
@@ -330,7 +331,7 @@ public static class Program
             jsonFile,
             workingDir);
 
-        var result = await executor.ExecuteAsync("explain", invocation, cancellationToken);
+        var result = await ExecuteCommandAsync(executor, "explain", invocation, cancellationToken);
         return await WriteResultAsync(result, invocation, verbose, quiet, cancellationToken);
     }
 
@@ -353,7 +354,7 @@ public static class Program
 
         var subCommand = $"config {args[1].ToLowerInvariant()}";
         var invocation = EmptyInvocation(workingDir, json, jsonFile);
-        var result = await executor.ExecuteAsync(subCommand, invocation, cancellationToken);
+        var result = await ExecuteCommandAsync(executor, subCommand, invocation, cancellationToken);
         return await WriteResultAsync(result, invocation, verbose, quiet, cancellationToken);
     }
 
@@ -363,60 +364,8 @@ public static class Program
         string workingDir,
         CancellationToken cancellationToken)
     {
-        // Build list of user-facing command names (config-defined commands + aliases)
-        var commandNames = new List<string>();
-        if (config?.Commands is { Count: > 0 })
-            commandNames.AddRange(config.Commands.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase));
-        if (config?.Aliases is { Count: > 0 })
-            commandNames.AddRange(config.Aliases.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase));
-
-        // Always include inspectability/navigation commands in UI mode.
-        commandNames.AddRange([
-            "list",
-            "doctor",
-            "config resolved",
-            "config sources",
-            "config materialize",
-            "explain version",
-        ]);
-
-        commandNames = commandNames
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        // Fall back to built-in list if no config commands
-        if (commandNames.Count == 0)
-            commandNames.AddRange(["version", "list", "doctor", "init", "config resolved", "config sources"]);
-
-        string? selected;
-
-        // Use richer picker with descriptions when config is available
-        if (config?.Commands is { Count: > 0 })
-        {
-            var commandsWithDescriptions = commandNames
-                .Select(name =>
-                {
-                    string? desc = null;
-                    if (config.Commands!.TryGetValue(name, out var cmd))
-                        desc = cmd.Description;
-                    else if (config.Aliases?.TryGetValue(name, out var target) == true)
-                        desc = $"→ {target}";
-                    return (Name: name, Description: desc);
-                })
-                .ToArray();
-
-            selected = ConsoleRenderer.PromptCommandPickerWithDescriptions(commandsWithDescriptions);
-        }
-        else
-        {
-            selected = ConsoleRenderer.PromptCommandPicker(commandNames);
-        }
-        if (selected is null) return 0;
-
-        var invocation = EmptyInvocation(workingDir, false, null);
-        var result = await executor.ExecuteAsync(selected, invocation, cancellationToken);
-        return await WriteResultAsync(result, invocation, false, false, cancellationToken);
+        await RexoTuiHost.RunAsync(executor, config, workingDir, cancellationToken);
+        return 0;
     }
 
     private static async Task<int> RunConfiguredAsync(
@@ -467,7 +416,7 @@ public static class Program
 
             var invocation = new CommandInvocation(parsedArgs, parsedOptions, json, jsonFile, workingDir);
             var startedAt = DateTimeOffset.UtcNow;
-            var result = await executor.ExecuteAsync(candidateName, invocation, cancellationToken);
+            var result = await ExecuteCommandAsync(executor, candidateName, invocation, cancellationToken);
             var completedAt = DateTimeOffset.UtcNow;
 
             var exitCode = await WriteResultAsync(result, invocation, verbose, quiet, cancellationToken);
@@ -515,7 +464,7 @@ public static class Program
 
         var invocation = new CommandInvocation(parsedArgs, parsedOptions, json, jsonFile, workingDir);
 
-        var result = await executor.ExecuteAsync("init", invocation, cancellationToken);
+        var result = await ExecuteCommandAsync(executor, "init", invocation, cancellationToken);
         return await WriteResultAsync(result, invocation, verbose, quiet, cancellationToken);
     }
 
@@ -560,7 +509,7 @@ public static class Program
             }
 
             var invocation = new CommandInvocation(parsedArgs, parsedOptions, json, jsonFile, workingDir);
-            var result = await executor.ExecuteAsync(candidateName, invocation, cancellationToken);
+            var result = await ExecuteCommandAsync(executor, candidateName, invocation, cancellationToken);
             return await WriteResultAsync(result, invocation, verbose, quiet, cancellationToken);
         }
 
@@ -583,7 +532,6 @@ public static class Program
                 var dir = Path.GetDirectoryName(invocation.JsonFile);
                 if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
                 await File.WriteAllTextAsync(invocation.JsonFile!, payload, cancellationToken);
-                if (!quiet) Console.WriteLine($"JSON output written to {invocation.JsonFile}");
             }
             else
             {
@@ -618,6 +566,33 @@ public static class Program
         }
 
         return result.ExitCode;
+    }
+
+    private static async Task<CommandResult> ExecuteCommandAsync(
+        DefaultCommandExecutor executor,
+        string command,
+        CommandInvocation invocation,
+        CancellationToken cancellationToken)
+    {
+        if (!invocation.Json)
+        {
+            return await executor.ExecuteAsync(command, invocation, cancellationToken);
+        }
+
+        var originalOut = Console.Out;
+        var originalError = Console.Error;
+
+        try
+        {
+            Console.SetOut(TextWriter.Null);
+            Console.SetError(TextWriter.Null);
+            return await executor.ExecuteAsync(command, invocation, cancellationToken);
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+            Console.SetError(originalError);
+        }
     }
 
     private static async Task WriteRunManifestAsync(

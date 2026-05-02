@@ -1,0 +1,90 @@
+@page "/config/sources"
+@inject TuiNavigationService Nav
+
+<Rows>
+    <Panel Title="Configuration Sources" Border="BoxBorder.Rounded" BorderColor="Color.Aqua" Expand="true">
+        <Rows>
+            @if (isLoading)
+            {
+                <Spinner Message="Loading config sources..." />
+            }
+            else if (!string.IsNullOrWhiteSpace(errorMessage))
+            {
+                <Markup Content="@errorMessage" Foreground="Color.Red" />
+            }
+            else
+            {
+                <Rows>
+                    @foreach (var line in sourceLines)
+                    {
+                        <Markup Content="@line" Foreground="@GetLineColor(line)" />
+                    }
+                </Rows>
+            }
+
+            <Columns Expand="true">
+                <TextButton Content="Resolved Config" OnClick="GoToConfig" BackgroundColor="Color.Grey" FocusedColor="Color.Blue" />
+                <TextButton Content="Home" OnClick="GoHome" BackgroundColor="Color.Grey" FocusedColor="Color.Yellow" />
+            </Columns>
+        </Rows>
+    </Panel>
+</Rows>
+
+@code {
+    private bool isLoading = true;
+    private string? errorMessage;
+    private IReadOnlyList<string> sourceLines = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var invocation = new CommandInvocation(
+            Args: new Dictionary<string, string>(),
+            Options: new Dictionary<string, string?>(),
+            Json: false,
+            JsonFile: null,
+            WorkingDirectory: TuiRuntimeContext.WorkingDirectory);
+
+        var result = await TuiRuntimeContext.Executor.ExecuteAsync("config sources", invocation, CancellationToken.None);
+
+        if (result.Success)
+        {
+            sourceLines = (result.Message ?? string.Empty)
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        }
+        else
+        {
+            errorMessage = result.Message ?? "Failed to load config sources.";
+        }
+
+        isLoading = false;
+    }
+
+    private static Color GetLineColor(string line)
+    {
+        if (line.Contains("[not found]", StringComparison.OrdinalIgnoreCase))
+        {
+            return Color.Red;
+        }
+
+        if (line.Contains("[overlay]", StringComparison.OrdinalIgnoreCase))
+        {
+            return Color.Yellow;
+        }
+
+        if (line.Contains("[policy]", StringComparison.OrdinalIgnoreCase))
+        {
+            return Color.Cyan1;
+        }
+
+        if (line.Contains("[loaded]", StringComparison.OrdinalIgnoreCase))
+        {
+            return Color.Green;
+        }
+
+        return Color.Grey70;
+    }
+
+    private void GoToConfig() => Nav.Navigate("config");
+
+    private void GoHome() => Nav.Navigate("home");
+}

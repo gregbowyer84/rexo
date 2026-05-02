@@ -1,0 +1,59 @@
+@page "/config"
+@inject TuiNavigationService Nav
+
+<Rows>
+    <Panel Title="Resolved Configuration" Border="BoxBorder.Rounded" BorderColor="Color.Cyan1" Expand="true">
+        <Rows>
+            @if (isLoading)
+            {
+                <Spinner Message="Loading resolved config..." />
+            }
+            else if (!string.IsNullOrWhiteSpace(errorMessage))
+            {
+                <Markup Content="@errorMessage" Foreground="Color.Red" />
+            }
+            else
+            {
+                <SyntaxHighlighter Language="json" Code="@resolvedConfigJson" ShowLineNumbers="true" />
+            }
+
+            <Columns Expand="true">
+                <TextButton Content="Sources" OnClick="GoToSources" BackgroundColor="Color.Grey" FocusedColor="Color.Blue" />
+                <TextButton Content="Home" OnClick="GoHome" BackgroundColor="Color.Grey" FocusedColor="Color.Yellow" />
+            </Columns>
+        </Rows>
+    </Panel>
+</Rows>
+
+@code {
+    private bool isLoading = true;
+    private string? errorMessage;
+    private string resolvedConfigJson = "{}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var invocation = new CommandInvocation(
+            Args: new Dictionary<string, string>(),
+            Options: new Dictionary<string, string?>(),
+            Json: false,
+            JsonFile: null,
+            WorkingDirectory: TuiRuntimeContext.WorkingDirectory);
+
+        var result = await TuiRuntimeContext.Executor.ExecuteAsync("config resolved", invocation, CancellationToken.None);
+
+        if (result.Success)
+        {
+            resolvedConfigJson = result.Message ?? "{}";
+        }
+        else
+        {
+            errorMessage = result.Message ?? "Failed to load resolved config.";
+        }
+
+        isLoading = false;
+    }
+
+    private void GoToSources() => Nav.Navigate("config-sources");
+
+    private void GoHome() => Nav.Navigate("home");
+}

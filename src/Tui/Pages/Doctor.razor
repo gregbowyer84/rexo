@@ -1,0 +1,101 @@
+@page "/doctor"
+@inject TuiNavigationService Nav
+
+<Rows>
+    <Panel Title="Doctor Dashboard" Border="BoxBorder.Rounded" BorderColor="Color.Green" Expand="true">
+        <Rows>
+            @if (isLoading)
+            {
+                <Spinner Message="Running doctor checks..." />
+            }
+            else if (!string.IsNullOrWhiteSpace(errorMessage))
+            {
+                <Markup Content="@errorMessage" Foreground="Color.Red" />
+            }
+            else
+            {
+                <Panel Border="BoxBorder.Rounded" BorderColor="@(allPassed ? Color.Green : Color.Red)" Expand="true">
+                    <Markup Content="@summaryLine" Foreground="@(allPassed ? Color.Green : Color.Red)" Decoration="Decoration.Bold" />
+                </Panel>
+
+                <Rows>
+                    @foreach (var line in checkLines)
+                    {
+                        <Markup Content="@line" Foreground="@GetLineColor(line)" />
+                    }
+                </Rows>
+            }
+
+            <Columns Expand="true">
+                <TextButton Content="Run Again" OnClick="RunDoctorAsync" BackgroundColor="Color.Grey" FocusedColor="Color.Green" />
+                <TextButton Content="Home" OnClick="GoHome" BackgroundColor="Color.Grey" FocusedColor="Color.Yellow" />
+            </Columns>
+        </Rows>
+    </Panel>
+</Rows>
+
+@code {
+    private bool isLoading = true;
+    private bool allPassed;
+    private string? errorMessage;
+    private string summaryLine = string.Empty;
+    private IReadOnlyList<string> checkLines = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RunDoctorAsync();
+    }
+
+    private async Task RunDoctorAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+        checkLines = [];
+        StateHasChanged();
+
+        var invocation = new CommandInvocation(
+            Args: new Dictionary<string, string>(),
+            Options: new Dictionary<string, string?>(),
+            Json: false,
+            JsonFile: null,
+            WorkingDirectory: TuiRuntimeContext.WorkingDirectory);
+
+        var result = await TuiRuntimeContext.Executor.ExecuteAsync("doctor", invocation, CancellationToken.None);
+
+        allPassed = result.Success;
+
+        if (!string.IsNullOrWhiteSpace(result.Message))
+        {
+            var lines = result.Message.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            checkLines = lines.Where(l => l.Contains("[OK]", StringComparison.OrdinalIgnoreCase) || l.Contains("[FAIL]", StringComparison.OrdinalIgnoreCase)).ToArray();
+        }
+
+        if (!result.Success && checkLines.Count == 0)
+        {
+            errorMessage = result.Message ?? "Doctor command failed.";
+        }
+
+        var passedCount = checkLines.Count(l => l.Contains("[OK]", StringComparison.OrdinalIgnoreCase));
+        var failedCount = checkLines.Count(l => l.Contains("[FAIL]", StringComparison.OrdinalIgnoreCase));
+        summaryLine = $"Checks: {passedCount} passed, {failedCount} failed";
+
+        isLoading = false;
+    }
+
+    private static Color GetLineColor(string line)
+    {
+        if (line.Contains("[FAIL]", StringComparison.OrdinalIgnoreCase))
+        {
+            return Color.Red;
+        }
+
+        if (line.Contains("[OK]", StringComparison.OrdinalIgnoreCase))
+        {
+            return Color.Green;
+        }
+
+        return Color.Grey70;
+    }
+
+    private void GoHome() => Nav.Navigate("home");
+}

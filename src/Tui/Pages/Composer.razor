@@ -1,0 +1,261 @@
+@page "/composer"
+@inject TuiNavigationService Nav
+
+<Rows>
+    <Panel Title="Command Composer" Border="BoxBorder.Rounded" BorderColor="Color.DeepSkyBlue1" Expand="true">
+        <Rows>
+            <TextInput Value="@commandName" ValueChanged="OnCommandNameChanged" Placeholder="command name (e.g. explain, doctor, config resolved)" Expand="true" />
+
+            <Panel Title="Arguments (key/value)" Border="BoxBorder.Rounded" BorderColor="Color.Cyan1" Expand="true">
+                <Rows>
+                    <Columns Expand="true">
+                        <TextInput Value="@argKey" ValueChanged="OnArgKeyChanged" Placeholder="arg key (e.g. command)" Expand="true" />
+                        <TextInput Value="@argValue" ValueChanged="OnArgValueChanged" Placeholder="arg value (e.g. version)" Expand="true" />
+                        <TextButton Content="Add Arg" OnClick="AddArg" BackgroundColor="Color.Grey" FocusedColor="Color.Green" />
+                    </Columns>
+
+                    @if (args.Count == 0)
+                    {
+                        <Markup Content="No args set." Foreground="Color.Grey70" />
+                    }
+                    else
+                    {
+                        @foreach (var kv in args)
+                        {
+                            <Columns Expand="true">
+                                <Markup Content="@($"{kv.Key} = {kv.Value}")" Foreground="Color.Grey70" />
+                                <TextButton Content="Remove" OnClick="@(() => RemoveArg(kv.Key))" BackgroundColor="Color.Grey" FocusedColor="Color.Red" />
+                            </Columns>
+                        }
+                    }
+                </Rows>
+            </Panel>
+
+            <Panel Title="Options (key/value)" Border="BoxBorder.Rounded" BorderColor="Color.Yellow" Expand="true">
+                <Rows>
+                    <Columns Expand="true">
+                        <TextInput Value="@optionKey" ValueChanged="OnOptionKeyChanged" Placeholder="option key (e.g. yes, provider)" Expand="true" />
+                        <TextInput Value="@optionValue" ValueChanged="OnOptionValueChanged" Placeholder="option value (use true for flags)" Expand="true" />
+                        <TextButton Content="Add Option" OnClick="AddOption" BackgroundColor="Color.Grey" FocusedColor="Color.Green" />
+                    </Columns>
+
+                    @if (options.Count == 0)
+                    {
+                        <Markup Content="No options set." Foreground="Color.Grey70" />
+                    }
+                    else
+                    {
+                        @foreach (var kv in options)
+                        {
+                            <Columns Expand="true">
+                                <Markup Content="@($"{kv.Key} = {kv.Value ?? "(null)"}")" Foreground="Color.Grey70" />
+                                <TextButton Content="Remove" OnClick="@(() => RemoveOption(kv.Key))" BackgroundColor="Color.Grey" FocusedColor="Color.Red" />
+                            </Columns>
+                        }
+                    }
+                </Rows>
+            </Panel>
+
+            <Panel Title="Output" Border="BoxBorder.Rounded" BorderColor="Color.Aqua" Expand="true">
+                <Rows>
+                    <TextButton Content="@($"Show raw JSON: {(showRawJson ? "on" : "off")}")" OnClick="ToggleRawJson" BackgroundColor="Color.Grey" FocusedColor="Color.DeepSkyBlue1" />
+                    <TextInput Value="@outputFilePath" ValueChanged="OnOutputFilePathChanged" Placeholder="optional output file path (relative or absolute)" Expand="true" />
+                </Rows>
+            </Panel>
+
+            <Columns Expand="true">
+                <TextButton Content="Run" OnClick="RunAsync" BackgroundColor="Color.Grey" FocusedColor="Color.Green" />
+                <TextButton Content="Home" OnClick="GoHome" BackgroundColor="Color.Grey" FocusedColor="Color.Yellow" />
+                <TextButton Content="History" OnClick="GoHistory" BackgroundColor="Color.Grey" FocusedColor="Color.Cyan1" />
+            </Columns>
+
+            @if (isRunning)
+            {
+                <Spinner Message="Running composed command..." />
+            }
+
+            @if (!string.IsNullOrWhiteSpace(errorMessage))
+            {
+                <Markup Content="@errorMessage" Foreground="Color.Red" />
+            }
+
+            @if (result is not null)
+            {
+                <Panel Title="Result" Border="BoxBorder.Rounded" BorderColor="@(result.Success ? Color.Green : Color.Red)" Expand="true">
+                    <Rows>
+                        <Markup Content="@($"exit={result.ExitCode} success={result.Success}")" Foreground="@(result.Success ? Color.Green : Color.Red)" />
+                        @if (!string.IsNullOrWhiteSpace(result.Message))
+                        {
+                            <Markup Content="@result.Message" Foreground="Color.Grey70" />
+                        }
+                    </Rows>
+                </Panel>
+
+                @if (showRawJson)
+                {
+                    <SyntaxHighlighter Language="json" Code="@rawJson" ShowLineNumbers="true" />
+                }
+            }
+        </Rows>
+    </Panel>
+</Rows>
+
+@code {
+    private string commandName = string.Empty;
+    private string argKey = string.Empty;
+    private string argValue = string.Empty;
+    private string optionKey = string.Empty;
+    private string? optionValue = string.Empty;
+    private string? outputFilePath;
+    private bool isRunning;
+    private bool showRawJson;
+    private string? errorMessage;
+    private string rawJson = "{}";
+    private CommandResult? result;
+
+    private readonly Dictionary<string, string> args = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string?> options = new(StringComparer.OrdinalIgnoreCase);
+
+    private Task OnCommandNameChanged(string? value)
+    {
+        commandName = value ?? string.Empty;
+        return Task.CompletedTask;
+    }
+
+    private Task OnArgKeyChanged(string? value)
+    {
+        argKey = value ?? string.Empty;
+        return Task.CompletedTask;
+    }
+
+    private Task OnArgValueChanged(string? value)
+    {
+        argValue = value ?? string.Empty;
+        return Task.CompletedTask;
+    }
+
+    private Task OnOptionKeyChanged(string? value)
+    {
+        optionKey = value ?? string.Empty;
+        return Task.CompletedTask;
+    }
+
+    private Task OnOptionValueChanged(string? value)
+    {
+        optionValue = value;
+        return Task.CompletedTask;
+    }
+
+    private Task OnOutputFilePathChanged(string? value)
+    {
+        outputFilePath = value;
+        return Task.CompletedTask;
+    }
+
+    private void AddArg()
+    {
+        if (string.IsNullOrWhiteSpace(argKey))
+        {
+            return;
+        }
+
+        args[argKey.Trim()] = argValue;
+        argKey = string.Empty;
+        argValue = string.Empty;
+    }
+
+    private void RemoveArg(string key)
+    {
+        args.Remove(key);
+    }
+
+    private void AddOption()
+    {
+        if (string.IsNullOrWhiteSpace(optionKey))
+        {
+            return;
+        }
+
+        var normalized = optionValue;
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            normalized = "true";
+        }
+
+        options[optionKey.Trim()] = normalized;
+        optionKey = string.Empty;
+        optionValue = string.Empty;
+    }
+
+    private void RemoveOption(string key)
+    {
+        options.Remove(key);
+    }
+
+    private void ToggleRawJson()
+    {
+        showRawJson = !showRawJson;
+    }
+
+    private async Task RunAsync()
+    {
+        if (string.IsNullOrWhiteSpace(commandName))
+        {
+            errorMessage = "Enter a command name.";
+            return;
+        }
+
+        isRunning = true;
+        errorMessage = null;
+        result = null;
+        StateHasChanged();
+
+        var invocation = new CommandInvocation(
+            Args: new Dictionary<string, string>(args, StringComparer.OrdinalIgnoreCase),
+            Options: new Dictionary<string, string?>(options, StringComparer.OrdinalIgnoreCase),
+            Json: false,
+            JsonFile: null,
+            WorkingDirectory: TuiRuntimeContext.WorkingDirectory);
+
+        var startedAt = DateTimeOffset.UtcNow;
+        result = await TuiRuntimeContext.Executor.ExecuteAsync(commandName.Trim(), invocation, CancellationToken.None);
+        var completedAt = DateTimeOffset.UtcNow;
+
+        TuiRuntimeContext.AddRun(startedAt, completedAt, commandName.Trim(), args, options, result);
+
+        rawJson = System.Text.Json.JsonSerializer.Serialize(result, new System.Text.Json.JsonSerializerOptions
+        {
+            WriteIndented = true,
+        });
+
+        if (!string.IsNullOrWhiteSpace(outputFilePath))
+        {
+            try
+            {
+                var destination = outputFilePath!;
+                if (!Path.IsPathRooted(destination))
+                {
+                    destination = Path.Combine(TuiRuntimeContext.WorkingDirectory, destination);
+                }
+
+                var dir = Path.GetDirectoryName(destination);
+                if (!string.IsNullOrWhiteSpace(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
+
+                await File.WriteAllTextAsync(destination, rawJson);
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"Failed to write output file: {ex.Message}";
+            }
+        }
+
+        isRunning = false;
+    }
+
+    private void GoHome() => Nav.Navigate("home");
+
+    private void GoHistory() => Nav.Navigate("history");
+}

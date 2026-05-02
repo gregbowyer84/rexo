@@ -1,0 +1,47 @@
+@inherits LayoutComponentBase
+
+<Rows>
+    <Panel Border="BoxBorder.Rounded" BorderColor="Color.Cyan1" Expand="true">
+        <Columns Expand="true">
+            <Markup Content="Rexo TUI" Foreground="Color.Cyan1" Decoration="Decoration.Bold" />
+            <Markup Content="@RepoName" Foreground="Color.Green3" />
+            <Markup Content="@gitSummary" Foreground="Color.Grey70" />
+            <Markup Content="@CiSummary" Foreground="Color.Yellow" />
+        </Columns>
+    </Panel>
+
+    @Body
+
+    <Panel Border="BoxBorder.Rounded" BorderColor="Color.Grey" Expand="true">
+        <Markup Content="Tab/Shift+Tab focus controls | Enter activate focused button | Ctrl+C exit" Foreground="Color.Grey70" />
+    </Panel>
+</Rows>
+
+@code {
+    private string gitSummary = "loading git context...";
+
+    private string RepoName => TuiRuntimeContext.Config?.Name ?? "(no config loaded)";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var git = await GitDetector.DetectAsync(TuiRuntimeContext.WorkingDirectory, CancellationToken.None);
+        var branch = git.Branch ?? "no-branch";
+        var sha = git.ShortSha ?? "no-sha";
+        var clean = git.IsClean ? "clean" : "dirty";
+        gitSummary = $"{branch} {sha} {clean}";
+    }
+
+    private static string CiSummary
+    {
+        get
+        {
+            var ci = CiDetector.Detect();
+            if (!ci.IsCi)
+            {
+                return "local";
+            }
+
+            return ci.Provider ?? "ci";
+        }
+    }
+}

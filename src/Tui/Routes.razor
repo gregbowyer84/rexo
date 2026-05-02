@@ -1,0 +1,66 @@
+@inject TuiNavigationService Nav
+@implements IDisposable
+
+<LayoutView Layout="@typeof(MainLayout)">
+    @if (Nav.Current == "commands")
+    {
+        <Commands />
+    }
+    else if (Nav.Current == "composer")
+    {
+        <Composer />
+    }
+    else if (Nav.Current == "init-wizard")
+    {
+        <InitWizard />
+    }
+    else if (Nav.Current == "config")
+    {
+        <Config />
+    }
+    else if (Nav.Current == "config-sources")
+    {
+        <ConfigSources />
+    }
+    else if (Nav.Current == "doctor")
+    {
+        <Doctor />
+    }
+    else if (Nav.Current == "version")
+    {
+        <Version />
+    }
+    else if (Nav.Current == "artifacts")
+    {
+        <Artifacts />
+    }
+    else if (Nav.Current == "history")
+    {
+        <History />
+    }
+    else if (Nav.Current == "execute")
+    {
+        <Execute />
+    }
+    else
+    {
+        <Home />
+    }
+</LayoutView>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Nav.NavigationRequested += OnNavigate;
+    }
+
+    private void OnNavigate(object? sender, EventArgs e)
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Nav.NavigationRequested -= OnNavigate;
+    }
+}

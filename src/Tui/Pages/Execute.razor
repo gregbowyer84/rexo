@@ -1,0 +1,235 @@
+@inject TuiNavigationService Nav
+
+<Rows>
+    <Panel Title="Execute" Border="BoxBorder.Rounded" BorderColor="Color.Yellow" Expand="true">
+        <Rows>
+            <Markup Content="@($"Command: {DecodedCommand}")" Foreground="Color.Cyan1" Decoration="Decoration.Bold" />
+
+            @if (commandConfig is not null)
+            {
+                <Panel Title="Command Metadata" Border="BoxBorder.Rounded" BorderColor="Color.Aqua" Expand="true">
+                    <Rows>
+                        <Markup Content="@GetCommandDescription()" Foreground="Color.Grey70" />
+                        <Markup Content="@($"args: {commandConfig.Args?.Count ?? 0} | options: {commandConfig.Options?.Count ?? 0} | steps: {commandConfig.Steps?.Count ?? 0}")" Foreground="Color.Grey70" />
+                    </Rows>
+                </Panel>
+            }
+
+            @if (commandConfig is not null)
+            {
+                <Panel Title="Inputs" Border="BoxBorder.Rounded" BorderColor="Color.Blue" Expand="true">
+                    <Rows>
+                        @if (commandConfig.Args is { Count: > 0 })
+                        {
+                            <Markup Content="Arguments" Foreground="Color.Grey70" Decoration="Decoration.Bold" />
+                            @foreach (var (name, arg) in commandConfig.Args)
+                            {
+                                <TextInput Value="@GetArgValue(name)" ValueChanged="@(v => SetArgValue(name, v))" Placeholder="@(arg.Required ? "required" : "optional")" Expand="true" />
+                            }
+                        }
+
+                        @if (commandConfig.Options is { Count: > 0 })
+                        {
+                            <Markup Content="Options" Foreground="Color.Grey70" Decoration="Decoration.Bold" />
+                            @foreach (var (name, option) in commandConfig.Options)
+                            {
+                                @if (string.Equals(option.Type, "bool", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    <TextButton Content="@($"--{name}: {GetOptionValue(name) ?? "false"}")" OnClick="@(() => ToggleBoolOption(name))" BackgroundColor="Color.Grey" FocusedColor="Color.DeepSkyBlue1" />
+                                }
+                                else if (option.Allowed is { Length: > 0 })
+                                {
+                                    <TextButton Content="@($"--{name}: {GetOptionValue(name) ?? option.Allowed[0]} (cycle)")" OnClick="@(() => CycleAllowedOption(name))" BackgroundColor="Color.Grey" FocusedColor="Color.DeepSkyBlue1" />
+                                }
+                                else
+                                {
+                                    <TextInput Value="@GetOptionValue(name)" ValueChanged="@(v => SetOptionValue(name, v))" Placeholder="@($"--{name}")" Expand="true" />
+                                }
+                            }
+                        }
+                    </Rows>
+                </Panel>
+            }
+
+            <Columns Expand="true">
+                <TextButton Content="Run" OnClick="RunAsync" BackgroundColor="Color.Grey" FocusedColor="Color.Green" />
+                <TextButton Content="Back" OnClick="GoBack" BackgroundColor="Color.Grey" FocusedColor="Color.Yellow" />
+            </Columns>
+
+            @if (isRunning)
+            {
+                <Spinner Message="@($"Running... {elapsedLabel}")" />
+            }
+
+            @if (result is not null)
+            {
+                <Markup Content="@($"Exit: {result.ExitCode}  Success: {result.Success}")" Foreground="@(result.Success ? Color.Green : Color.Red)" />
+                @if (!string.IsNullOrWhiteSpace(result.Message))
+                {
+                    <Markup Content="@result.Message" Foreground="Color.Grey70" />
+                }
+
+                <Rows>
+                    @foreach (var step in result.Steps)
+                    {
+                        <Markup Content="@FormatStep(step)" Foreground="@(step.Success ? Color.Green : Color.Red)" />
+                    }
+                </Rows>
+            }
+        </Rows>
+    </Panel>
+</Rows>
+
+@code {
+    private string DecodedCommand => Nav.Parameter ?? string.Empty;
+
+    private CommandResult? result;
+    private bool isRunning;
+    private RepoCommandConfig? commandConfig;
+    private Dictionary<string, string> argValues = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, string?> optionValues = new(StringComparer.OrdinalIgnoreCase);
+    private DateTimeOffset runningSince;
+    private string elapsedLabel = "0.0s";
+
+    protected override void OnInitialized()
+    {
+        if (TuiRuntimeContext.Config?.Commands?.TryGetValue(DecodedCommand, out var cfg) == true)
+        {
+            commandConfig = cfg;
+
+            if (cfg.Options is { Count: > 0 })
+            {
+                foreach (var (name, option) in cfg.Options)
+                {
+                    if (option.Default is { } d)
+                    {
+                        optionValues[name] = d.ValueKind switch
+                        {
+                            System.Text.Json.JsonValueKind.String => d.GetString(),
+                            System.Text.Json.JsonValueKind.True => "true",
+                            System.Text.Json.JsonValueKind.False => "false",
+                            System.Text.Json.JsonValueKind.Null or System.Text.Json.JsonValueKind.Undefined => null,
+                            _ => d.ToString(),
+                        };
+                    }
+                }
+            }
+        }
+    }
+
+    private async Task RunAsync()
+    {
+        isRunning = true;
+        result = null;
+        runningSince = DateTimeOffset.UtcNow;
+        elapsedLabel = "0.0s";
+        StateHasChanged();
+
+        var args = argValues
+            .Where(kv => !string.IsNullOrWhiteSpace(kv.Value))
+            .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
+
+        var options = optionValues
+            .Where(kv => !string.IsNullOrWhiteSpace(kv.Value))
+            .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
+
+        var invocation = new CommandInvocation(
+            Args: args,
+            Options: options,
+            Json: false,
+            JsonFile: null,
+            WorkingDirectory: TuiRuntimeContext.WorkingDirectory);
+
+        var startedAt = DateTimeOffset.UtcNow;
+
+        using var tickerCts = new CancellationTokenSource();
+        var ticker = RunElapsedTickerAsync(tickerCts.Token);
+
+        try
+        {
+            result = await TuiRuntimeContext.Executor.ExecuteAsync(DecodedCommand, invocation, CancellationToken.None);
+            var completedAt = DateTimeOffset.UtcNow;
+            TuiRuntimeContext.AddRun(startedAt, completedAt, DecodedCommand, args, options, result);
+        }
+        finally
+        {
+            tickerCts.Cancel();
+            try
+            {
+                await ticker;
+            }
+            catch (OperationCanceledException)
+            {
+                // expected when ticker is cancelled
+            }
+
+            isRunning = false;
+            StateHasChanged();
+        }
+    }
+
+    private static string FormatStep(StepResult step) =>
+        $"- {step.StepId}: {(step.Success ? "OK" : "FAIL")} ({step.Duration.TotalMilliseconds:F0}ms)";
+
+    private string GetArgValue(string name) =>
+        argValues.TryGetValue(name, out var value) ? value : string.Empty;
+
+    private string? GetOptionValue(string name) =>
+        optionValues.TryGetValue(name, out var value) ? value : null;
+
+    private Task SetArgValue(string name, string? value)
+    {
+        argValues[name] = value ?? string.Empty;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private Task SetOptionValue(string name, string? value)
+    {
+        optionValues[name] = value;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private void ToggleBoolOption(string name)
+    {
+        var current = GetOptionValue(name);
+        optionValues[name] = string.Equals(current, "true", StringComparison.OrdinalIgnoreCase)
+            ? "false"
+            : "true";
+
+        StateHasChanged();
+    }
+
+    private void CycleAllowedOption(string name)
+    {
+        if (commandConfig?.Options is null || !commandConfig.Options.TryGetValue(name, out var option) || option.Allowed is not { Length: > 0 })
+        {
+            return;
+        }
+
+        var current = GetOptionValue(name);
+        var currentIndex = Array.FindIndex(option.Allowed, value => string.Equals(value, current, StringComparison.OrdinalIgnoreCase));
+        var nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % option.Allowed.Length;
+        optionValues[name] = option.Allowed[nextIndex];
+        StateHasChanged();
+    }
+
+    private string GetCommandDescription() =>
+        string.IsNullOrWhiteSpace(commandConfig?.Description)
+            ? "No description provided."
+            : commandConfig!.Description!;
+
+    private async Task RunElapsedTickerAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            var elapsed = DateTimeOffset.UtcNow - runningSince;
+            elapsedLabel = $"{elapsed.TotalSeconds:F1}s";
+            await InvokeAsync(StateHasChanged);
+            await Task.Delay(200, cancellationToken);
+        }
+    }
+
+    private void GoBack() => Nav.Navigate("commands");
+}

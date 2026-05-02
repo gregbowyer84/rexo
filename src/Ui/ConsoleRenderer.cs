@@ -46,7 +46,7 @@ public static class ConsoleRenderer
 
     public static void RenderVersion(string version)
     {
-        AnsiConsole.Write(new FigletText("repo")
+        AnsiConsole.Write(new FigletText("rexo")
             .Color(Color.Blue));
 
         AnsiConsole.MarkupLine($"[bold]Version:[/] [cyan]{Markup.Escape(version)}[/]");

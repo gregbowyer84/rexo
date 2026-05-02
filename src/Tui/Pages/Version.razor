@@ -1,0 +1,117 @@
+@page "/version"
+@inject TuiNavigationService Nav
+
+<Rows>
+    <Panel Title="Version Dashboard" Border="BoxBorder.Rounded" BorderColor="Color.Yellow" Expand="true">
+        <Rows>
+            @if (isLoading)
+            {
+                <Spinner Message="Loading version details..." />
+            }
+            else
+            {
+                <Panel Title="Tool" Border="BoxBorder.Rounded" BorderColor="Color.Green" Expand="true">
+                    <Markup Content="@toolVersionLine" Foreground="Color.Green" Decoration="Decoration.Bold" />
+                </Panel>
+
+                <Panel Title="Runtime" Border="BoxBorder.Rounded" BorderColor="Color.Grey" Expand="true">
+                    <Rows>
+                        <Markup Content="@runtimeLine" Foreground="Color.Grey70" />
+                        <Markup Content="@branchLine" Foreground="Color.Grey70" />
+                    </Rows>
+                </Panel>
+
+                <Panel Title="Provider" Border="BoxBorder.Rounded" BorderColor="Color.Cyan1" Expand="true">
+                    <Rows>
+                        <Markup Content="@providerLine" Foreground="Color.Cyan1" />
+                        @foreach (var line in providerDetailLines)
+                        {
+                            <Markup Content="@line" Foreground="Color.Grey70" />
+                        }
+                    </Rows>
+                </Panel>
+
+                <Panel Title="Version Contract Fields" Border="BoxBorder.Rounded" BorderColor="Color.Blue" Expand="true">
+                    <Rows>
+                        @foreach (var line in contractFieldLines)
+                        {
+                            <Markup Content="@line" Foreground="Color.Grey70" />
+                        }
+                    </Rows>
+                </Panel>
+            }
+
+            <Columns Expand="true">
+                <TextButton Content="Run version" OnClick="LoadAsync" BackgroundColor="Color.Grey" FocusedColor="Color.Green" />
+                <TextButton Content="Home" OnClick="GoHome" BackgroundColor="Color.Grey" FocusedColor="Color.Yellow" />
+            </Columns>
+        </Rows>
+    </Panel>
+</Rows>
+
+@code {
+    private bool isLoading = true;
+    private string toolVersionLine = "Version unavailable";
+    private string providerLine = "Provider not configured";
+    private IReadOnlyList<string> providerDetailLines = [];
+    private string runtimeLine = "runtime: local";
+    private string branchLine = "branch: unknown";
+
+    private static readonly string[] contractFieldLines =
+    [
+        "semver, major, minor, patch, preRelease, buildMetadata",
+        "branch, commitSha, shortSha, isPreRelease, isStable",
+        "assemblyVersion, fileVersion, informationalVersion",
+        "nugetVersion, dockerVersion, commitsSinceVersionSource",
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        var invocation = new CommandInvocation(
+            Args: new Dictionary<string, string>(),
+            Options: new Dictionary<string, string?>(),
+            Json: false,
+            JsonFile: null,
+            WorkingDirectory: TuiRuntimeContext.WorkingDirectory);
+
+        var versionResult = await TuiRuntimeContext.Executor.ExecuteAsync("version", invocation, CancellationToken.None);
+        toolVersionLine = versionResult.Message ?? "Version unavailable";
+
+        var ci = CiDetector.Detect();
+        runtimeLine = ci.IsCi ? $"runtime: {ci.Provider ?? "ci"}" : "runtime: local";
+
+        var git = await GitDetector.DetectAsync(TuiRuntimeContext.WorkingDirectory, CancellationToken.None);
+        branchLine = $"branch: {git.Branch ?? "unknown"} | sha: {git.ShortSha ?? "unknown"}";
+
+        var explainResult = await TuiRuntimeContext.Executor.ExecuteAsync("explain version", invocation, CancellationToken.None);
+        var explain = explainResult.Message ?? string.Empty;
+        var lines = explain
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToArray();
+
+        providerLine = lines.FirstOrDefault(l => l.StartsWith("Provider:", StringComparison.OrdinalIgnoreCase)) ?? "Provider not configured";
+        providerDetailLines = lines
+            .Where(l => !l.StartsWith("Versioning configuration", StringComparison.OrdinalIgnoreCase) &&
+                        !l.StartsWith("Provider:", StringComparison.OrdinalIgnoreCase))
+            .Take(8)
+            .ToArray();
+
+        if (TuiRuntimeContext.Config?.Versioning?.Settings is { Count: > 0 } settings)
+        {
+            var settingsLines = settings.Select(kv => $"setting {kv.Key}: {kv.Value}").ToArray();
+            providerDetailLines = providerDetailLines.Concat(settingsLines).Take(12).ToArray();
+        }
+
+        isLoading = false;
+    }
+
+    private void GoHome() => Nav.Navigate("home");
+}
