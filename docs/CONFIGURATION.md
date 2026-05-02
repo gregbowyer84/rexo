@@ -356,6 +356,12 @@ Override the Docker image:
 ]
 ```
 
+Artifact name fallback:
+
+- `artifacts[].name` is optional.
+- When omitted, Rexo uses the root `name` value from the config as the artifact name.
+- This fallback applies consistently to plan/build/tag/push output and manifests.
+
 After `builtin:push-artifacts` completes, a manifest is written to
 `<runtime.output.root>/manifest.json` (default: `artifacts/manifest.json`) listing each
 artifact's type, name, push status, and published references.

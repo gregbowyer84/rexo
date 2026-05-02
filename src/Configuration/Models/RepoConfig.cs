@@ -72,7 +72,7 @@ public sealed record RepoVersioningConfig(
 
 public sealed record RepoArtifactConfig(
     string Type,
-    string Name,
+    string? Name = null,
     Dictionary<string, JsonElement>? Settings = null);
 
 public sealed record RepoOutputConfig(

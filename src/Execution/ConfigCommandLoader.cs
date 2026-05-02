@@ -424,6 +424,7 @@ public sealed class ConfigCommandLoader
                     !stagesValue.TryGetProperty(stageName, out var selectedStage) ||
                     selectedStage.ValueKind != JsonValueKind.Object)
                 {
+                    var artifactName = ResolveArtifactName(artifactCfg, config);
                     return new StepResult(
                         step.Id ?? "docker-stage",
                         false,
@@ -431,7 +432,7 @@ public sealed class ConfigCommandLoader
                         TimeSpan.Zero,
                         new Dictionary<string, object?>
                         {
-                            ["error"] = $"Stage '{stageName}' not found for docker artifact '{artifactCfg.Name}'.",
+                            ["error"] = $"Stage '{stageName}' not found for docker artifact '{artifactName}'.",
                         });
                 }
 
@@ -444,12 +445,13 @@ public sealed class ConfigCommandLoader
 
                 var artifactConfig = new ArtifactConfig(
                     artifactCfg.Type,
-                    artifactCfg.Name,
+                    ResolveArtifactName(artifactCfg, config),
                     clonedSettings);
 
                 var result = await provider.BuildAsync(artifactConfig, ctx, ct);
                 if (!result.Success)
                 {
+                    var artifactName = ResolveArtifactName(artifactCfg, config);
                     return new StepResult(
                         step.Id ?? "docker-stage",
                         false,
@@ -457,7 +459,7 @@ public sealed class ConfigCommandLoader
                         TimeSpan.Zero,
                         new Dictionary<string, object?>
                         {
-                            ["error"] = $"Failed to build docker stage '{stageName}' for artifact '{artifactCfg.Name}'.",
+                            ["error"] = $"Failed to build docker stage '{stageName}' for artifact '{artifactName}'.",
                         });
                 }
             }
@@ -853,12 +855,13 @@ public sealed class ConfigCommandLoader
                 continue;
             }
 
-            var artifactConfig = ToArtifactConfig(artifactCfg, ResolveOutputRoot(config));
+            var artifactConfig = ToArtifactConfig(artifactCfg, config, ResolveOutputRoot(config));
             var result = await provider.BuildAsync(artifactConfig, ctx, cancellationToken);
             if (!result.Success)
             {
+                var artifactName = ResolveArtifactName(artifactCfg, config);
                 return new StepResult(stepId, false, 5, TimeSpan.Zero,
-                    new Dictionary<string, object?> { ["error"] = $"Failed to build artifact '{artifactCfg.Name}'." });
+                    new Dictionary<string, object?> { ["error"] = $"Failed to build artifact '{artifactName}'." });
             }
         }
 
@@ -893,7 +896,7 @@ public sealed class ConfigCommandLoader
                 continue;
             }
 
-            await provider.TagAsync(ToArtifactConfig(artifactCfg, ResolveOutputRoot(config)), ctx, cancellationToken);
+            await provider.TagAsync(ToArtifactConfig(artifactCfg, config, ResolveOutputRoot(config)), ctx, cancellationToken);
         }
 
         return new StepResult(stepId, true, 0, TimeSpan.Zero,
@@ -931,14 +934,15 @@ public sealed class ConfigCommandLoader
         {
             foreach (var artifactCfg in artifacts)
             {
+                var artifactName = ResolveArtifactName(artifactCfg, config);
                 manifestEntries.Add(new Core.Models.ArtifactManifestEntry(
                     artifactCfg.Type,
-                    artifactCfg.Name,
+                    artifactName,
                     Built: true,
                     Pushed: false,
                     Tags: Array.Empty<string>()));
                 pushDecisions.Add(new Core.Models.PushDecision(
-                    artifactCfg.Name,
+                    artifactName,
                     false,
                     "Push skipped: use --confirm locally, or use release --push."));
             }
@@ -964,33 +968,35 @@ public sealed class ConfigCommandLoader
                 continue;
             }
 
+            var artifactName = ResolveArtifactName(artifactCfg, config);
+
             var effectivePolicy = BuildEffectivePushPolicy(globalPolicy, artifactCfg.Settings);
             if (!IsPushAllowed(effectivePolicy, ctx, out var gateReason))
             {
                 manifestEntries.Add(new Core.Models.ArtifactManifestEntry(
                     artifactCfg.Type,
-                    artifactCfg.Name,
+                    artifactName,
                     Built: true,
                     Pushed: false,
                     Tags: Array.Empty<string>()));
-                pushDecisions.Add(new Core.Models.PushDecision(artifactCfg.Name, false, gateReason));
+                pushDecisions.Add(new Core.Models.PushDecision(artifactName, false, gateReason));
                 continue;
             }
 
-            var pushResult = await provider.PushAsync(ToArtifactConfig(artifactCfg, outputRoot), ctx, cancellationToken);
+            var pushResult = await provider.PushAsync(ToArtifactConfig(artifactCfg, config, outputRoot), ctx, cancellationToken);
             var pushPerformed = pushResult.PublishedReferences.Count > 0;
             manifestEntries.Add(new Core.Models.ArtifactManifestEntry(
                 artifactCfg.Type,
-                artifactCfg.Name,
+                artifactName,
                 Built: true,
                 Pushed: pushPerformed,
                 Tags: pushResult.PublishedReferences));
             pushDecisions.Add(new Core.Models.PushDecision(
-                artifactCfg.Name,
+                artifactName,
                 pushResult.Success,
                 pushResult.Success
                     ? (pushPerformed ? "Push succeeded." : "Push skipped.")
-                    : $"Failed to push artifact '{artifactCfg.Name}'."));
+                    : $"Failed to push artifact '{artifactName}'."));
 
             if (!pushResult.Success)
             {
@@ -1001,7 +1007,7 @@ public sealed class ConfigCommandLoader
                 return new StepResult(stepId, false, 6, TimeSpan.Zero,
                     new Dictionary<string, object?>
                     {
-                        ["error"] = $"Failed to push artifact '{artifactCfg.Name}'.",
+                        ["error"] = $"Failed to push artifact '{artifactName}'.",
                         ["__artifacts"] = manifestEntries,
                         ["__pushDecisions"] = pushDecisions,
                     });
@@ -1050,8 +1056,8 @@ public sealed class ConfigCommandLoader
         var plans = artifacts.Select(a => new
         {
             a.Type,
-            a.Name,
-            Image = TryGetArtifactSettingString(a.Settings, "image") ?? a.Name,
+            Name = ResolveArtifactName(a, config),
+            Image = TryGetArtifactSettingString(a.Settings, "image") ?? ResolveArtifactName(a, config),
             Dockerfile = TryGetArtifactSettingString(a.Settings, "dockerfile") ?? "Dockerfile",
             Context = TryGetArtifactSettingString(a.Settings, "context") ?? ".",
             Runner = TryGetArtifactSettingString(a.Settings, "runner") ?? "build",
@@ -1082,15 +1088,16 @@ public sealed class ConfigCommandLoader
         planLines.Add("Artifacts:");
         foreach (var a in artifacts)
         {
-            var image = TryGetArtifactSettingString(a.Settings, "image") ?? a.Name;
-            planLines.Add($"  [{a.Type}] {a.Name}");
+            var artifactName = ResolveArtifactName(a, config);
+            var image = TryGetArtifactSettingString(a.Settings, "image") ?? artifactName;
+            planLines.Add($"  [{a.Type}] {artifactName}");
             planLines.Add($"    image: {image}");
             planLines.Add($"    build: yes");
 
             var provider = artifactProviders.Resolve(a.Type);
             if (provider is not null)
             {
-                var tags = provider.GetPlannedTags(new ArtifactConfig(a.Type, a.Name, a.Settings ?? new Dictionary<string, System.Text.Json.JsonElement>(StringComparer.Ordinal)), ctx);
+                var tags = provider.GetPlannedTags(new ArtifactConfig(a.Type, artifactName, a.Settings ?? new Dictionary<string, System.Text.Json.JsonElement>(StringComparer.Ordinal)), ctx);
                 if (tags.Count > 0)
                 {
                     planLines.Add($"    tags:");
@@ -1191,7 +1198,7 @@ public sealed class ConfigCommandLoader
         return (canPush, skipReasons);
     }
 
-    private static ArtifactConfig ToArtifactConfig(RepoArtifactConfig artifactCfg, string outputRoot)
+    private static ArtifactConfig ToArtifactConfig(RepoArtifactConfig artifactCfg, RepoConfig config, string outputRoot)
     {
         var settings = artifactCfg.Settings is not null
             ? CloneSettings(artifactCfg.Settings)
@@ -1206,9 +1213,14 @@ public sealed class ConfigCommandLoader
 
         return new ArtifactConfig(
             artifactCfg.Type,
-            artifactCfg.Name,
+            ResolveArtifactName(artifactCfg, config),
             settings);
     }
+
+    private static string ResolveArtifactName(RepoArtifactConfig artifactCfg, RepoConfig config) =>
+        string.IsNullOrWhiteSpace(artifactCfg.Name)
+            ? config.Name
+            : artifactCfg.Name;
 
     private static string? TryGetArtifactSettingString(Dictionary<string, JsonElement>? settings, string key)
     {

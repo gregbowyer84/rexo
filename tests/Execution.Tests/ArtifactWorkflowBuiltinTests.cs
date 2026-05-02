@@ -97,6 +97,55 @@ public sealed class ArtifactWorkflowBuiltinTests
         Assert.Empty(nugetProvider.PushCalls);
     }
 
+    [Fact]
+    public async Task ArtifactNameFallsBackToRootConfigNameWhenOmitted()
+    {
+        var dockerProvider = new RecordingArtifactProvider("docker");
+        var builtins = new BuiltinRegistry();
+        var providerRegistry = new ArtifactProviderRegistry();
+        providerRegistry.Register(dockerProvider.Type, dockerProvider);
+
+        var loader = new ConfigCommandLoader(
+            builtins,
+            new TemplateRenderer(),
+            VersionProviderRegistry.CreateDefault(),
+            providerRegistry);
+
+        var config = new RepoConfig(
+            Name: "repo-root-name",
+            Commands: new Dictionary<string, RepoCommandConfig>
+            {
+                ["build"] = new RepoCommandConfig(
+                    Description: "build",
+                    Options: new Dictionary<string, RepoOptionConfig>(),
+                    Steps: [new RepoStepConfig(Id: "build", Uses: "builtin:build-artifacts")]),
+            },
+            Aliases: new Dictionary<string, string>())
+        {
+            Artifacts =
+            [
+                new RepoArtifactConfig(
+                    "docker",
+                    null,
+                    JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
+                        """
+                        {
+                          "image": "ghcr.io/acme/docker-app"
+                        }
+                        """)!),
+            ],
+        };
+
+        var registry = new CommandRegistry();
+        var executor = new DefaultCommandExecutor(registry);
+        loader.LoadInto(registry, config, Path.GetTempPath(), executor);
+
+        var result = await ExecuteAsync(executor, "build");
+
+        Assert.True(result.Success);
+        Assert.Equal(["repo-root-name"], dockerProvider.BuildCalls);
+    }
+
     private static DefaultCommandExecutor CreateExecutor(params IArtifactProvider[] providers)
     {
         var builtins = new BuiltinRegistry();

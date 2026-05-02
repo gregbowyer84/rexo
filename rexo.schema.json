@@ -317,8 +317,7 @@
       "description": "Docker image artifact configuration.",
       "additionalProperties": false,
       "required": [
-        "type",
-        "name"
+        "type"
       ],
       "properties": {
         "type": {
@@ -327,7 +326,7 @@
         },
         "name": {
           "type": "string",
-          "description": "Logical artifact name used in logs and manifests."
+          "description": "Logical artifact name used in logs and manifests. When omitted, falls back to the root config name."
         },
         "settings": {
           "description": "Provider-specific docker build, tag, and push settings.",
@@ -340,8 +339,7 @@
       "description": "NuGet package artifact configuration.",
       "additionalProperties": false,
       "required": [
-        "type",
-        "name"
+        "type"
       ],
       "properties": {
         "type": {
@@ -350,7 +348,7 @@
         },
         "name": {
           "type": "string",
-          "description": "Logical artifact name used in logs and manifests."
+          "description": "Logical artifact name used in logs and manifests. When omitted, falls back to the root config name."
         },
         "settings": {
           "description": "Provider-specific nuget pack/push settings.",
@@ -363,8 +361,7 @@
       "description": "Fallback artifact shape for custom providers not explicitly modeled in this schema.",
       "additionalProperties": false,
       "required": [
-        "type",
-        "name"
+        "type"
       ],
       "properties": {
         "type": {
@@ -379,7 +376,7 @@
         },
         "name": {
           "type": "string",
-          "description": "Logical artifact name used in logs and manifests."
+          "description": "Logical artifact name used in logs and manifests. When omitted, falls back to the root config name."
         },
         "settings": {
           "type": "object",
