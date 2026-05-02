@@ -30,21 +30,11 @@ public static class Program
         // Parse global flags
         var (cleanArgs, json, jsonFile, verbose, debug, quiet, setOverrides) = ParseGlobalFlags(args);
 
-        // No args (or only global flags) — launch interactive TUI picker
+        // No args (or only global flags) — show help
         if (cleanArgs.Count == 0)
         {
-            var projectRoots = DiscoverUiProjectRoots(workingDir);
-            if (projectRoots.Count > 1)
-            {
-                var selectedProject = ConsoleRenderer.PromptProjectPicker(projectRoots, workingDir);
-                if (selectedProject is not null)
-                {
-                    workingDir = selectedProject;
-                }
-            }
-
-            var (_, uiExecutor, uiConfig) = await CliBootstrapper.BuildServicesAsync(workingDir, debug, setOverrides, cancellationToken);
-            return await RunUiAsync(uiExecutor, uiConfig, workingDir, cancellationToken);
+            PrintHelp();
+            return 0;
         }
 
         var command = cleanArgs[0];
