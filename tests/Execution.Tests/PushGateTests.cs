@@ -154,6 +154,8 @@ public sealed class PushGateTests
     [Fact]
     public async Task PushRequiresExplicitConfirmationLocally()
     {
+        using var _ = new CiEnvironmentScope();
+
         var provider = new RecordingArtifactProvider("docker");
         var (executor, _) = CreateExecutor(
             provider,
@@ -286,6 +288,30 @@ public sealed class PushGateTests
         {
             PushedArtifacts.Add(artifact.Name);
             return Task.FromResult(new ArtifactPushResult(artifact.Name, true, [$"{artifact.Name}:latest"]));
+        }
+    }
+
+    /// <summary>Clears CI environment variables for the duration of a test, then restores them.</summary>
+    private sealed class CiEnvironmentScope : IDisposable
+    {
+        private static readonly string[] CiVars = ["GITHUB_ACTIONS", "TF_BUILD", "GITLAB_CI", "BITBUCKET_BUILD_NUMBER", "CI"];
+        private readonly Dictionary<string, string?> _saved = new(StringComparer.Ordinal);
+
+        public CiEnvironmentScope()
+        {
+            foreach (var v in CiVars)
+            {
+                _saved[v] = Environment.GetEnvironmentVariable(v);
+                Environment.SetEnvironmentVariable(v, null);
+            }
+        }
+
+        public void Dispose()
+        {
+            foreach (var (v, val) in _saved)
+            {
+                Environment.SetEnvironmentVariable(v, val);
+            }
         }
     }
 }
