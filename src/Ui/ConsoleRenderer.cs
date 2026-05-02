@@ -208,6 +208,46 @@ public static class ConsoleRenderer
         return displayToName.TryGetValue(selection, out var name) ? name : null;
     }
 
+    /// <summary>
+    /// Presents an interactive project picker when multiple config roots are detected.
+    /// Returns the selected project directory, or <c>null</c> if cancelled.
+    /// </summary>
+    public static string? PromptProjectPicker(IReadOnlyList<string> projectRoots, string currentWorkingDir)
+    {
+        if (projectRoots.Count <= 1) return null;
+
+        const string cancelEntry = "(cancel)";
+        var ordered = projectRoots
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var currentName = Path.GetFileName(currentWorkingDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        var choices = ordered
+            .Select(path =>
+            {
+                var name = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                var isCurrent = string.Equals(path, currentWorkingDir, StringComparison.OrdinalIgnoreCase);
+                var suffix = isCurrent ? " [grey](current)[/]" : string.Empty;
+                return $"[cyan]{Markup.Escape(name)}[/] [grey]- {Markup.Escape(path)}[/]{suffix}";
+            })
+            .ToList();
+        choices.Add(cancelEntry);
+
+        var displayToPath = ordered
+            .Zip(choices.Take(ordered.Length), (path, display) => (display, path))
+            .ToDictionary(x => x.display, x => x.path, StringComparer.Ordinal);
+
+        var selection = AnsiConsole.Prompt(
+            new SelectionPrompt<string>()
+                .Title($"[bold yellow]Select a project root (current: {Markup.Escape(currentName)}):[/]")
+                .PageSize(12)
+                .HighlightStyle(new Style(foreground: Color.Cyan1))
+                .AddChoices(choices));
+
+        if (selection == cancelEntry) return null;
+        return displayToPath.TryGetValue(selection, out var selectedPath) ? selectedPath : null;
+    }
+
     /// <summary>Renders a live execution dashboard row during command execution.</summary>
     public static void RenderExecutionProgress(string commandName, int totalSteps, int completedSteps, bool success)
     {

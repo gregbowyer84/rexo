@@ -136,8 +136,8 @@ Legend:
 - [x] Local file policy source class exists
 - [x] Policy source integration in runtime config load path (policy.json loaded alongside repo.json)
 - [x] Embedded policy templates
-- [ ] Remote policy sources (HTTP/Git/NuGet/company registry)
-- [ ] Policy caching/version pinning/trust model
+- [x] Remote policy sources (HTTP/Git/NuGet/company registry)
+- [x] Policy caching/version pinning/trust model
 
 ## 13) Config Inspection and Explainability
 
@@ -163,8 +163,8 @@ Legend:
 - [x] Basic `repo ui` command path
 - [x] Interactive command picker (Spectre.Console SelectionPrompt, `rx ui` or `rx` with no args)
 - [x] Rich command picker with command descriptions and execution dashboard
-- [ ] Config/policy/resolution browsing UI
-- [ ] TUI project/features (future phase)
+- [x] Config/policy/resolution browsing UI
+- [x] TUI project/features (future phase)
 
 ## 16) Testing and Quality Gates
 
@@ -213,10 +213,10 @@ Items expected in MVP (per scope section 56) and status:
 - [x] Secret masking/redaction in logs and outputs
 - [x] Not-found command suggestion engine
 - [x] Add focused tests for merge/policy/parallel/manifest edge cases (80 tests total)
-- [ ] Add Helm chart OCI artifact provider (`type: helm-oci`) with build/tag/push lifecycle integration
-- [ ] Add typed schema + tests + docs for Helm chart OCI artifact settings
-- [ ] Add CI pipeline scaffolding (`rx init ci`) for GitHub Actions and Azure DevOps thin-wrapper templates
-- [ ] Add shared feed-auth resolution layer for artifact pushes (Docker/NuGet/Helm) with env-mounted credentials
-- [ ] Add CI-native identity fallback for feed authentication (OIDC/service connection/token providers) with env fallback
-- [ ] Add auth preflight validation + secret-safe diagnostics for missing/invalid feed credentials
-- [ ] Smarter `rx init` repo introspection (language/framework detection, richer templates, policy template recommendations)
+- [x] Add Helm chart OCI artifact provider (`type: helm-oci`) with build/tag/push lifecycle integration
+- [x] Add typed schema + tests + docs for Helm chart OCI artifact settings
+- [x] Add CI pipeline scaffolding (`rx init ci`) for GitHub Actions and Azure DevOps thin-wrapper templates
+- [x] Add shared feed-auth resolution layer for artifact pushes (Docker/NuGet/Helm) with env-mounted credentials
+- [x] Add CI-native identity fallback for feed authentication (OIDC/service connection/token providers) with env fallback
+- [x] Add auth preflight validation + secret-safe diagnostics for missing/invalid feed credentials
+- [x] Smarter `rx init` repo introspection (language/framework detection, richer templates, policy template recommendations)

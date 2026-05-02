@@ -191,6 +191,44 @@ public sealed class InitCommandTests
     }
 
     [Fact]
+    public async Task InitAutoDetectsPythonTemplate()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"rexo-init-python-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(dir, "requirements.txt"), "pytest\n");
+
+            var registry = BuiltinCommandRegistration.CreateDefault();
+            var executor = new DefaultCommandExecutor(registry);
+
+            var invocation = new CommandInvocation(
+                new Dictionary<string, string>(),
+                new Dictionary<string, string?>
+                {
+                    ["yes"] = "true",
+                    ["template"] = "auto",
+                },
+                Json: false,
+                JsonFile: null,
+                WorkingDirectory: dir);
+
+            var result = await executor.ExecuteAsync("init", invocation, CancellationToken.None);
+
+            Assert.True(result.Success);
+            var configPath = Path.Combine(dir, ".rexo", "rexo.json");
+            var content = await File.ReadAllTextAsync(configPath);
+            Assert.Contains("python -m compileall .", content, StringComparison.Ordinal);
+            Assert.Contains("python -m pytest", content, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
     public async Task InitFailsWhenInstructionsPathEscapesRepository()
     {
         var dir = Path.Combine(Path.GetTempPath(), $"rexo-init-instructions-path-{Guid.NewGuid():N}");
@@ -325,6 +363,72 @@ public sealed class InitCommandTests
             Assert.False(File.Exists(schemaPath));
             var content = await File.ReadAllTextAsync(configPath);
             Assert.Contains("\"$schema\": \"https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json\"", content, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public async Task InitCiCreatesGitHubAndAzdoTemplatesByDefault()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"rexo-init-ci-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+
+        try
+        {
+            var registry = BuiltinCommandRegistration.CreateDefault();
+            var executor = new DefaultCommandExecutor(registry);
+
+            var invocation = new CommandInvocation(
+                new Dictionary<string, string>(),
+                new Dictionary<string, string?>
+                {
+                    ["mode"] = "ci",
+                },
+                Json: false,
+                JsonFile: null,
+                WorkingDirectory: dir);
+
+            var result = await executor.ExecuteAsync("init", invocation, CancellationToken.None);
+
+            Assert.True(result.Success);
+            Assert.True(File.Exists(Path.Combine(dir, ".github", "workflows", "rexo-release.yml")));
+            Assert.True(File.Exists(Path.Combine(dir, ".azuredevops", "rexo-release.yml")));
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public async Task InitCiFailsForUnknownProvider()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"rexo-init-ci-invalid-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+
+        try
+        {
+            var registry = BuiltinCommandRegistration.CreateDefault();
+            var executor = new DefaultCommandExecutor(registry);
+
+            var invocation = new CommandInvocation(
+                new Dictionary<string, string>(),
+                new Dictionary<string, string?>
+                {
+                    ["mode"] = "ci",
+                    ["provider"] = "unknown",
+                },
+                Json: false,
+                JsonFile: null,
+                WorkingDirectory: dir);
+
+            var result = await executor.ExecuteAsync("init", invocation, CancellationToken.None);
+
+            Assert.False(result.Success);
+            Assert.Contains("Invalid --provider value", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

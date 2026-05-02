@@ -2,7 +2,9 @@ namespace Rexo.Artifacts.NuGet;
 
 using System.Diagnostics;
 using System.Text.Json;
+using Rexo.Artifacts;
 using Rexo.Core.Abstractions;
+using Rexo.Core.Environment;
 using Rexo.Core.Models;
 
 public sealed class NuGetArtifactProvider : IArtifactProvider
@@ -57,12 +59,18 @@ public sealed class NuGetArtifactProvider : IArtifactProvider
         var source = GetSetting(artifact, "source") ?? "https://api.nuget.org/v3/index.json";
         var output = GetSetting(artifact, "output") ?? "artifacts/packages";
         var apiKeyEnvVar = GetSetting(artifact, "apiKeyEnv") ?? "NUGET_API_KEY";
-        var apiKey = Environment.GetEnvironmentVariable(apiKeyEnvVar);
+        var fileEnv = RepositoryEnvironmentFiles.Load(context.RepositoryRoot);
+        var auth = FeedAuthResolver.ResolveNuGet(source, apiKeyEnvVar, fileEnv);
+        if (!auth.HasCredentials)
+        {
+            Console.Error.WriteLine("NuGet auth preflight failed: no API token resolved from env/CI identity.");
+            return new ArtifactPushResult(artifact.Name, false, Array.Empty<string>());
+        }
 
         var args = $"nuget push {output}/*.nupkg --source {source} --skip-duplicate";
-        if (!string.IsNullOrEmpty(apiKey))
+        if (!string.IsNullOrEmpty(auth.Secret))
         {
-            args += $" --api-key {apiKey}";
+            args += $" --api-key {auth.Secret}";
         }
 
         Console.WriteLine($"  > dotnet {args}");

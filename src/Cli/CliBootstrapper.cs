@@ -2,6 +2,7 @@ namespace Rexo.Cli;
 
 using System.Text.Json;
 using Rexo.Artifacts;
+using Rexo.Artifacts.Helm;
 using Rexo.Artifacts.Docker;
 using Rexo.Artifacts.NuGet;
 using Rexo.Configuration;
@@ -61,6 +62,7 @@ internal static class CliBootstrapper
         var templateRenderer = new TemplateRenderer();
         var versionProviders = VersionProviderRegistry.CreateDefault();
         var artifactProviders = new ArtifactProviderRegistry();
+        artifactProviders.Register("helm-oci", new HelmOciArtifactProvider());
         artifactProviders.Register("docker", new DockerArtifactProvider());
         artifactProviders.Register("nuget", new NuGetArtifactProvider());
 

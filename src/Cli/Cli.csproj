@@ -4,6 +4,7 @@
     <ProjectReference Include="..\\Configuration\\Configuration.csproj" />
     <ProjectReference Include="..\\Execution\\Execution.csproj" />
     <ProjectReference Include="..\\Ui\\Ui.csproj" />
+    <ProjectReference Include="..\Artifacts.Helm\Artifacts.Helm.csproj" />
     <ProjectReference Include="..\\Artifacts.Docker\\Artifacts.Docker.csproj" />
     <ProjectReference Include="..\\Artifacts.NuGet\\Artifacts.NuGet.csproj" />
     <ProjectReference Include="..\\Versioning\\Versioning.csproj" />

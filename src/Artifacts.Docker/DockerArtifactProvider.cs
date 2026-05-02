@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Rexo.Artifacts;
 using Rexo.Core.Abstractions;
 using Rexo.Core.Environment;
 using Rexo.Core.Models;
@@ -255,27 +256,23 @@ public sealed class DockerArtifactProvider : IArtifactProvider
         CancellationToken cancellationToken)
     {
         var envOverrides = BuildEnvironmentOverrides(dotEnv);
-        var username = GetEnvironmentValue("DOCKER_LOGIN_USERNAME", dotEnv)
-            ?? GetEnvironmentValue("DOCKER_AUTH_USERNAME", dotEnv);
-        var password = GetEnvironmentValue("DOCKER_LOGIN_PASSWORD", dotEnv)
-            ?? GetEnvironmentValue("DOCKER_AUTH_PASSWORD", dotEnv);
+        var auth = FeedAuthResolver.ResolveDocker(
+            configuredRegistry: settings.LoginRegistry,
+            inferredRegistry: InferRegistryFromImage(settings.Image),
+            fileEnv: dotEnv);
 
-        if (string.IsNullOrWhiteSpace(username) && string.IsNullOrWhiteSpace(password))
+        if (!string.IsNullOrWhiteSpace(auth.Error))
+        {
+            Console.Error.WriteLine(auth.Error);
+            return (false, null, null);
+        }
+
+        if (!auth.HasCredentials)
         {
             return (true, envOverrides.Count > 0 ? envOverrides : null, null);
         }
 
-        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
-        {
-            Console.Error.WriteLine("DOCKER_LOGIN_USERNAME and DOCKER_LOGIN_PASSWORD must both be set.");
-            return (false, null, null);
-        }
-
-        var registry = GetEnvironmentValue("DOCKER_LOGIN_REGISTRY", dotEnv)
-            ?? GetEnvironmentValue("DOCKER_AUTH_REGISTRY", dotEnv)
-            ?? settings.LoginRegistry
-            ?? InferRegistryFromImage(settings.Image);
-
+        var registry = auth.Endpoint;
         if (string.IsNullOrWhiteSpace(registry))
         {
             Console.Error.WriteLine("Docker login registry could not be determined. Set settings.loginRegistry or DOCKER_LOGIN_REGISTRY.");
@@ -287,13 +284,13 @@ public sealed class DockerArtifactProvider : IArtifactProvider
 
         envOverrides["DOCKER_CONFIG"] = tempDockerConfig;
 
-        var loginArgs = new[] { "login", registry, "--username", username, "--password-stdin" };
+        var loginArgs = new[] { "login", registry, "--username", auth.Username!, "--password-stdin" };
         Console.WriteLine($"  > docker {FormatArguments(loginArgs)}");
         var loginResult = await _runDockerAsync(
             loginArgs,
             workingDirectory,
             envOverrides,
-            password + Environment.NewLine,
+            auth.Secret! + Environment.NewLine,
             cancellationToken);
 
         if (loginResult.ExitCode != 0)

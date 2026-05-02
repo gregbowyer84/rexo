@@ -186,4 +186,73 @@ public sealed class CliSmokeTests
             }
         }
     }
+
+        [Fact]
+        public async Task RemotePolicySourceFromEnvironmentIsMerged()
+        {
+                var tempDir = Path.Combine(Path.GetTempPath(), $"rexo-cli-remote-policy-{Guid.NewGuid():N}");
+                Directory.CreateDirectory(tempDir);
+                var originalDirectory = Environment.CurrentDirectory;
+                var originalSources = Environment.GetEnvironmentVariable("REXO_POLICY_SOURCES");
+
+                try
+                {
+                        await File.WriteAllTextAsync(
+                                Path.Combine(tempDir, "rexo.json"),
+                                """
+                                {
+                                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+                                    "schemaVersion": "1.0",
+                                    "name": "sample",
+                                    "versioning": {
+                                        "provider": "fixed",
+                                        "fallback": "1.2.3"
+                                    }
+                                }
+                                """);
+
+                        var externalPolicy = Path.Combine(tempDir, "external.policy.json");
+                        await File.WriteAllTextAsync(
+                                externalPolicy,
+                                """
+                                {
+                                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json",
+                                    "schemaVersion": "1.0",
+                                    "name": "external-policy",
+                                    "commands": {
+                                        "from remote": {
+                                            "description": "Resolve version from environment policy source",
+                                            "steps": [
+                                                { "uses": "builtin:resolve-version" }
+                                            ]
+                                        }
+                                    },
+                                    "aliases": {}
+                                }
+                                """);
+
+                        Environment.SetEnvironmentVariable("REXO_POLICY_SOURCES", externalPolicy);
+                        Environment.CurrentDirectory = tempDir;
+
+                        var listJsonPath = Path.Combine(tempDir, "list-remote-policy.json");
+                        var listExitCode = await Program.ExecuteAsync(["--json-file", listJsonPath, "--json", "list"], CancellationToken.None);
+                        Assert.Equal(0, listExitCode);
+
+                        var listOutput = await File.ReadAllTextAsync(listJsonPath);
+                        Assert.Contains("from remote", listOutput, StringComparison.OrdinalIgnoreCase);
+
+                        var commandExitCode = await Program.ExecuteAsync(["from", "remote"], CancellationToken.None);
+                        Assert.Equal(0, commandExitCode);
+                }
+                finally
+                {
+                        Environment.SetEnvironmentVariable("REXO_POLICY_SOURCES", originalSources);
+                        Environment.CurrentDirectory = originalDirectory;
+
+                        if (Directory.Exists(tempDir))
+                        {
+                                Directory.Delete(tempDir, true);
+                        }
+                }
+        }
 }

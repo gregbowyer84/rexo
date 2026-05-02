@@ -13,7 +13,7 @@ public static class BuiltinCommandRegistration
 {
     private static readonly JsonSerializerOptions IndentedJsonOptions = new() { WriteIndented = true };
     private static readonly HttpClient HttpClient = new();
-    private static readonly string[] InitTemplateChoices = ["dotnet", "node", "generic"];
+    private static readonly string[] InitTemplateChoices = ["dotnet", "node", "python", "go", "generic"];
     private static readonly string[] InitSchemaSourceChoices = ["remote", "local"];
     private static readonly string[] InitYesNoChoices = ["yes", "no"];
     private const string DefaultInstructionsPath = ".github/instructions/rexo.instructions.md";
@@ -438,6 +438,12 @@ public static class BuiltinCommandRegistration
         var workingDir = invocation.WorkingDirectory;
         var options = invocation.Options;
 
+        var initMode = ReadOption(options, "mode") ?? ReadOption(options, "subcommand");
+        if (!string.IsNullOrWhiteSpace(initMode) && initMode.Equals("ci", StringComparison.OrdinalIgnoreCase))
+        {
+            return await RunInitCiAsync(invocation, cancellationToken);
+        }
+
         var force = IsTrue(options, "force");
         var nonInteractive = IsTrue(options, "yes") || IsTrue(options, "non-interactive");
 
@@ -540,7 +546,7 @@ public static class BuiltinCommandRegistration
         template = NormalizeTemplate(template);
         if (template is null)
         {
-            return CommandResult.Fail("init", 1, "Invalid --template value. Use auto|dotnet|node|generic.");
+            return CommandResult.Fail("init", 1, "Invalid --template value. Use auto|dotnet|node|python|go|generic.");
         }
 
         schemaSource = NormalizeSchemaSource(schemaSource);
@@ -700,8 +706,77 @@ public static class BuiltinCommandRegistration
         return CommandResult.Ok("init", string.Join(Environment.NewLine, lines));
     }
 
+    private static async Task<CommandResult> RunInitCiAsync(
+        CommandInvocation invocation,
+        CancellationToken cancellationToken)
+    {
+        var workingDir = invocation.WorkingDirectory;
+        var options = invocation.Options;
+        var force = IsTrue(options, "force");
+
+        var provider = NormalizeCiProvider(ReadOption(options, "provider") ?? "both");
+        if (provider is null)
+        {
+            return CommandResult.Fail("init", 1, "Invalid --provider value. Use github|azdo|both.");
+        }
+
+        var createdFiles = new List<string>();
+
+        if (provider is "github" or "both")
+        {
+            var githubPath = Path.Combine(workingDir, ".github", "workflows", "rexo-release.yml");
+            if (File.Exists(githubPath) && !force)
+            {
+                return CommandResult.Fail("init", 1, $"Target CI file already exists at '{githubPath}'. Use --force to overwrite.");
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(githubPath)!);
+            await File.WriteAllTextAsync(githubPath, BuildGitHubActionsCiTemplate(), cancellationToken);
+            createdFiles.Add(githubPath);
+        }
+
+        if (provider is "azdo" or "both")
+        {
+            var azdoPath = Path.Combine(workingDir, ".azuredevops", "rexo-release.yml");
+            if (File.Exists(azdoPath) && !force)
+            {
+                return CommandResult.Fail("init", 1, $"Target CI file already exists at '{azdoPath}'. Use --force to overwrite.");
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(azdoPath)!);
+            await File.WriteAllTextAsync(azdoPath, BuildAzureDevOpsCiTemplate(), cancellationToken);
+            createdFiles.Add(azdoPath);
+        }
+
+        var lines = new List<string>
+        {
+            $"Initialized CI scaffolding for provider: {provider}",
+            "Generated files:",
+        };
+
+        lines.AddRange(createdFiles.Select(path => $"  - {path}"));
+        lines.Add("Next steps:");
+        lines.Add("  1. Ensure a dotnet tool manifest includes rx (dotnet tool restore succeeds)." );
+        lines.Add("  2. Configure registry/feed credentials in CI secrets/variables." );
+        lines.Add("  3. Enable pipeline trigger rules for your release branches." );
+
+        return CommandResult.Ok("init", string.Join(Environment.NewLine, lines));
+    }
+
     private static string DetectTemplate(string workingDir)
     {
+        if (File.Exists(Path.Combine(workingDir, "pyproject.toml")) ||
+            File.Exists(Path.Combine(workingDir, "requirements.txt")) ||
+            Directory.EnumerateFiles(workingDir, "*.py", SearchOption.TopDirectoryOnly).Any())
+        {
+            return "python";
+        }
+
+        if (File.Exists(Path.Combine(workingDir, "go.mod")))
+        {
+            return "go";
+        }
+
         if (Directory.EnumerateFiles(workingDir, "*.sln", SearchOption.TopDirectoryOnly).Any() ||
             Directory.EnumerateFiles(workingDir, "*.csproj", SearchOption.AllDirectories).Any())
         {
@@ -716,9 +791,71 @@ public static class BuiltinCommandRegistration
         return "generic";
     }
 
+        private static string? NormalizeCiProvider(string value)
+        {
+                var normalized = value.Trim().ToLowerInvariant();
+                return normalized is "github" or "azdo" or "both"
+                        ? normalized
+                        : null;
+        }
+
+        private static string BuildGitHubActionsCiTemplate() =>
+                """
+                name: rexo-release
+
+                on:
+                    push:
+                        branches:
+                            - main
+                            - release/*
+
+                jobs:
+                    release:
+                        runs-on: ubuntu-latest
+
+                        steps:
+                            - name: Checkout
+                                uses: actions/checkout@v4
+
+                            - name: Setup .NET
+                                uses: actions/setup-dotnet@v4
+                                with:
+                                    dotnet-version: '10.0.x'
+
+                            - name: Restore tools
+                                run: dotnet tool restore
+
+                            - name: Release
+                                run: dotnet tool run rx -- release --push --json-file artifacts/manifests/release.json
+                """;
+
+        private static string BuildAzureDevOpsCiTemplate() =>
+                """
+                trigger:
+                    branches:
+                        include:
+                            - main
+                            - release/*
+
+                pool:
+                    vmImage: ubuntu-latest
+
+                steps:
+                    - task: UseDotNet@2
+                        inputs:
+                            packageType: sdk
+                            version: 10.0.x
+
+                    - script: dotnet tool restore
+                        displayName: Restore tools
+
+                    - script: dotnet tool run rx -- release --push --json-file artifacts/manifests/release.json
+                        displayName: Release
+                """;
+
     private static string? NormalizeTemplate(string value)
     {
-        var known = new[] { "dotnet", "node", "generic" };
+        var known = new[] { "dotnet", "node", "python", "go", "generic" };
         return known.Contains(value, StringComparer.OrdinalIgnoreCase)
             ? value.ToLowerInvariant()
             : null;
@@ -785,6 +922,46 @@ public static class BuiltinCommandRegistration
                     steps = new object[]
                     {
                         new { run = "npm test" },
+                    },
+                },
+            },
+            "python" => new Dictionary<string, object>
+            {
+                ["compile"] = new
+                {
+                    description = "Install dependencies and run a quick syntax pass",
+                    steps = new object[]
+                    {
+                        new { run = "python -m pip install -r requirements.txt" },
+                        new { run = "python -m compileall ." },
+                    },
+                },
+                ["run-tests"] = new
+                {
+                    description = "Run tests",
+                    steps = new object[]
+                    {
+                        new { run = "python -m pytest" },
+                    },
+                },
+            },
+            "go" => new Dictionary<string, object>
+            {
+                ["compile"] = new
+                {
+                    description = "Download modules and build",
+                    steps = new object[]
+                    {
+                        new { run = "go mod download" },
+                        new { run = "go build ./..." },
+                    },
+                },
+                ["run-tests"] = new
+                {
+                    description = "Run tests",
+                    steps = new object[]
+                    {
+                        new { run = "go test ./..." },
                     },
                 },
             },

@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Analysis/Analysis.csproj" />
+    <Project Path="src/Artifacts.Helm/Artifacts.Helm.csproj" />
     <Project Path="src/Artifacts.Docker/Artifacts.Docker.csproj" />
     <Project Path="src/Artifacts.NuGet/Artifacts.NuGet.csproj" />
     <Project Path="src/Artifacts/Artifacts.csproj" />

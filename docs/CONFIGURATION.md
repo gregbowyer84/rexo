@@ -352,6 +352,15 @@ Override the Docker image:
       "project": "src/MyLib/MyLib.csproj",
       "source": "https://api.nuget.org/v3/index.json"
     }
+  },
+  {
+    "type": "helm-oci",
+    "name": "my-chart",
+    "settings": {
+      "chartPath": "deploy/charts/my-chart",
+      "registry": "ghcr.io",
+      "repository": "org/charts"
+    }
   }
 ]
 ```
@@ -522,6 +531,10 @@ Login behavior:
 - Both username and password must be set together.
 - Login registry is resolved from login env vars, then `settings.loginRegistry`, then
   inferred from image.
+- **GHCR zero-config (GitHub Actions)**: when no login credentials are configured and the
+  target registry contains `ghcr.io`, Rexo automatically uses `GITHUB_ACTOR` and
+  `GITHUB_TOKEN` (both injected by GitHub Actions). No `secrets:` binding required —
+  only `permissions: packages: write` in the workflow.
 
 `secrets` shape:
 
@@ -556,7 +569,66 @@ Supported keys:
 | `project` | `string` | Project path for `dotnet pack` |
 | `output` | `string` | Output directory |
 | `source` | `string` | NuGet feed URL |
-| `apiKeyEnv` | `string` | Environment variable containing API key |
+| `apiKeyEnv` | `string` | Environment variable containing API key (defaults to `NUGET_API_KEY`) |
+
+#### NuGet authentication
+
+Resolution order: process env → `.rexo/.env` → `.env` → CI-native fallback.
+
+Scope note: NuGet environment variables are global for the process. Multiple `nuget` artifacts in one run all use the same credential resolution — which is the normal case when a repo publishes several NuGet packages to the same feed.
+
+| Environment variable | Purpose |
+| --- | --- |
+| `NUGET_API_KEY` | API key for push (default; overridden by `settings.apiKeyEnv`) |
+| `NUGET_AUTH_TOKEN` | Alternative API key alias, used if `NUGET_API_KEY` is not set |
+| `GITHUB_TOKEN` | Auto-used for `nuget.pkg.github.com` when no explicit key is set |
+| `SYSTEM_ACCESSTOKEN` | Auto-used for Azure Artifacts feeds when no explicit key is set |
+
+- **GHCR/GitHub Packages zero-config**: when `settings.source` contains `nuget.pkg.github.com` and no API key is configured, `GITHUB_TOKEN` is used automatically. Requires `permissions: packages: write` in the workflow.
+- **Azure Artifacts zero-config**: when the source is an Azure Artifacts feed and no key is configured, `SYSTEM_ACCESSTOKEN` is used automatically (must be enabled in the pipeline job).
+
+### Helm OCI artifact settings (`type: "helm-oci"`)
+
+Supported keys:
+
+| Key | Type | Purpose |
+| --- | --- | --- |
+| `chart` | `string` | Chart name used to resolve packaged archive names (defaults to artifact name) |
+| `chartPath` | `string` | Path to chart root containing `Chart.yaml` (default `chart`) |
+| `output` | `string` | Output directory for packaged `.tgz` files (default `artifacts/charts`) |
+| `oci` | `string` | Full OCI destination (`oci://registry/repository`) |
+| `registry` | `string` | OCI registry host (used with `repository` when `oci` is not set) |
+| `repository` | `string` | OCI repository path (used with `registry` when `oci` is not set) |
+| `loginRegistry` | `string` | Optional registry host override for `helm registry login` |
+| `useDocker` | `boolean` | Set to `false` to disable the Docker fallback when host `helm` CLI is unavailable (default `true`) |
+| `dockerImage` | `string` | Override the Helm container image used when host `helm` CLI is unavailable |
+
+Push destination resolution:
+
+- If `settings.oci` is set, it is used directly (with `oci://` normalized when omitted).
+- Otherwise destination is composed from `settings.registry` + `settings.repository`.
+
+#### Helm OCI authentication
+
+Resolution order: process env → `.rexo/.env` → `.env` → CI-native fallback.
+
+Scope note: Helm OCI environment variables are global for the process. Multiple `helm-oci` artifacts in one run all use the same credential resolution — which is the normal case when a repo packages several charts to the same OCI registry.
+
+| Environment variable | Purpose |
+| --- | --- |
+| `HELM_REGISTRY_USERNAME` | Registry login username |
+| `HELM_REGISTRY_PASSWORD` | Registry login password/token |
+| `HELM_REGISTRY` | Registry host for login (falls back to `settings.loginRegistry`, then `settings.registry`) |
+
+- **GHCR zero-config (GitHub Actions)**: when no credentials are configured and the registry contains `ghcr.io`, `GITHUB_ACTOR` and `GITHUB_TOKEN` are used automatically. Requires `permissions: packages: write`.
+- Both `HELM_REGISTRY_USERNAME` and `HELM_REGISTRY_PASSWORD` must be set together; partial credentials are an error.
+
+Helm runtime behavior:
+
+- `helm-oci` operations use the host `helm` CLI when available.
+- If `helm` is not installed, runtime automatically falls back to `docker run` with a Helm image.
+- Disable the Docker fallback with `settings.useDocker: false`.
+- Fallback image resolution order: `HELM_CONTAINER_IMAGE` env var, then `settings.dockerImage`, then default `alpine/helm:3.17.3`.
 
 ### Artifact workflow procedures
 
@@ -745,11 +817,18 @@ Use as `uses: builtin:<name>` in a step:
 
 `rx init` also supports interactive policy setup and these non-interactive flags:
 
-- `--template auto|dotnet|node|generic`
+- `--template auto|dotnet|node|python|go|generic`
 - `--schema-source local|remote`
 - `--with-policy`
 - `--policy-template <name>` (e.g. `standard`, `dotnet`)
 - `--yes` and `--force`
+
+CI scaffolding mode:
+
+- `rx init ci --provider github|azdo|both`
+- Generates thin wrapper pipeline templates:
+- `.github/workflows/rexo-release.yml`
+- `.azuredevops/rexo-release.yml`
 
 `rx init` always scaffolds under `.rexo/`. Root config files are still supported when authored manually.
 
@@ -832,9 +911,14 @@ The following features are defined in the product scope but not yet implemented:
 
 ### Policy Sources
 
-- Only **local file** policy sources are supported (`policy.json` alongside `rexo.json`, or files in `.rexo/`; `.repo/` is still accepted for backward compatibility).
-- **Remote policy sources** (HTTP, Git, NuGet package) are not yet implemented.
-- **Policy caching, version pinning, and trust models** are not yet implemented.
+- Local policy files are still supported (`policy.json` alongside `rexo.json`, or files in `.rexo/`; `.repo/` remains backward compatible).
+- Additional policy sources can be loaded via `REXO_POLICY_SOURCES` (semicolon/comma separated):
+- HTTP/HTTPS URL: `https://.../policy.json` (optional pin: `#sha256=<hex>`)
+- Git reference: `git+<repo>@<ref>#<path>`
+- NuGet reference: `nuget:<packageId>@<version>#<pathInPackage>`
+- Loaded remote policies are cached under `.rexo/cache/policies/`.
+- Trust model is enforced via `REXO_POLICY_TRUST` (host allow-list, or `allow-all`).
+- Pin enforcement can be enabled with `REXO_POLICY_REQUIRE_PINNED=true`.
 
 ### Parallel Step Execution
 
@@ -854,5 +938,5 @@ The following features are defined in the product scope but not yet implemented:
 
 ### UI and Interactive Features
 
-- No TUI (terminal user interface) project picker or interactive workflow is implemented yet.
-- The rich command picker (`rx` with no arguments) shows a list but does not support keyboard navigation.
+- Running `rx` with no arguments launches an interactive project picker when multiple `repo.json`-bearing sibling directories are found, then shows the command list for the selected project.
+- The command picker shows available commands but does not support keyboard navigation (arrow-key selection is not implemented).

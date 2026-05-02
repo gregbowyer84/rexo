@@ -37,8 +37,9 @@ internal static class ConfigBuilder
     public static async Task<PolicyConfig> LoadAndMergePoliciesAsync(RepoConfig config, string workingDir, bool debug, CancellationToken cancellationToken)
     {
         var embeddedPolicy = LoadEmbeddedPolicyTemplate("standard", debug);
+        var remotePolicies = await PolicySourceLoader.LoadPoliciesFromEnvironmentAsync(workingDir, debug, cancellationToken);
         var localPolicy = await LoadLocalPolicyAsync(workingDir, debug, cancellationToken);
-        return MergePolicies(embeddedPolicy, localPolicy);
+        return MergePolicies(MergePolicies(embeddedPolicy, remotePolicies), localPolicy);
     }
 
     private static async Task<PolicyConfig> LoadLocalPolicyAsync(string workingDir, bool debug, CancellationToken cancellationToken)

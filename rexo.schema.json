@@ -34,8 +34,7 @@
     },
     "description": {
       "type": "string",
-      "description": "Optional longer description of the repository runtime.
-"
+      "description": "Optional longer description of the repository runtime."
     },
     "version": {
       "type": "string",
@@ -308,6 +307,9 @@
           "$ref": "#/$defs/nugetArtifact"
         },
         {
+          "$ref": "#/$defs/helmOciArtifact"
+        },
+        {
           "$ref": "#/$defs/genericArtifact"
         }
       ]
@@ -370,7 +372,8 @@
           "not": {
             "enum": [
               "docker",
-              "nuget"
+              "nuget",
+              "helm-oci"
             ]
           }
         },
@@ -384,6 +387,28 @@
           "additionalProperties": {
             "$ref": "#/$defs/artifactSettingValue"
           }
+        }
+      }
+    },
+    "helmOciArtifact": {
+      "type": "object",
+      "description": "Helm chart artifact pushed to OCI registry.",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "helm-oci",
+          "description": "Selects the Helm OCI artifact provider."
+        },
+        "name": {
+          "type": "string",
+          "description": "Logical artifact name used in logs and manifests. When omitted, falls back to the root config name."
+        },
+        "settings": {
+          "description": "Provider-specific Helm package and OCI push settings.",
+          "$ref": "#/$defs/helmOciArtifactSettings"
         }
       }
     },
@@ -897,7 +922,53 @@
         },
         "apiKeyEnv": {
           "type": "string",
-          "description": "Environment variable name containing the NuGet API key."
+          "description": "Environment variable name containing the NuGet API key. Defaults to NUGET_API_KEY (fallback: NUGET_AUTH_TOKEN). CI-native: GITHUB_TOKEN is used automatically for nuget.pkg.github.com; SYSTEM_ACCESSTOKEN for Azure Artifacts."
+        }
+      }
+    },
+    "helmOciArtifactSettings": {
+      "type": "object",
+      "description": "Settings for Helm chart packaging and OCI registry push. Auth env vars: HELM_REGISTRY_USERNAME, HELM_REGISTRY_PASSWORD, HELM_REGISTRY. For ghcr.io, GITHUB_ACTOR+GITHUB_TOKEN are used automatically in GitHub Actions (requires permissions: packages: write).",
+      "additionalProperties": false,
+      "properties": {
+        "chart": {
+          "type": "string",
+          "description": "Chart name used to resolve packaged file names. Defaults to artifact name."
+        },
+        "chartPath": {
+          "type": "string",
+          "description": "Path to the chart root that contains Chart.yaml.",
+          "default": "chart"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output directory for generated .tgz chart packages.",
+          "default": "artifacts/charts"
+        },
+        "oci": {
+          "type": "string",
+          "description": "Full OCI destination (for example oci://ghcr.io/org/charts)."
+        },
+        "registry": {
+          "type": "string",
+          "description": "OCI registry host used when composing destination from registry + repository."
+        },
+        "repository": {
+          "type": "string",
+          "description": "OCI repository path used when composing destination from registry + repository."
+        },
+        "loginRegistry": {
+          "type": "string",
+          "description": "Optional registry host to use for helm registry login."
+        },
+        "useDocker": {
+          "type": "boolean",
+          "description": "Set to false to disable the Docker fallback when the host helm CLI is unavailable. Defaults to true.",
+          "default": true
+        },
+        "dockerImage": {
+          "type": "string",
+          "description": "Override the Helm container image used when host helm CLI is unavailable. Resolution order: HELM_CONTAINER_IMAGE env, this setting, then alpine/helm:3.17.3."
         }
       }
     },

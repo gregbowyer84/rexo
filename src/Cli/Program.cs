@@ -2,6 +2,7 @@ namespace Rexo.Cli;
 
 using System.Text.Json;
 using Rexo.Artifacts;
+using Rexo.Artifacts.Helm;
 using Rexo.Artifacts.Docker;
 using Rexo.Artifacts.NuGet;
 using Rexo.Ci;
@@ -31,6 +32,16 @@ public static class Program
         // No args (or only global flags) — launch interactive TUI picker
         if (cleanArgs.Count == 0)
         {
+            var projectRoots = DiscoverUiProjectRoots(workingDir);
+            if (projectRoots.Count > 1)
+            {
+                var selectedProject = ConsoleRenderer.PromptProjectPicker(projectRoots, workingDir);
+                if (selectedProject is not null)
+                {
+                    workingDir = selectedProject;
+                }
+            }
+
             var (_, uiExecutor, uiConfig) = await CliBootstrapper.BuildServicesAsync(workingDir, debug, cancellationToken);
             return await RunUiAsync(uiExecutor, uiConfig, workingDir, cancellationToken);
         }
@@ -115,6 +126,7 @@ public static class Program
             var templateRenderer = new TemplateRenderer();
             var versionProviders = VersionProviderRegistry.CreateDefault();
             var artifactProviders = new ArtifactProviderRegistry();
+            artifactProviders.Register("helm-oci", new HelmOciArtifactProvider());
             artifactProviders.Register("docker", new DockerArtifactProvider());
             artifactProviders.Register("nuget", new NuGetArtifactProvider());
 
@@ -358,6 +370,21 @@ public static class Program
         if (config?.Aliases is { Count: > 0 })
             commandNames.AddRange(config.Aliases.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase));
 
+        // Always include inspectability/navigation commands in UI mode.
+        commandNames.AddRange([
+            "list",
+            "doctor",
+            "config resolved",
+            "config sources",
+            "config materialize",
+            "explain version",
+        ]);
+
+        commandNames = commandNames
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
         // Fall back to built-in list if no config commands
         if (commandNames.Count == 0)
             commandNames.AddRange(["version", "list", "doctor", "init", "config resolved", "config sources"]);
@@ -470,7 +497,22 @@ public static class Program
         CancellationToken cancellationToken)
     {
         var remainingArgs = args.Skip(1).ToList();
+        string? mode = null;
+        if (remainingArgs.Count > 0 && !remainingArgs[0].StartsWith("--", StringComparison.Ordinal))
+        {
+            mode = remainingArgs[0];
+            remainingArgs.RemoveAt(0);
+        }
+
         var (parsedArgs, parsedOptions) = ParseArgsAndOptions(remainingArgs);
+        if (!string.IsNullOrWhiteSpace(mode))
+        {
+            parsedOptions = new Dictionary<string, string?>(parsedOptions)
+            {
+                ["mode"] = mode,
+            };
+        }
+
         var invocation = new CommandInvocation(parsedArgs, parsedOptions, json, jsonFile, workingDir);
 
         var result = await executor.ExecuteAsync("init", invocation, cancellationToken);
@@ -737,9 +779,11 @@ public static class Program
         Console.WriteLine("  explain <command>    Explain a command");
         Console.WriteLine("  doctor               Check environment and configuration");
         Console.WriteLine("  init                 Create a starter rexo config");
+        Console.WriteLine("  init ci              Scaffold thin CI wrappers for rx release");
+        Console.WriteLine("      --provider       github|azdo|both (default: both)");
         Console.WriteLine("      --yes            Non-interactive defaults");
-        Console.WriteLine("      --template       auto|dotnet|node|generic");
-        Console.WriteLine("      --schema-source  local (default) or remote");
+        Console.WriteLine("      --template       auto|dotnet|node|python|go|generic");
+        Console.WriteLine("      --schema-source  remote (default) or local");
         Console.WriteLine("      --with-policy    Also create policy.json from a template");
         Console.WriteLine("      --policy-template standard|dotnet (or any embedded template)");
         Console.WriteLine("      --with-instructions Download docs/rexo.instructions.md into repo");
@@ -762,6 +806,30 @@ public static class Program
             Json: json,
             JsonFile: jsonFile,
             WorkingDirectory: workingDir);
+
+    private static IReadOnlyList<string> DiscoverUiProjectRoots(string currentWorkingDir)
+    {
+        var roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            currentWorkingDir,
+        };
+
+        var parent = Path.GetDirectoryName(currentWorkingDir);
+        if (string.IsNullOrWhiteSpace(parent) || !Directory.Exists(parent))
+        {
+            return roots.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
+        }
+
+        foreach (var directory in Directory.EnumerateDirectories(parent))
+        {
+            if (ConfigFileLocator.FindConfigPath(directory) is not null)
+            {
+                roots.Add(directory);
+            }
+        }
+
+        return roots.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
 
     private static string GetCliCommandName()
     {
