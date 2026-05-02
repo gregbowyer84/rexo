@@ -27,7 +27,7 @@ public static class Program
         var workingDir = Environment.CurrentDirectory;
 
         // Parse global flags
-        var (cleanArgs, json, jsonFile, verbose, debug, quiet) = ParseGlobalFlags(args);
+        var (cleanArgs, json, jsonFile, verbose, debug, quiet, setOverrides) = ParseGlobalFlags(args);
 
         // No args (or only global flags) — launch interactive TUI picker
         if (cleanArgs.Count == 0)
@@ -42,7 +42,7 @@ public static class Program
                 }
             }
 
-            var (_, uiExecutor, uiConfig) = await CliBootstrapper.BuildServicesAsync(workingDir, debug, cancellationToken);
+            var (_, uiExecutor, uiConfig) = await CliBootstrapper.BuildServicesAsync(workingDir, debug, setOverrides, cancellationToken);
             return await RunUiAsync(uiExecutor, uiConfig, workingDir, cancellationToken);
         }
 
@@ -56,7 +56,7 @@ public static class Program
         }
 
         // Set up the full service graph
-        var (registry, executor, config) = await CliBootstrapper.BuildServicesAsync(workingDir, debug, cancellationToken);
+        var (registry, executor, config) = await CliBootstrapper.BuildServicesAsync(workingDir, debug, setOverrides, cancellationToken);
 
         return command switch
         {
@@ -698,7 +698,7 @@ public static class Program
             .FirstOrDefault()?.InformationalVersion ?? "0.1.0-local";
     }
 
-    private static (IReadOnlyList<string> cleanArgs, bool json, string? jsonFile, bool verbose, bool debug, bool quiet) ParseGlobalFlags(string[] args)
+    private static (IReadOnlyList<string> cleanArgs, bool json, string? jsonFile, bool verbose, bool debug, bool quiet, IReadOnlyList<string> setOverrides) ParseGlobalFlags(string[] args)
     {
         var clean = new List<string>();
         var json = false;
@@ -706,6 +706,7 @@ public static class Program
         var verbose = false;
         var debug = false;
         var quiet = false;
+        var setOverrides = new List<string>();
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -728,13 +729,16 @@ public static class Program
                 case "--quiet" or "-q":
                     quiet = true;
                     break;
+                case "--set" when i + 1 < args.Length:
+                    setOverrides.Add(args[++i]);
+                    break;
                 default:
                     clean.Add(args[i]);
                     break;
             }
         }
 
-        return (clean, json, jsonFile, verbose, debug, quiet);
+        return (clean, json, jsonFile, verbose, debug, quiet, setOverrides);
     }
 
     private static (IReadOnlyDictionary<string, string> args, IReadOnlyDictionary<string, string?> options)

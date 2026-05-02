@@ -17,7 +17,7 @@ public static class BuiltinCommandRegistration
     private static readonly string[] InitSchemaSourceChoices = ["remote", "local"];
     private static readonly string[] InitYesNoChoices = ["yes", "no"];
     private const string DefaultInstructionsPath = ".github/instructions/rexo.instructions.md";
-    private const string InstructionsTemplateUrl = "https://raw.githubusercontent.com/agile-north/rexo/release/next/docs/rexo.instructions.md";
+    private const string InstructionsTemplateUrl = RepoConfigurationLoader.RawGitHubBaseUrl + "release/next/docs/rexo.instructions.md";
 
     public static CommandRegistry CreateDefault(RepoConfig? config = null, string? configPath = null)
     {

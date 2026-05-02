@@ -9,11 +9,12 @@ using YamlDotNet.Serialization;
 
 public sealed class RepoConfigurationLoader
 {
+    public const string RawGitHubBaseUrl = "https://raw.githubusercontent.com/agile-north/rexo/";
     public const string SupportedSchemaVersion = "1.0";
-    public const string SupportedRexoSchemaUri = "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json";
+    public const string SupportedRexoSchemaUri = RawGitHubBaseUrl + "schema-v1.0/rexo.schema.json";
     public const string SupportedRexoSchemaPath = "rexo.schema.json";
     public const string SupportedRexoSchemaPathInRexoFolder = ".rexo/rexo.schema.json";
-    public const string SupportedPolicySchemaUri = "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json";
+    public const string SupportedPolicySchemaUri = RawGitHubBaseUrl + "schema-v1.0/policy.schema.json";
     public const string SupportedPolicySchemaPath = "policy.schema.json";
     public const string SupportedPolicySchemaPathInRexoFolder = ".rexo/policy.schema.json";
 

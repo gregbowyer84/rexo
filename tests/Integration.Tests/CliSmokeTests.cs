@@ -2,6 +2,7 @@ namespace Rexo.Integration.Tests;
 
 using Rexo.Cli;
 
+[Collection("IntegrationSequential")]
 public sealed class CliSmokeTests
 {
     [Fact]

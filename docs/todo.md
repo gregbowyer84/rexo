@@ -31,7 +31,7 @@ Legend:
 - [x] Config model includes versioning, artifacts, tests, analysis
 - [x] Validation: full JSON Schema validation via NJsonSchema (`ValidateSchemaAsync`)
 - [x] Resolve `extends` from local file paths (breadth-first merge, circular detection)
-- [~] Config merge order pipeline (defaults -> policies -> repo -> overlays -> CLI)
+- [x] Config merge order pipeline (defaults -> policies -> repo -> overlays -> CLI)
 - [x] Environment overlays (REXO_OVERLAY env var)
 - [x] Merge strategy customization for arrays/objects
 - [x] Alternative config file names (`repo.yaml`, `.repo/repo.json`, `.repo/repo.yaml`)

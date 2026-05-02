@@ -20,7 +20,7 @@ using Rexo.Versioning;
 internal static class CliBootstrapper
 {
     public static async Task<(CommandRegistry registry, DefaultCommandExecutor executor, RepoConfig? config)>
-        BuildServicesAsync(string workingDir, bool debug, CancellationToken cancellationToken)
+        BuildServicesAsync(string workingDir, bool debug, IReadOnlyList<string>? setOverrides, CancellationToken cancellationToken)
     {
         if (debug) Console.WriteLine($"[debug] Loading configuration from {workingDir}");
 
@@ -35,6 +35,18 @@ internal static class CliBootstrapper
         }
 
         var effectiveConfig = ConfigBuilder.MergePolicyIntoEffectiveConfig(config, policyConfig);
+
+        // Apply CLI --set overrides (highest-priority layer in the merge pipeline)
+        if (setOverrides is { Count: > 0 })
+        {
+            if (debug)
+            {
+                foreach (var s in setOverrides)
+                    Console.WriteLine($"[debug] --set override: {s}");
+            }
+
+            effectiveConfig = ConfigBuilder.ApplySetOverrides(effectiveConfig, setOverrides);
+        }
 
         // Create command registry
         var configPath = ConfigFileLocator.FindConfigPath(workingDir)

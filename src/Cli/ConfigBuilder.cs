@@ -1,6 +1,7 @@
 namespace Rexo.Cli;
 
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Rexo.Configuration;
 using Rexo.Configuration.Models;
 using Rexo.Policies;
@@ -11,6 +12,12 @@ using Rexo.Policies;
 /// </summary>
 internal static class ConfigBuilder
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        ReadCommentHandling = JsonCommentHandling.Skip,
+    };
+
     public static async Task<RepoConfig?> LoadConfigAsync(string workingDir, bool debug, CancellationToken cancellationToken)
     {
         var configPath = ConfigFileLocator.FindConfigPath(workingDir)
@@ -211,4 +218,89 @@ internal static class ConfigBuilder
             Args = command.Args ?? [],
             MaxParallel = command.MaxParallel,
         };
+
+    /// <summary>
+    /// Applies <c>--set key.path=value</c> CLI overrides to the effective config.
+    /// This is the final (highest-priority) layer of the config merge pipeline.
+    /// Paths are dotted JSON property names (case-insensitive).
+    /// Values are parsed as JSON booleans/numbers/null when applicable; otherwise treated as strings.
+    /// </summary>
+    public static RepoConfig? ApplySetOverrides(RepoConfig? config, IReadOnlyList<string> setOverrides)
+    {
+        if (config is null || setOverrides.Count == 0)
+        {
+            return config;
+        }
+
+        var json = JsonSerializer.Serialize(config, JsonOptions);
+        var node = JsonNode.Parse(json);
+        if (node is null)
+        {
+            return config;
+        }
+
+        foreach (var setOverride in setOverrides)
+        {
+            var eqIdx = setOverride.IndexOf('=', StringComparison.Ordinal);
+            if (eqIdx < 1)
+            {
+                continue; // malformed — skip silently
+            }
+
+            var path = setOverride[..eqIdx];
+            var rawValue = setOverride[(eqIdx + 1)..];
+            SetAtPath(node, path, rawValue);
+        }
+
+        return JsonSerializer.Deserialize<RepoConfig>(node.ToJsonString(), JsonOptions) ?? config;
+    }
+
+    private static void SetAtPath(JsonNode root, string dotPath, string rawValue)
+    {
+        var parts = dotPath.Split('.');
+        var current = root.AsObject();
+
+        for (var i = 0; i < parts.Length - 1; i++)
+        {
+            var part = parts[i];
+            var existingKey = current
+                .Select(kv => kv.Key)
+                .FirstOrDefault(k => string.Equals(k, part, StringComparison.OrdinalIgnoreCase));
+
+            if (existingKey is null)
+            {
+                current[part] = new JsonObject();
+                current = current[part]!.AsObject();
+            }
+            else if (current[existingKey] is JsonObject childObj)
+            {
+                current = childObj;
+            }
+            else
+            {
+                // Replace null or scalar intermediate node with an object
+                current[existingKey] = new JsonObject();
+                current = current[existingKey]!.AsObject();
+            }
+        }
+
+        var leafPart = parts[^1];
+        var existingLeafKey = current
+            .Select(kv => kv.Key)
+            .FirstOrDefault(k => string.Equals(k, leafPart, StringComparison.OrdinalIgnoreCase));
+        var actualKey = existingLeafKey ?? leafPart;
+
+        // Parse value: try as JSON literal (true/false/null/number), else treat as string
+        JsonNode? jsonValue;
+        try
+        {
+            jsonValue = JsonNode.Parse(rawValue);
+        }
+        catch (JsonException)
+        {
+            jsonValue = JsonValue.Create(rawValue);
+        }
+
+        current[actualKey] = jsonValue;
+    }
 }

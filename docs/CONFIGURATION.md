@@ -864,6 +864,27 @@ rx run config materialize
 | `--verbose` | Print step output and extra detail |
 | `--debug` | Enable debug output (implies `--verbose`) |
 | `--quiet` / `-q` | Suppress all non-error console output |
+| `--set <key.path=value>` | Override a single config property at runtime (repeatable) |
+
+### `--set` overrides
+
+`--set` is the highest-priority layer in the config merge pipeline. It runs after `REXO_OVERLAY` and wins over every other config source. Use it for one-off adjustments without touching config files:
+
+```bash
+# Change the version provider for a single run
+rx build --set versioning.provider=env
+
+# Disable push without editing repo.json
+rx release --set runtime.push.enabled=false
+
+# Override a fallback version
+rx version --set versioning.fallback=0.0.0-local
+
+# Multiple overrides — repeat the flag
+rx release --set versioning.provider=fixed --set versioning.fallback=1.2.3
+```
+
+The key path uses dot-notation that matches the `repo.json` property hierarchy (case-insensitive). Values that look like JSON booleans, numbers, or `null` are parsed as their native types; everything else is treated as a string.
 
 For full functional requirements see [scope.md](scope.md).
 
