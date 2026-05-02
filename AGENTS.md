@@ -35,7 +35,7 @@ dotnet test solution.slnx -c Release --no-build
 ```
 
 Build must produce **0 errors, 0 warnings** (`TreatWarningsAsErrors=true`).
-All 23+ tests must pass before any PR can be merged.
+All 189 tests must pass before any PR can be merged.
 
 ---
 
@@ -53,6 +53,7 @@ src/
   Analysis/                 # dotnet format + build analysis runner
   Artifacts/                # IArtifactProvider abstraction + registry
   Artifacts.Docker/         # Docker build/tag/push provider
+  Artifacts.Helm/           # Helm OCI chart build/tag/push provider
   Artifacts.NuGet/          # dotnet pack/push provider
   Ci/                       # CI environment detector (GHA/AzDO/GitLab/Bitbucket)
   Cli/                      # CLI entry point (Program.cs) — packs as `rx` tool
@@ -62,6 +63,7 @@ src/
   Git/                      # Git info detector (branch/SHA/remote/clean)
   Policies/                 # LocalFilePolicySource
   Templating/               # {{variable.path}} template engine with filters
+  Tui/                      # Blazor/RazorConsole interactive TUI (`rx ui`)
   Ui/                       # ConsoleRenderer (Spectre.Console rich output)
   Verification/             # dotnet test runner + result parsing
   Versioning/               # VersionProviderRegistry + built-in providers
@@ -237,17 +239,8 @@ IPolicySource             // LoadAsync(root, ct)
 
 ## What Is Not Yet Implemented
 
-See `docs/todo.md` for the full checklist. Key gaps:
-
-- `extends` / config merge pipeline (single-file only today)
-- Policy-provided commands
-- `config resolved`, `config sources`, `config materialize` sub-commands
-- Parallel step execution
-- Output capture (stdout, regex, JSONPath, file)
-- `builtin:config-resolved`, `builtin:config-materialize`
-- NBGV and MinVer version providers
-- Artifact manifest file output
-- `--debug` / `--quiet` global flags
+See `docs/todo.md` for the full checklist. The implementation is feature-complete per `docs/scope.md`.
+No known gaps remain at this time.
 
 ---
 

@@ -36,12 +36,14 @@ src/Configuration/     repo.json loading with NJsonSchema validation
 src/Execution/         Step executor, command registry, built-in primitives
 src/Templating/        {{var | filter}} engine
 src/Cli/               Entry point — packs as `rx` dotnet tool
-src/Versioning/        fixed / env / gitversion providers
+src/Versioning/        fixed / env / gitversion / minver / nbgv / git providers
 src/Artifacts/         IArtifactProvider + registry
 src/Artifacts.Docker/  Docker build/tag/push
+src/Artifacts.Helm/    Helm OCI chart build/tag/push
 src/Artifacts.NuGet/   dotnet pack/push
 src/Git/               Branch/SHA/remote detector
 src/Ci/                CI provider detector
+src/Tui/               Blazor/RazorConsole interactive TUI (`rx ui`)
 src/Ui/                Spectre.Console rich renderer
 src/Verification/      dotnet test runner
 src/Analysis/          dotnet format + build analysis
@@ -54,12 +56,8 @@ Every `repo.json` must have `$schema` and `schemaVersion: "1.0"`.
 Schema file: `rexo.schema.json` (repo root).
 Loader: `src/Configuration/RepoConfigurationLoader.cs`.
 
-## What still needs to be built
+## Current status
 
-See `docs/todo.md`. Priority gaps:
-1. `extends` / config merge pipeline
-2. Policy-provided commands
-3. `config resolved` / `config sources` sub-commands
-4. Parallel step execution
-5. NBGV and MinVer version providers
+The implementation is feature-complete per `docs/scope.md`. All 189 tests pass.
+See `docs/todo.md` for the full checklist.
 

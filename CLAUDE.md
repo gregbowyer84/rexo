@@ -49,26 +49,21 @@ See `docs/todo.md` for the complete checklist. Working today:
 - CLI routing (built-in + config commands, multi-word resolution, global flags)
 - Config loading with JSON Schema validation
 - Template engine with filters (`slug`, `upper`, `lower`, `default(...)`)
-- All 8 built-in step primitives (`builtin:validate`, `builtin:resolve-version`, etc.)
-- Version providers: `fixed`, `env`, `gitversion`
-- Artifact providers: `docker`, `nuget`
+- All built-in step primitives (validate, resolve-version, test, analyze, verify, artifacts lifecycle, config-resolved, config-materialize, etc.)
+- Version providers: `fixed`, `env`, `gitversion`, `minver`, `nbgv`, `git`
+- Artifact providers: `docker`, `nuget`, `helm-oci`
 - Git + CI environment detection
-- Spectre.Console rich output renderer
-- `dotnet test` verification runner
+- Spectre.Console rich output renderer + Blazor/RazorConsole interactive TUI (`rx ui`)
+- `dotnet test` verification runner with TRX + Cobertura coverage thresholds
 - `dotnet format` + build analysis runner
-- 23+ passing tests
+- `extends` config merge, policy-provided commands, parallel step execution, output capture
+- `config resolved` / `config sources` / `config materialize` sub-commands
+- Artifact manifest file output, secret masking, structured error taxonomy
+- 189 passing tests
 
-## What is not yet implemented (priority order)
+## What is not yet implemented
 
-1. `extends` / config merge pipeline
-2. Policy-provided commands
-3. `config resolved` / `config sources` / `config materialize` sub-commands
-4. Parallel step execution (`parallel` step groups)
-5. NBGV and MinVer version providers
-6. Output capture (stdout/regex/JSONPath from steps)
-7. `builtin:config-resolved`, `builtin:config-materialize`
-8. Artifact manifest file output
-9. `--debug` / `--quiet` global flags
+The implementation is feature-complete per `docs/scope.md`. No known gaps remain.
 
 ---
 
