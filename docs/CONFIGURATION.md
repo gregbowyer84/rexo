@@ -153,6 +153,8 @@ Rexo now uses an explicit lifecycle model. If you do not set `extends`, no embed
 commands are added automatically. An artifacts-only config remains minimal until you opt in
 to a policy template.
 
+This is intentional so Rexo can be used as a lightweight command/alias runtime without becoming a build/release tool unless a policy is selected.
+
 To keep a config explicitly minimal, include `embedded:none` in `extends`:
 
 ```json

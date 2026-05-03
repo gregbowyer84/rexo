@@ -21,6 +21,8 @@ Current embedded templates:
 - `standard`
 - `dotnet`
 
+Embedded templates are never applied implicitly.
+
 Artifact-only configs are minimal by default.
 Use `extends` to opt into an embedded lifecycle template explicitly:
 
@@ -29,6 +31,9 @@ Use `extends` to opt into an embedded lifecycle template explicitly:
   "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
   "schemaVersion": "1.0",
   "name": "orders-api",
+  "extends": [
+    "embedded:standard"
+  ],
   "artifacts": [
     {
       "type": "docker",

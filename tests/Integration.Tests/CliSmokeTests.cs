@@ -111,6 +111,12 @@ public sealed class CliSmokeTests
 
             var planExitCode = await Program.ExecuteAsync(["plan"], CancellationToken.None);
             Assert.NotEqual(0, planExitCode);
+
+            var buildExitCode = await Program.ExecuteAsync(["build"], CancellationToken.None);
+            Assert.NotEqual(0, buildExitCode);
+
+            var verifyExitCode = await Program.ExecuteAsync(["verify"], CancellationToken.None);
+            Assert.NotEqual(0, verifyExitCode);
         }
         finally
         {
@@ -162,6 +168,54 @@ public sealed class CliSmokeTests
             Assert.DoesNotContain("release", listOutput, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("build", listOutput, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("verify", listOutput, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Environment.CurrentDirectory = originalDirectory;
+
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task EmbeddedStandardExposesLifecycleCommands()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"rexo-cli-embedded-standard-commands-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        var originalDirectory = Environment.CurrentDirectory;
+
+        try
+        {
+            await File.WriteAllTextAsync(
+                    Path.Combine(tempDir, "rexo.json"),
+                    """
+                                {
+                                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+                                    "schemaVersion": "1.0",
+                                    "name": "sample",
+                                    "extends": ["embedded:standard"],
+                                    "versioning": {
+                                        "provider": "fixed",
+                                        "fallback": "1.2.3"
+                                    }
+                                }
+                                """);
+
+            Environment.CurrentDirectory = tempDir;
+
+            var listJsonPath = Path.Combine(tempDir, "list-standard.json");
+            var listExitCode = await Program.ExecuteAsync(["--json-file", listJsonPath, "--json", "list"], CancellationToken.None);
+            Assert.Equal(0, listExitCode);
+
+            var listOutput = await File.ReadAllTextAsync(listJsonPath);
+            Assert.Contains("plan", listOutput, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("release", listOutput, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("build", listOutput, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("verify", listOutput, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

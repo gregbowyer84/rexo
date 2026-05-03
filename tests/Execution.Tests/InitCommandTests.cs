@@ -842,7 +842,7 @@ public sealed class InitCommandTests
     }
 
     [Fact]
-    public async Task InitWithBlankTemplateCreatesMinimalConfigWithNoneExtends()
+    public async Task InitWithBlankTemplateCreatesMinimalConfigWithoutExtends()
     {
         var dir = Path.Combine(Path.GetTempPath(), $"rexo-init-blank-{Guid.NewGuid():N}");
         Directory.CreateDirectory(dir);
@@ -864,7 +864,7 @@ public sealed class InitCommandTests
             Assert.True(result.Success);
             var configPath = Path.Combine(dir, ".rexo", "rexo.json");
             var content = await File.ReadAllTextAsync(configPath);
-            Assert.Contains("embedded:none", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"extends\"", content, StringComparison.Ordinal);
             Assert.DoesNotContain("embedded:standard", content, StringComparison.Ordinal);
             Assert.Contains("\"hello\":", content, StringComparison.Ordinal);
             Assert.DoesNotContain("\"tests\"", content, StringComparison.Ordinal);

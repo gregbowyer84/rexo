@@ -1,15 +1,27 @@
 # Rexo
 
-Rexo is a config-driven repository runtime for build, verification, versioning, artifact production, and release orchestration.
+Rexo is a config-driven repository command runtime for local and CI workflows. Use it as a lightweight command/alias system, or opt into policy templates for build, verification, artifact production, and release orchestration.
 
 ## Quickstart
+
+### Minimal command runtime
 
 ```bash
 # Install Rexo globally
 dotnet tool install --global Rexo.Cli
 
-# Initialize a new repository with auto-detection
-rx init --template auto --yes
+# Initialize a minimal repository command runtime
+rx init --template minimal --yes
+
+# Run a configured command
+rx hello
+```
+
+### Standard lifecycle (opt-in)
+
+```bash
+# Initialize with an explicit policy template
+rx init --template auto --with-policy --yes
 
 # See what would happen
 rx plan
@@ -39,13 +51,49 @@ rx release --push
 
 ## Minimal Configuration
 
-Rexo applies the standard lifecycle policy automatically when a config does not define commands. In most repos you only need to declare what the repository emits:
+Rexo does not apply lifecycle commands automatically.
+
+No extends means no policy commands.
+
+A config can be as small as a command and alias map:
+
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+  "schemaVersion": "1.0",
+  "name": "my-repo",
+  "commands": {
+    "hello": {
+      "steps": [
+        {
+          "run": "echo hello"
+        }
+      ]
+    },
+    "local build": {
+      "steps": [
+        {
+          "run": "dotnet build"
+        }
+      ]
+    }
+  },
+  "aliases": {
+    "b": "local build"
+  }
+}
+```
+
+To opt into the standard lifecycle, extend embedded:standard:
 
 ```json
 {
   "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
   "schemaVersion": "1.0",
   "name": "my-api",
+  "extends": [
+    "embedded:standard"
+  ],
   "artifacts": [
     {
       "type": "docker",
@@ -60,7 +108,7 @@ Rexo applies the standard lifecycle policy automatically when a config does not 
 }
 ```
 
-Rexo will automatically provide these commands:
+With embedded:standard, Rexo provides these commands:
 
 ```bash
 rx plan                 # What would happen
