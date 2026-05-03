@@ -34,9 +34,16 @@ execution engine. See [scope.md](scope.md) for the full product specification an
 ┌────────▼──┐ ┌──────▼──┐ ┌────▼────┐ ┌───▼──────────┐
 │Versioning │ │Artifacts│ │Verific. │ │  Analysis    │
 │fixed/env/ │ │docker/  │ │dotnet   │ │  dotnet fmt  │
-│gitversion/│ │nuget    │ │test +   │ │  build check │
-│minver/nbgv│ └─────────┘ │coverage │ └──────────────┘
-└───────────┘             └─────────┘
+│gitversion/│ │compose/ │ │test +   │ │  build check │
+│minver/nbgv│ │nuget/   │ │coverage │ └──────────────┘
+│git/auto   │ │helm*/   │ └─────────┘
+└───────────┘ │npm/pypi/ │
+              │maven/    │
+              │gradle/   │
+              │rubygems/ │
+              │terraform/│
+              │generic   │
+              └──────────┘
                      │
 ┌────────────────────▼────────────────────────────────┐
 │  Core  (src/Core)  — zero project references        │
@@ -66,8 +73,8 @@ rx branch feature my-change
         ▼
 Program.ExecuteAsync
   1. Parse global flags (--json, --json-file, --verbose, --debug, --quiet/-q)
-  2. Load repo.json → RepoConfigurationLoader
-       a. Validate $schema + schemaVersion metadata
+  2. Load rexo.json → RepoConfigurationLoader
+      a. Validate $schema + schemaVersion metadata
       b. NJsonSchema validation against embedded schema (or local `rexo.schema.json` / `policy.schema.json`)
        c. JsonSerializer.Deserialize<RepoConfig>
        d. Resolve `extends` chain (breadth-first merge, child wins, circular detection)
@@ -83,7 +90,6 @@ Program.ExecuteAsync
               · stdout captured via outputPattern (regex named groups)
               · stdout written to outputFile if configured
             - "uses" steps: BuiltinRegistry.DispatchAsync
-            - "command" steps: recursive executor dispatch
             - "command" steps: recursive executor dispatch
        c. ExecutionContext accumulates step outputs + VersionResult
   6. CommandResult → ConsoleRenderer (rich or JSON)
@@ -133,8 +139,13 @@ invocations: `rx branch feature my-ticket`.
 
 ```text
 Cli ──────────────────────────────────────────────────┐
-  └→ Configuration, Execution, Artifacts.Docker,       │
-     Artifacts.NuGet, Versioning, Ui                   │
+    └→ Configuration, Execution, Artifacts.Docker,       │
+      Artifacts.DockerCompose, Artifacts.Generic,       │
+      Artifacts.Gradle, Artifacts.Helm,                 │
+      Artifacts.Maven, Artifacts.Npm,                   │
+      Artifacts.NuGet, Artifacts.PyPi,                  │
+      Artifacts.RubyGems, Artifacts.Terraform,          │
+      Versioning, Ui                                    │
                                                         │
 Execution ─────────────────────────────────────────────┤
   └→ Core, Configuration, Templating, Versioning,      │
@@ -157,7 +168,7 @@ Core ─────────────────────────
 | To add… | Implement… | Register in… |
 | --- | --- | --- |
 | A new version provider | `IVersionProvider` | `VersionProviderRegistry.CreateDefault()` |
-| A new artifact type | `IArtifactProvider` | `Program.BuildServicesAsync` |
+| A new artifact type | `IArtifactProvider` | `CliBootstrapper.RegisterConfigCommands` |
 | A new built-in primitive | lambda in `ConfigCommandLoader.RegisterBuiltins` | `_builtinRegistry.Register("builtin:name", ...)` |
 | A new built-in CLI command | method in `BuiltinCommandRegistration` | `registry.Register("name", ...)` |
 | A new policy source | `IPolicySource` | (future — not wired yet) |

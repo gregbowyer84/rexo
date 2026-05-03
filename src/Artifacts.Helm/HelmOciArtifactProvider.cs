@@ -10,6 +10,9 @@ using Rexo.Core.Models;
 
 public sealed class HelmOciArtifactProvider : IArtifactProvider
 {
+    public static void Register(ArtifactProviderRegistry registry) =>
+        registry.Register("helm-oci", new HelmOciArtifactProvider());
+
     private const string DefaultHelmContainerImage = "alpine/helm:3.17.3";
     private readonly Func<ArtifactConfig, IReadOnlyList<string>, string, IReadOnlyDictionary<string, string?>?, string?, CancellationToken, Task<(int ExitCode, string Output)>> _runHelmAsync;
 
@@ -134,7 +137,7 @@ public sealed class HelmOciArtifactProvider : IArtifactProvider
         CancellationToken cancellationToken)
     {
         var fileEnv = RepositoryEnvironmentFiles.Load(context.RepositoryRoot);
-        var auth = FeedAuthResolver.ResolveHelm(
+        var auth = ResolveRegistryAuth(
             configuredRegistry: GetSetting(artifact, "loginRegistry") ?? GetSetting(artifact, "registry"),
             fileEnv: fileEnv);
 
@@ -383,4 +386,48 @@ public sealed class HelmOciArtifactProvider : IArtifactProvider
 
     private static bool IsCommandNotFound(Win32Exception exception) =>
         exception.NativeErrorCode is 2 or 3;
+
+    /// <summary>
+    /// Resolves Helm OCI registry credentials.  Order: HELM_REGISTRY_USERNAME +
+    /// HELM_REGISTRY_PASSWORD → GITHUB_ACTOR + GITHUB_TOKEN for ghcr.io registries.
+    /// Credentials are used for <c>helm registry login</c> before push.
+    /// </summary>
+    private static FeedAuthResolution ResolveRegistryAuth(
+        string? configuredRegistry,
+        IReadOnlyDictionary<string, string> fileEnv)
+    {
+        var username = FeedAuthResolver.GetEnv("HELM_REGISTRY_USERNAME", fileEnv);
+        var secret = FeedAuthResolver.GetEnv("HELM_REGISTRY_PASSWORD", fileEnv);
+        var endpoint = FeedAuthResolver.GetEnv("HELM_REGISTRY", fileEnv) ?? configuredRegistry;
+
+        if (string.IsNullOrWhiteSpace(username) && string.IsNullOrWhiteSpace(secret))
+        {
+            if (!string.IsNullOrWhiteSpace(endpoint) &&
+                endpoint.Contains("ghcr.io", StringComparison.OrdinalIgnoreCase))
+            {
+                var actor = Environment.GetEnvironmentVariable("GITHUB_ACTOR");
+                var token = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+                if (!string.IsNullOrWhiteSpace(actor) && !string.IsNullOrWhiteSpace(token))
+                {
+                    return new FeedAuthResolution(true, actor, token, endpoint, null, "github-token");
+                }
+            }
+
+            return new FeedAuthResolution(false, null, null, endpoint, null, "none");
+        }
+
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(secret))
+        {
+            return new FeedAuthResolution(false, null, null, endpoint,
+                "HELM_REGISTRY_USERNAME and HELM_REGISTRY_PASSWORD must both be set.", "env");
+        }
+
+        if (string.IsNullOrWhiteSpace(endpoint))
+        {
+            return new FeedAuthResolution(false, null, null, null,
+                "Helm login registry could not be determined. Set settings.registry or HELM_REGISTRY.", "env");
+        }
+
+        return new FeedAuthResolution(true, username, secret, endpoint, null, "env");
+    }
 }

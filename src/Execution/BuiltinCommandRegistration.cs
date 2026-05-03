@@ -14,7 +14,7 @@ public static class BuiltinCommandRegistration
 {
     private static readonly JsonSerializerOptions IndentedJsonOptions = new() { WriteIndented = true };
     private static readonly HttpClient HttpClient = new();
-    private static readonly string[] InitTemplateChoices = ["dotnet", "node", "python", "go", "generic", "blank"];
+    private static readonly string[] InitTemplateChoices = ["dotnet", "node", "python", "go", "java", "ruby", "generic", "blank"];
     private static readonly string[] InitSchemaSourceChoices = ["remote", "local"];
     private static readonly string[] InitYesNoChoices = ["yes", "no"];
     private const string DefaultInstructionsPath = ".github/instructions/rexo.instructions.md";
@@ -97,12 +97,70 @@ public static class BuiltinCommandRegistration
             checks.Add(("docker", dockerOk.ok, dockerOk.version));
         }
 
-        // helm (only if helm-oci artifacts configured)
-        var needsHelm = config?.Artifacts?.Any(a => a.Type == "helm-oci") == true;
+        // helm (only if helm or helm-oci artifacts configured)
+        var needsHelm = config?.Artifacts?.Any(a => a.Type is "helm-oci" or "helm") == true;
         if (needsHelm)
         {
             var helmOk = await IsToolAvailableAsync("helm", "version --short", cancellationToken);
-            checks.Add(("helm", helmOk.ok, helmOk.ok ? helmOk.version : "not found — required for helm-oci artifacts"));
+            checks.Add(("helm", helmOk.ok, helmOk.ok ? helmOk.version : "not found — required for helm/helm-oci artifacts"));
+        }
+
+        // docker compose (only if docker-compose artifacts configured)
+        var needsDockerCompose = config?.Artifacts?.Any(a => a.Type == "docker-compose") == true;
+        if (needsDockerCompose)
+        {
+            var dcOk = await IsToolAvailableAsync("docker", "compose version", cancellationToken);
+            checks.Add(("docker compose", dcOk.ok, dcOk.ok ? dcOk.version : "not found — required for docker-compose artifacts"));
+        }
+
+        // npm (only if npm artifacts configured)
+        var needsNpm = config?.Artifacts?.Any(a => a.Type == "npm") == true;
+        if (needsNpm)
+        {
+            var npmOk = await IsToolAvailableAsync("npm", "--version", cancellationToken);
+            checks.Add(("npm", npmOk.ok, npmOk.ok ? npmOk.version : "not found — required for npm artifacts"));
+        }
+
+        // python (only if pypi artifacts configured)
+        var needsPython = config?.Artifacts?.Any(a => a.Type == "pypi") == true;
+        if (needsPython)
+        {
+            var pythonOk = await IsToolAvailableAsync("python", "--version", cancellationToken);
+            if (!pythonOk.ok)
+                pythonOk = await IsToolAvailableAsync("python3", "--version", cancellationToken);
+            checks.Add(("python", pythonOk.ok, pythonOk.ok ? pythonOk.version : "not found — required for pypi artifacts"));
+        }
+
+        // mvn (only if maven artifacts configured)
+        var needsMaven = config?.Artifacts?.Any(a => a.Type == "maven") == true;
+        if (needsMaven)
+        {
+            var mvnOk = await IsToolAvailableAsync("mvn", "--version", cancellationToken);
+            checks.Add(("mvn", mvnOk.ok, mvnOk.ok ? mvnOk.version : "not found — required for maven artifacts"));
+        }
+
+        // gradle (only if gradle artifacts configured)
+        var needsGradle = config?.Artifacts?.Any(a => a.Type == "gradle") == true;
+        if (needsGradle)
+        {
+            var gradleOk = await IsToolAvailableAsync("gradle", "--version", cancellationToken);
+            checks.Add(("gradle", gradleOk.ok, gradleOk.ok ? gradleOk.version : "not found — required for gradle artifacts (or use Gradle wrapper)"));
+        }
+
+        // gem (only if rubygems artifacts configured)
+        var needsGem = config?.Artifacts?.Any(a => a.Type == "rubygems") == true;
+        if (needsGem)
+        {
+            var gemOk = await IsToolAvailableAsync("gem", "--version", cancellationToken);
+            checks.Add(("gem", gemOk.ok, gemOk.ok ? gemOk.version : "not found — required for rubygems artifacts"));
+        }
+
+        // terraform (only if terraform artifacts configured)
+        var needsTerraform = config?.Artifacts?.Any(a => a.Type == "terraform") == true;
+        if (needsTerraform)
+        {
+            var tfOk = await IsToolAvailableAsync("terraform", "--version", cancellationToken);
+            checks.Add(("terraform", tfOk.ok, tfOk.ok ? tfOk.version : "not found — required for terraform artifacts"));
         }
 
         // version provider tool (only if an external tool is required)
@@ -738,7 +796,7 @@ public static class BuiltinCommandRegistration
         template = NormalizeTemplate(template);
         if (template is null)
         {
-            return CommandResult.Fail("init", 1, "Invalid --template value. Use auto|dotnet|node|python|go|generic|blank.");
+            return CommandResult.Fail("init", 1, "Invalid --template value. Use auto|dotnet|node|python|go|java|ruby|generic|blank.");
         }
 
         schemaSource = NormalizeSchemaSource(schemaSource);
@@ -1126,32 +1184,75 @@ public static class BuiltinCommandRegistration
         var hasDockerfile = dockerfileCandidates.Count > 0;
         var primaryDockerfile = hasDockerfile ? dockerfileCandidates[0] : null;
 
-        if (File.Exists(Path.Combine(workingDir, "pyproject.toml")) ||
-            File.Exists(Path.Combine(workingDir, "requirements.txt")) ||
-            Directory.EnumerateFiles(workingDir, "*.py", SearchOption.TopDirectoryOnly).Any())
-        {
-            return new InitDetection("python", DotnetLibrary: false, hasDockerfile, primaryDockerfile);
-        }
+        // Detect all ecosystem signals (independent of each other)
+        var hasPyproject = File.Exists(Path.Combine(workingDir, "pyproject.toml"));
+        var hasRequirements = File.Exists(Path.Combine(workingDir, "requirements.txt"));
+        var hasSetupPy = Directory.EnumerateFiles(workingDir, "*.py", SearchOption.TopDirectoryOnly).Any();
+        var isPython = hasPyproject || hasRequirements || hasSetupPy;
 
-        if (File.Exists(Path.Combine(workingDir, "go.mod")))
-        {
-            return new InitDetection("go", DotnetLibrary: false, hasDockerfile, primaryDockerfile);
-        }
+        var isGo = File.Exists(Path.Combine(workingDir, "go.mod"));
 
         var csprojFiles = Directory.EnumerateFiles(workingDir, "*.csproj", SearchOption.AllDirectories).ToList();
-        if (Directory.EnumerateFiles(workingDir, "*.sln", SearchOption.TopDirectoryOnly).Any() ||
-            csprojFiles.Count > 0)
+        var isDotnet = Directory.EnumerateFiles(workingDir, "*.sln", SearchOption.TopDirectoryOnly).Any()
+            || csprojFiles.Count > 0;
+        var dotnetLibrary = isDotnet && csprojFiles.Count > 0 && csprojFiles.All(IsLibraryProject);
+
+        var hasPackageJson = File.Exists(Path.Combine(workingDir, "package.json"));
+        var isNode = hasPackageJson;
+
+        var hasPomXml = File.Exists(Path.Combine(workingDir, "pom.xml"));
+        var hasBuildGradle = File.Exists(Path.Combine(workingDir, "build.gradle"))
+            || File.Exists(Path.Combine(workingDir, "build.gradle.kts"));
+        var hasGemfile = File.Exists(Path.Combine(workingDir, "Gemfile"))
+            || Directory.EnumerateFiles(workingDir, "*.gemspec", SearchOption.TopDirectoryOnly).Any();
+        var hasTerraform = Directory.EnumerateFiles(workingDir, "*.tf", SearchOption.TopDirectoryOnly).Any();
+        var hasHelmChart = File.Exists(Path.Combine(workingDir, "Chart.yaml"));
+        var hasDockerCompose = File.Exists(Path.Combine(workingDir, "docker-compose.yml"))
+            || File.Exists(Path.Combine(workingDir, "docker-compose.yaml"));
+
+        // Determine primary template (ordered by priority)
+        string template;
+        if (isPython)
         {
-            var dotnetLibrary = csprojFiles.Count > 0 && csprojFiles.All(IsLibraryProject);
-            return new InitDetection("dotnet", dotnetLibrary, hasDockerfile, primaryDockerfile);
+            template = "python";
+        }
+        else if (isGo)
+        {
+            template = "go";
+        }
+        else if (isDotnet)
+        {
+            template = "dotnet";
+        }
+        else if (isNode)
+        {
+            template = "node";
+        }
+        else if (hasPomXml || hasBuildGradle)
+        {
+            template = "java";
+        }
+        else if (hasGemfile)
+        {
+            template = "ruby";
+        }
+        else
+        {
+            template = "generic";
         }
 
-        if (File.Exists(Path.Combine(workingDir, "package.json")))
-        {
-            return new InitDetection("node", DotnetLibrary: false, hasDockerfile, primaryDockerfile);
-        }
-
-        return new InitDetection("generic", DotnetLibrary: false, hasDockerfile, primaryDockerfile);
+        return new InitDetection(
+            Template: template,
+            DotnetLibrary: dotnetLibrary,
+            HasDockerfile: hasDockerfile,
+            PrimaryDockerfileRelativePath: primaryDockerfile,
+            HasPackageJson: hasPackageJson,
+            HasPomXml: hasPomXml,
+            HasBuildGradle: hasBuildGradle,
+            HasGemfile: hasGemfile,
+            HasTerraform: hasTerraform,
+            HasHelmChart: hasHelmChart,
+            HasDockerCompose: hasDockerCompose);
     }
 
     private static bool IsLibraryProject(string csprojPath)
@@ -1237,7 +1338,14 @@ public static class BuiltinCommandRegistration
         string Template,
         bool DotnetLibrary,
         bool HasDockerfile,
-        string? PrimaryDockerfileRelativePath);
+        string? PrimaryDockerfileRelativePath,
+        bool HasPackageJson = false,
+        bool HasPomXml = false,
+        bool HasBuildGradle = false,
+        bool HasGemfile = false,
+        bool HasTerraform = false,
+        bool HasHelmChart = false,
+        bool HasDockerCompose = false);
 
     private sealed record InitDetectContract(
         string ContractVersion,
@@ -1326,7 +1434,7 @@ public static class BuiltinCommandRegistration
 
     private static string? NormalizeTemplate(string value)
     {
-        var known = new[] { "dotnet", "node", "python", "go", "generic", "blank" };
+        var known = new[] { "dotnet", "node", "python", "go", "java", "ruby", "generic", "blank" };
         return known.Contains(value, StringComparer.OrdinalIgnoreCase)
             ? value.ToLowerInvariant()
             : null;
@@ -1453,6 +1561,44 @@ public static class BuiltinCommandRegistration
                     },
                 },
             },
+            "java" => new Dictionary<string, object>
+            {
+                ["local build"] = new
+                {
+                    description = "Build the Java project locally",
+                    steps = new object[]
+                    {
+                        new { run = "mvn package -DskipTests" },
+                    },
+                },
+                ["local test"] = new
+                {
+                    description = "Run tests locally",
+                    steps = new object[]
+                    {
+                        new { run = "mvn test" },
+                    },
+                },
+            },
+            "ruby" => new Dictionary<string, object>
+            {
+                ["local build"] = new
+                {
+                    description = "Install dependencies locally",
+                    steps = new object[]
+                    {
+                        new { run = "bundle install" },
+                    },
+                },
+                ["local test"] = new
+                {
+                    description = "Run tests locally",
+                    steps = new object[]
+                    {
+                        new { run = "bundle exec rake spec" },
+                    },
+                },
+            },
             _ => new Dictionary<string, object>
             {
                 ["local build"] = new
@@ -1492,17 +1638,57 @@ public static class BuiltinCommandRegistration
             ["commands"] = commands,
         };
 
-        if (withDockerArtifact)
+        // Collect artifacts to scaffold based on what was detected and what was requested.
+        // blank template intentionally omits artifacts — the user adds them explicitly.
+        if (!template.Equals("blank", StringComparison.OrdinalIgnoreCase))
         {
-            doc["artifacts"] = new object[] { BuildDockerArtifactTemplate(detection) };
+            var artifacts = new List<object>();
+
+            if (withDockerArtifact)
+            {
+                artifacts.Add(BuildDockerArtifactTemplate(detection));
+            }
+
+            if (detection.HasDockerCompose)
+            {
+                artifacts.Add(new Dictionary<string, object> { ["type"] = "docker-compose" });
+            }
+
+            if (detection.HasPomXml)
+            {
+                artifacts.Add(new Dictionary<string, object> { ["type"] = "maven" });
+            }
+
+            if (detection.HasBuildGradle)
+            {
+                artifacts.Add(new Dictionary<string, object> { ["type"] = "gradle" });
+            }
+
+            if (detection.HasGemfile)
+            {
+                artifacts.Add(new Dictionary<string, object> { ["type"] = "rubygems" });
+            }
+
+            if (detection.HasTerraform)
+            {
+                artifacts.Add(new Dictionary<string, object> { ["type"] = "terraform" });
+            }
+
+            if (detection.HasHelmChart)
+            {
+                artifacts.Add(new Dictionary<string, object> { ["type"] = "helm" });
+            }
+
+            if (artifacts.Count > 0)
+            {
+                doc["artifacts"] = artifacts.ToArray();
+            }
         }
 
         if (template == "dotnet")
         {
             doc["tests"] = new { enabled = true, configuration = "Release" };
         }
-
-        // blank template intentionally omits tests and artifacts — the user adds them explicitly.
 
         return JsonSerializer.Serialize(doc, IndentedJsonOptions);
     }

@@ -1,9 +1,17 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Analysis/Analysis.csproj" />
-    <Project Path="src/Artifacts.Helm/Artifacts.Helm.csproj" />
+    <Project Path="src/Artifacts.DockerCompose/Artifacts.DockerCompose.csproj" />
     <Project Path="src/Artifacts.Docker/Artifacts.Docker.csproj" />
+    <Project Path="src/Artifacts.Generic/Artifacts.Generic.csproj" />
+    <Project Path="src/Artifacts.Gradle/Artifacts.Gradle.csproj" />
+    <Project Path="src/Artifacts.Helm/Artifacts.Helm.csproj" />
+    <Project Path="src/Artifacts.Maven/Artifacts.Maven.csproj" />
+    <Project Path="src/Artifacts.Npm/Artifacts.Npm.csproj" />
     <Project Path="src/Artifacts.NuGet/Artifacts.NuGet.csproj" />
+    <Project Path="src/Artifacts.PyPi/Artifacts.PyPi.csproj" />
+    <Project Path="src/Artifacts.RubyGems/Artifacts.RubyGems.csproj" />
+    <Project Path="src/Artifacts.Terraform/Artifacts.Terraform.csproj" />
     <Project Path="src/Artifacts/Artifacts.csproj" />
     <Project Path="src/Ci/Ci.csproj" />
     <Project Path="src/Cli/Cli.csproj" />

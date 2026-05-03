@@ -298,7 +298,7 @@
       }
     },
     "artifact": {
-      "description": "Artifact declaration. Choose docker, nuget, or a custom provider type.",
+      "description": "Artifact declaration. Choose docker, nuget, helm-oci, npm, pypi, maven, gradle, rubygems, terraform, helm, docker-compose, or a custom provider type.",
       "anyOf": [
         {
           "$ref": "#/$defs/dockerArtifact"
@@ -308,6 +308,30 @@
         },
         {
           "$ref": "#/$defs/helmOciArtifact"
+        },
+        {
+          "$ref": "#/$defs/npmArtifact"
+        },
+        {
+          "$ref": "#/$defs/pypiArtifact"
+        },
+        {
+          "$ref": "#/$defs/mavenArtifact"
+        },
+        {
+          "$ref": "#/$defs/gradleArtifact"
+        },
+        {
+          "$ref": "#/$defs/rubygemsArtifact"
+        },
+        {
+          "$ref": "#/$defs/terraformArtifact"
+        },
+        {
+          "$ref": "#/$defs/helmArtifact"
+        },
+        {
+          "$ref": "#/$defs/dockerComposeArtifact"
         },
         {
           "$ref": "#/$defs/genericArtifact"
@@ -373,7 +397,15 @@
             "enum": [
               "docker",
               "nuget",
-              "helm-oci"
+              "helm-oci",
+              "npm",
+              "pypi",
+              "maven",
+              "gradle",
+              "rubygems",
+              "terraform",
+              "helm",
+              "docker-compose"
             ]
           }
         },
@@ -409,6 +441,450 @@
         "settings": {
           "description": "Provider-specific Helm package and OCI push settings.",
           "$ref": "#/$defs/helmOciArtifactSettings"
+        }
+      }
+    },
+    "npmArtifact": {
+      "type": "object",
+      "description": "npm package artifact configuration.",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "npm",
+          "description": "Selects the npm artifact provider."
+        },
+        "name": {
+          "type": "string",
+          "description": "Logical artifact name used in logs and manifests."
+        },
+        "settings": {
+          "type": "object",
+          "description": "npm pack/publish settings.",
+          "additionalProperties": false,
+          "properties": {
+            "directory": {
+              "type": "string",
+              "description": "Working directory containing package.json. Defaults to repo root."
+            },
+            "registry": {
+              "type": "string",
+              "description": "npm registry URL. Defaults to https://registry.npmjs.org."
+            },
+            "access": {
+              "type": "string",
+              "description": "Package access level.",
+              "enum": [
+                "public",
+                "restricted"
+              ]
+            },
+            "tag": {
+              "type": "string",
+              "description": "Distribution tag to publish under. Defaults to version."
+            },
+            "tokenEnv": {
+              "type": "string",
+              "description": "Name of the environment variable containing the npm auth token. Defaults to NPM_TOKEN."
+            },
+            "useDocker": {
+              "type": "boolean",
+              "description": "Use a Docker container as a fallback runtime when npm is not installed on the host. Defaults to true."
+            },
+            "dockerImage": {
+              "type": "string",
+              "description": "Docker image used when falling back to the containerized npm runtime. Defaults to node:lts-alpine."
+            },
+            "extra-build-args": {
+              "type": "string",
+              "description": "Additional space-separated arguments appended to the npm pack command."
+            },
+            "extra-push-args": {
+              "type": "string",
+              "description": "Additional space-separated arguments appended to the npm publish command."
+            }
+          }
+        }
+      }
+    },
+    "pypiArtifact": {
+      "type": "object",
+      "description": "Python/PyPI package artifact configuration.",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "pypi",
+          "description": "Selects the PyPI artifact provider."
+        },
+        "name": {
+          "type": "string",
+          "description": "Logical artifact name used in logs and manifests."
+        },
+        "settings": {
+          "type": "object",
+          "description": "python -m build / twine upload settings.",
+          "additionalProperties": false,
+          "properties": {
+            "directory": {
+              "type": "string",
+              "description": "Working directory. Defaults to repo root."
+            },
+            "repository-url": {
+              "type": "string",
+              "description": "PyPI repository URL for twine upload."
+            },
+            "dist-dir": {
+              "type": "string",
+              "description": "Distribution directory pattern. Defaults to 'dist/*'."
+            },
+            "useDocker": {
+              "type": "boolean",
+              "description": "Use a Docker container as a fallback runtime when python/python3 is not installed on the host. Defaults to true."
+            },
+            "dockerImage": {
+              "type": "string",
+              "description": "Docker image used when falling back to the containerized Python runtime. Defaults to python:3-slim. The default image does not include build or twine — provide a custom image if needed."
+            },
+            "extra-build-args": {
+              "type": "string",
+              "description": "Additional space-separated arguments appended to the python -m build command."
+            },
+            "extra-push-args": {
+              "type": "string",
+              "description": "Additional space-separated arguments appended to the python -m twine upload command."
+            }
+          }
+        }
+      }
+    },
+    "mavenArtifact": {
+      "type": "object",
+      "description": "Maven package/deploy artifact configuration.",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "maven",
+          "description": "Selects the Maven artifact provider."
+        },
+        "name": {
+          "type": "string",
+          "description": "Logical artifact name used in logs and manifests."
+        },
+        "settings": {
+          "type": "object",
+          "description": "mvn package/deploy settings.",
+          "additionalProperties": false,
+          "properties": {
+            "project": {
+              "type": "string",
+              "description": "Path to the pom.xml file. Defaults to root pom.xml."
+            },
+            "profiles": {
+              "type": "string",
+              "description": "Comma-separated Maven profiles to activate."
+            },
+            "useDocker": {
+              "type": "boolean",
+              "description": "Use a Docker container as a fallback runtime when mvn is not installed on the host. Defaults to true."
+            },
+            "dockerImage": {
+              "type": "string",
+              "description": "Docker image used when falling back to the containerized Maven runtime. Defaults to maven:3-eclipse-temurin-21."
+            },
+            "extra-build-args": {
+              "type": "string",
+              "description": "Additional space-separated arguments appended to mvn package."
+            },
+            "extra-push-args": {
+              "type": "string",
+              "description": "Additional space-separated arguments appended to mvn deploy."
+            }
+          }
+        }
+      }
+    },
+    "gradleArtifact": {
+      "type": "object",
+      "description": "Gradle build/publish artifact configuration.",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "gradle",
+          "description": "Selects the Gradle artifact provider."
+        },
+        "name": {
+          "type": "string",
+          "description": "Logical artifact name used in logs and manifests."
+        },
+        "settings": {
+          "type": "object",
+          "description": "Gradle build/publish settings.",
+          "additionalProperties": false,
+          "properties": {
+            "tasks": {
+              "type": "string",
+              "description": "Gradle tasks to run for build. Defaults to 'build'."
+            },
+            "wrapper": {
+              "type": "boolean",
+              "description": "Use Gradle wrapper (gradlew) if present. Defaults to true."
+            },
+            "directory": {
+              "type": "string",
+              "description": "Working directory containing build.gradle. Defaults to repo root."
+            },
+            "useDocker": {
+              "type": "boolean",
+              "description": "Use a Docker container as a fallback runtime when gradle is not installed on the host. Defaults to true."
+            },
+            "dockerImage": {
+              "type": "string",
+              "description": "Docker image used when falling back to the containerized Gradle runtime. Defaults to gradle:8-jdk21."
+            },
+            "extra-build-args": {
+              "type": "string",
+              "description": "Additional space-separated arguments appended to the Gradle build task(s)."
+            },
+            "extra-push-args": {
+              "type": "string",
+              "description": "Additional space-separated arguments appended to the Gradle publish task."
+            }
+          }
+        }
+      }
+    },
+    "rubygemsArtifact": {
+      "type": "object",
+      "description": "RubyGems gem build/push artifact configuration.",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "rubygems",
+          "description": "Selects the RubyGems artifact provider."
+        },
+        "name": {
+          "type": "string",
+          "description": "Logical artifact name used in logs and manifests."
+        },
+        "settings": {
+          "type": "object",
+          "description": "gem build/push settings.",
+          "additionalProperties": false,
+          "properties": {
+            "gemspec": {
+              "type": "string",
+              "description": "Path or glob to the .gemspec file. Defaults to '*.gemspec'."
+            },
+            "source": {
+              "type": "string",
+              "description": "Gem server source URL for gem push."
+            },
+            "gem-pattern": {
+              "type": "string",
+              "description": "Glob pattern for the built gem file to push. Defaults to '*.gem'."
+            },
+            "directory": {
+              "type": "string",
+              "description": "Working directory. Defaults to repo root."
+            },
+            "apiKeyEnv": {
+              "type": "string",
+              "description": "Name of the environment variable containing the RubyGems API key. Defaults to GEM_HOST_API_KEY."
+            },
+            "useDocker": {
+              "type": "boolean",
+              "description": "Use a Docker container as a fallback runtime when gem is not installed on the host. Defaults to true."
+            },
+            "dockerImage": {
+              "type": "string",
+              "description": "Docker image used when falling back to the containerized Ruby runtime. Defaults to ruby:3-alpine."
+            },
+            "extra-build-args": {
+              "type": "string",
+              "description": "Additional space-separated arguments appended to gem build."
+            },
+            "extra-push-args": {
+              "type": "string",
+              "description": "Additional space-separated arguments appended to gem push."
+            }
+          }
+        }
+      }
+    },
+    "terraformArtifact": {
+      "type": "object",
+      "description": "Terraform plan/apply artifact configuration.",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "terraform",
+          "description": "Selects the Terraform artifact provider."
+        },
+        "name": {
+          "type": "string",
+          "description": "Logical artifact name used in logs and manifests."
+        },
+        "settings": {
+          "type": "object",
+          "description": "terraform init/plan/apply settings.",
+          "additionalProperties": false,
+          "properties": {
+            "directory": {
+              "type": "string",
+              "description": "Directory containing Terraform configuration. Defaults to '.'."
+            },
+            "workspace": {
+              "type": "string",
+              "description": "Terraform workspace to select before apply."
+            },
+            "vars-file": {
+              "type": "string",
+              "description": "Path to a .tfvars file to pass to terraform plan."
+            },
+            "var-file": {
+              "type": "string",
+              "description": "Path to a .tfvars file to pass to terraform plan (alias for vars-file)."
+            },
+            "useDocker": {
+              "type": "boolean",
+              "description": "Use a Docker container as a fallback runtime when terraform is not installed on the host. Defaults to true."
+            },
+            "dockerImage": {
+              "type": "string",
+              "description": "Docker image used when falling back to the containerized Terraform runtime. Defaults to hashicorp/terraform:1.9."
+            },
+            "extra-build-args": {
+              "type": "string",
+              "description": "Additional space-separated arguments appended to terraform plan."
+            },
+            "extra-push-args": {
+              "type": "string",
+              "description": "Additional space-separated arguments appended to terraform apply."
+            }
+          }
+        }
+      }
+    },
+    "helmArtifact": {
+      "type": "object",
+      "description": "Helm chart package/push artifact configuration (non-OCI).",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "helm",
+          "description": "Selects the Helm (non-OCI) artifact provider."
+        },
+        "name": {
+          "type": "string",
+          "description": "Logical artifact name used in logs and manifests."
+        },
+        "settings": {
+          "type": "object",
+          "description": "helm package/push settings.",
+          "additionalProperties": false,
+          "properties": {
+            "chart": {
+              "type": "string",
+              "description": "Path to the chart directory. Defaults to '.'."
+            },
+            "chart-directory": {
+              "type": "string",
+              "description": "Path to the chart directory. Defaults to '.'."
+            },
+            "output-directory": {
+              "type": "string",
+              "description": "Directory where packaged .tgz files are written. Defaults to repo root."
+            },
+            "repository": {
+              "type": "string",
+              "description": "Chart Museum repo URL (https://…) for helm cm-push, or a local filesystem path for file copy."
+            },
+            "useDocker": {
+              "type": "boolean",
+              "description": "Use a Docker container as a fallback runtime when helm is not installed on the host. Defaults to true."
+            },
+            "dockerImage": {
+              "type": "string",
+              "description": "Docker image used when falling back to the containerized Helm runtime. Defaults to alpine/helm:3.17.3."
+            },
+            "extra-build-args": {
+              "type": "string",
+              "description": "Additional space-separated arguments appended to helm package."
+            },
+            "extra-push-args": {
+              "type": "string",
+              "description": "Additional space-separated arguments appended to helm cm-push."
+            }
+          }
+        }
+      }
+    },
+    "dockerComposeArtifact": {
+      "type": "object",
+      "description": "Docker Compose build/push artifact configuration.",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "docker-compose",
+          "description": "Selects the Docker Compose artifact provider."
+        },
+        "name": {
+          "type": "string",
+          "description": "Logical artifact name used in logs and manifests."
+        },
+        "settings": {
+          "type": "object",
+          "description": "docker compose build/push settings.",
+          "additionalProperties": false,
+          "properties": {
+            "file": {
+              "type": "string",
+              "description": "Path to the docker-compose file. Defaults to docker-compose.yml."
+            },
+            "project-name": {
+              "type": "string",
+              "description": "Docker Compose project name (-p flag)."
+            },
+            "services": {
+              "type": "string",
+              "description": "Space-separated list of services to build/push. Defaults to all."
+            },
+            "registry": {
+              "type": "string",
+              "description": "Container registry URL. When set, docker login is performed before push using resolved credentials."
+            },
+            "extra-build-args": {
+              "type": "string",
+              "description": "Additional space-separated arguments appended to docker compose build."
+            },
+            "extra-push-args": {
+              "type": "string",
+              "description": "Additional space-separated arguments appended to docker compose push."
+            }
+          }
         }
       }
     },

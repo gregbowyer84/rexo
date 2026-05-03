@@ -9,6 +9,9 @@ using Rexo.Core.Models;
 
 public sealed class NuGetArtifactProvider : IArtifactProvider
 {
+    public static void Register(ArtifactProviderRegistry registry) =>
+        registry.Register("nuget", new NuGetArtifactProvider());
+
     public string Type => "nuget";
 
     public async Task<ArtifactBuildResult> BuildAsync(
@@ -60,7 +63,7 @@ public sealed class NuGetArtifactProvider : IArtifactProvider
         var output = GetSetting(artifact, "output") ?? "artifacts/packages";
         var apiKeyEnvVar = GetSetting(artifact, "apiKeyEnv") ?? "NUGET_API_KEY";
         var fileEnv = RepositoryEnvironmentFiles.Load(context.RepositoryRoot);
-        var auth = FeedAuthResolver.ResolveNuGet(source, apiKeyEnvVar, fileEnv);
+        var auth = ResolveAuth(source, apiKeyEnvVar, fileEnv);
         if (!auth.HasCredentials)
         {
             Console.Error.WriteLine("NuGet auth preflight failed: no API token resolved from env/CI identity.");
@@ -126,4 +129,40 @@ public sealed class NuGetArtifactProvider : IArtifactProvider
             JsonValueKind.Number => value.GetRawText(),
             _ => value.ToString(),
         };
+
+    /// <summary>
+    /// Resolves NuGet push credentials.  Order: configured apiKeyEnv / NUGET_API_KEY /
+    /// NUGET_AUTH_TOKEN → GITHUB_TOKEN for nuget.pkg.github.com → SYSTEM_ACCESSTOKEN
+    /// for Azure Artifacts.
+    /// </summary>
+    private static FeedAuthResolution ResolveAuth(
+        string source,
+        string? configuredApiKeyEnv,
+        IReadOnlyDictionary<string, string> fileEnv)
+    {
+        var envName = string.IsNullOrWhiteSpace(configuredApiKeyEnv) ? "NUGET_API_KEY" : configuredApiKeyEnv;
+        var secret = FeedAuthResolver.GetEnv(envName, fileEnv)
+                     ?? FeedAuthResolver.GetEnv("NUGET_AUTH_TOKEN", fileEnv);
+
+        if (string.IsNullOrWhiteSpace(secret))
+        {
+            if (source.Contains("nuget.pkg.github.com", StringComparison.OrdinalIgnoreCase))
+            {
+                secret = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+            }
+            else
+            {
+                secret = Environment.GetEnvironmentVariable("SYSTEM_ACCESSTOKEN");
+            }
+
+            if (!string.IsNullOrWhiteSpace(secret))
+            {
+                return new FeedAuthResolution(true, null, secret, source, null, "ci-token");
+            }
+
+            return new FeedAuthResolution(false, null, null, source, null, "none");
+        }
+
+        return new FeedAuthResolution(true, null, secret, source, null, "env");
+    }
 }

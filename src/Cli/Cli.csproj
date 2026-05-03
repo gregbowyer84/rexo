@@ -5,9 +5,17 @@
     <ProjectReference Include="..\\Execution\\Execution.csproj" />
     <ProjectReference Include="..\Tui\Tui.csproj" />
     <ProjectReference Include="..\\Ui\\Ui.csproj" />
+    <ProjectReference Include="..\Artifacts.DockerCompose\Artifacts.DockerCompose.csproj" />
+    <ProjectReference Include="..\Artifacts.Docker\Artifacts.Docker.csproj" />
+    <ProjectReference Include="..\Artifacts.Generic\Artifacts.Generic.csproj" />
+    <ProjectReference Include="..\Artifacts.Gradle\Artifacts.Gradle.csproj" />
     <ProjectReference Include="..\Artifacts.Helm\Artifacts.Helm.csproj" />
-    <ProjectReference Include="..\\Artifacts.Docker\\Artifacts.Docker.csproj" />
-    <ProjectReference Include="..\\Artifacts.NuGet\\Artifacts.NuGet.csproj" />
+    <ProjectReference Include="..\Artifacts.Maven\Artifacts.Maven.csproj" />
+    <ProjectReference Include="..\Artifacts.Npm\Artifacts.Npm.csproj" />
+    <ProjectReference Include="..\Artifacts.NuGet\Artifacts.NuGet.csproj" />
+    <ProjectReference Include="..\Artifacts.PyPi\Artifacts.PyPi.csproj" />
+    <ProjectReference Include="..\Artifacts.RubyGems\Artifacts.RubyGems.csproj" />
+    <ProjectReference Include="..\Artifacts.Terraform\Artifacts.Terraform.csproj" />
     <ProjectReference Include="..\\Versioning\\Versioning.csproj" />
   </ItemGroup>
   <PropertyGroup>

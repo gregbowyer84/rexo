@@ -1,6 +1,6 @@
 # repoOS Implementation TODO
 
-Last updated: 2026-05-09
+Last updated: 2026-05-03
 
 This checklist maps the current implementation against the project scope in `docs/scope.md`.
 
@@ -99,8 +99,21 @@ Legend:
 
 - [x] Artifact provider registry
 - [x] Docker provider: build/tag/push
+- [x] Docker Compose provider: build/push (via Docker; `docker-compose`)
 - [x] NuGet provider: pack/push
+- [x] Helm OCI provider: package/push (Docker fallback supported)
+- [x] Helm (non-OCI) provider: package/push to HTTP chart repo
+- [x] npm provider: pack/publish (Docker fallback; `tokenEnv`)
+- [x] PyPI provider: build/publish (Docker fallback; twine auth)
+- [x] Maven provider: package/deploy (Docker fallback; username/password auth)
+- [x] Gradle provider: build/publish (Docker fallback; wrapper-aware; env auth)
+- [x] RubyGems provider: build/push (Docker fallback; `apiKeyEnv`)
+- [x] Terraform provider: init/validate/apply (Docker fallback; `var-file`)
+- [x] Generic provider: zip/copy artifact packaging
 - [x] Tag strategy support (semver/branch/sha/latest-on-main variants)
+- [x] Docker fallback (`useDocker`/`dockerImage`) for all tool-based providers
+- [x] Extra args passthrough (`extra-build-args`, `extra-push-args`) for all providers
+- [x] Feed auth resolution per-provider (private `ResolveAuth()` in each provider; `FeedAuthResolver` holds only shared Docker auth)
 - [x] Push policy rules enforced via `runtime.push` (`noPushInPullRequest`, `requireCleanWorkingTree`)
 - [x] Artifact manifest file output (`artifacts/manifest.json` written after push)
 - [x] Rich artifact metadata capture (manifest written; Artifacts/PushDecisions now flowed into CommandResult and RunManifest)
@@ -169,7 +182,7 @@ Legend:
 ## 16) Testing and Quality Gates
 
 - [x] Build passes (`dotnet build`)
-- [x] Tests pass (189 total — added tests for secret masking, template expressions, versioning, builtin commands)
+- [x] Tests pass (234 total — added tests for secret masking, template expressions, versioning, builtin commands)
 - [x] Added tests for template rendering behavior
 - [x] Added tests for built-in command registration paths
 - [x] Coverage breadth expanded: REXO_OVERLAY, commands merge, StepExecutor when-condition + unknown builtin tests
@@ -225,31 +238,31 @@ Items expected in MVP (per scope section 56) and status:
 
 ### Provider architecture
 
-- [ ] Remove hardcoded `artifactProviders.Register(...)` calls from CLI bootstrapper
-- [ ] Introduce pluggable provider discovery/registration mechanism (config-driven, plugin folder, NuGet extension model, explicit host API)
-- [ ] Ensure provider projects (`Artifacts.Docker`, `Artifacts.NuGet`, `Artifacts.Helm`) depend only on `Rexo.Core` — no CLI/Execution references
-- [ ] Add provider-availability diagnostics to `rx doctor` ("provider available" vs "provider missing")
+- [x] Remove hardcoded `artifactProviders.Register(...)` calls from CLI bootstrapper — replaced with self-registration (`XxxProvider.Register(registry)`)
+- [x] Introduce pluggable provider discovery/registration mechanism — static `Register()` method on each provider, called from `CliBootstrapper.cs`
+- [x] Ensure provider projects (`Artifacts.Docker`, `Artifacts.NuGet`, `Artifacts.Helm`) depend only on `Rexo.Core` — no CLI/Execution references
+- [x] Add provider-availability diagnostics to `rx doctor` — toolchain checks for docker-compose, npm, python/python3, mvn, gradle, gem, terraform
 - [ ] Clear error when a config references an unknown provider type (e.g. `type: "npm"` without provider loaded)
 
 ### Lifecycle builtins
 
-- [ ] Confirm `builtin:build-artifacts` / `builtin:tag-artifacts` / `builtin:push-artifacts` / `builtin:plan-artifacts` / `builtin:ship-artifacts` / `builtin:all-artifacts` remain host-owned and delegate only to the registry
-- [ ] Provider libraries must not register builtins directly
+- [x] Confirm `builtin:build-artifacts` / `builtin:tag-artifacts` / `builtin:push-artifacts` / `builtin:plan-artifacts` / `builtin:ship-artifacts` / `builtin:all-artifacts` remain host-owned and delegate only to the registry
+- [x] Provider libraries must not register builtins directly
 
 ### Provider backlog — high priority
 
-- [ ] `Rexo.Artifacts.Npm` — `type: "npm"` provider (npm pack / npm publish)
-- [ ] `Rexo.Artifacts.PyPi` — `type: "pypi"` provider (build wheel / twine upload)
-- [ ] `Rexo.Artifacts.Maven` — `type: "maven"` provider (mvn package / mvn deploy)
-- [ ] `Rexo.Artifacts.Generic` — `type: "generic"` provider (archive zip/tar.gz, copy to output)
+- [x] `Rexo.Artifacts.Npm` — `type: "npm"` provider (npm pack / npm publish)
+- [x] `Rexo.Artifacts.PyPi` — `type: "pypi"` provider (build wheel / twine upload)
+- [x] `Rexo.Artifacts.Maven` — `type: "maven"` provider (mvn package / mvn deploy)
+- [x] `Rexo.Artifacts.Generic` — `type: "generic"` provider (archive zip/tar.gz, copy to output)
 
 ### Provider backlog — medium priority
 
-- [ ] `Rexo.Artifacts.Gradle` — `type: "gradle"`
-- [ ] `Rexo.Artifacts.RubyGems` — `type: "rubygems"`
-- [ ] `Rexo.Artifacts.Terraform` — `type: "terraform"`
-- [ ] `Rexo.Artifacts.Helm` — `type: "helm"` (non-OCI / generic chart, separate from existing helm-oci)
-- [ ] `Rexo.Artifacts.DockerCompose` — `type: "docker-compose"`
+- [x] `Rexo.Artifacts.Gradle` — `type: "gradle"`
+- [x] `Rexo.Artifacts.RubyGems` — `type: "rubygems"`
+- [x] `Rexo.Artifacts.Terraform` — `type: "terraform"`
+- [x] `Rexo.Artifacts.Helm` — `type: "helm"` (non-OCI / generic chart, separate from existing helm-oci)
+- [x] `Rexo.Artifacts.DockerCompose` — `type: "docker-compose"`
 
 ### Provider backlog — lower priority / niche
 

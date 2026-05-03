@@ -31,6 +31,7 @@ rx release --push
 ## Documentation
 
 - [Configuration Reference](docs/CONFIGURATION.md)
+- [Artifact Providers](docs/artifacts/README.md)
 - [Builtins Reference](docs/BUILTINS.md)
 - [Embedded Items Reference](docs/EMBEDDED.md)
 - [Architecture](docs/ARCHITECTURE.md)

@@ -11,11 +11,11 @@ Codex, etc.) to continue work on this repository without re-reading conversation
 | ---------- | ------- |
 | Product name | **Rexo** |
 | CLI command | **`rx`** |
-| Repository | `nrth/repoOS` |
+| Repository | `agile-north/rexo` |
 | Language / SDK | C# / .NET 10 (`net10.0`) |
 | Solution file | `solution.slnx` (slnx format) |
 
-Rexo is a **config-driven repository runtime CLI**. A single `repo.json` file in a
+Rexo is a **config-driven repository runtime CLI**. A single `rexo.json` file in a
 repository root drives build, versioning, artifact production, verification, analysis,
 and release orchestration. The CLI is identical whether run locally or in CI.
 
@@ -35,7 +35,7 @@ dotnet test solution.slnx -c Release --no-build
 ```
 
 Build must produce **0 errors, 0 warnings** (`TreatWarningsAsErrors=true`).
-All 189 tests must pass before any PR can be merged.
+All 234 tests must pass before any PR can be merged.
 
 ---
 
@@ -46,7 +46,7 @@ solution.slnx               # Solution file (slnx format)
 Directory.Build.props       # Central build conventions + branding
 Directory.Build.targets     # Shared MSBuild targets
 Directory.Packages.props    # Central NuGet version management
-repo.json                   # Example / self-describing config
+rexo.json                   # Example / self-describing config
 rexo.schema.json           # JSON Schema for rexo.json v1.0
 policy.schema.json         # JSON Schema for policy.json v1.0
 src/
@@ -57,7 +57,7 @@ src/
   Artifacts.NuGet/          # dotnet pack/push provider
   Ci/                       # CI environment detector (GHA/AzDO/GitLab/Bitbucket)
   Cli/                      # CLI entry point (Program.cs) — packs as `rx` tool
-  Configuration/            # repo.json loader + NJsonSchema validation
+  Configuration/            # rexo.json loader + NJsonSchema validation
   Core/                     # Domain models, interfaces (no external deps)
   Execution/                # Step executor, command registry, built-in primitives
   Git/                      # Git info detector (branch/SHA/remote/clean)
@@ -118,9 +118,9 @@ docs/
 
 ## Configuration System
 
-### `repo.json` required fields
+### `rexo.json` required fields
 
-Every `repo.json` must start with:
+Every `rexo.json` must start with:
 
 ```json
 {
@@ -220,7 +220,17 @@ Filters (pipe syntax): `{{value | slug}}`, `{{value | upper}}`, `{{value | lower
 | Provider key | Class | Notes |
 | --- | --- | --- |
 | `docker` | `DockerArtifactProvider` | `docker build`, `docker tag`, `docker push` |
+| `docker-compose` | `DockerComposeArtifactProvider` | `docker compose build`, `docker compose push` |
 | `nuget` | `NuGetArtifactProvider` | `dotnet pack`, `dotnet nuget push` |
+| `helm-oci` | `HelmOciArtifactProvider` | `helm package` + OCI push/login, Docker fallback supported |
+| `helm` | `HelmArtifactProvider` | classic chart package/push to HTTP chart repos |
+| `npm` | `NpmArtifactProvider` | `npm pack`, `npm publish`, Docker fallback supported |
+| `pypi` | `PyPiArtifactProvider` | `python -m build`, `twine upload`, Docker fallback supported |
+| `maven` | `MavenArtifactProvider` | `mvn package/deploy`, Docker fallback supported |
+| `gradle` | `GradleArtifactProvider` | `gradle build/publish`, wrapper-aware, Docker fallback supported |
+| `rubygems` | `RubyGemsArtifactProvider` | `gem build`, `gem push`, Docker fallback supported |
+| `terraform` | `TerraformArtifactProvider` | module/package workflow with Docker fallback |
+| `generic` | `GenericArtifactProvider` | zip/file packaging and copy/publish flow |
 
 ---
 

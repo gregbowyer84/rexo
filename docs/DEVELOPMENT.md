@@ -81,7 +81,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full layer diagram and dependency
    registry.Register("mykey", new MyVersionProvider());
    ```
 
-3. Users set `"provider": "mykey"` in their `repo.json` `versioning` section.
+3. Users set `"provider": "mykey"` in their `rexo.json` `versioning` section.
 
 ---
 
@@ -89,10 +89,11 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full layer diagram and dependency
 
 1. Create a class in a new `src/Artifacts.MyType/` project implementing `IArtifactProvider`.
 2. Add a project reference to `src/Cli/Cli.csproj`.
-3. Register in `Program.BuildServicesAsync`:
+3. Follow the existing self-registration pattern and add `public static void Register(ArtifactProviderRegistry registry)` to the provider.
+4. Register it from `src/Cli/CliBootstrapper.cs`:
 
    ```csharp
-   artifactProviders.Register("mytype", new MyTypeArtifactProvider());
+   MyTypeArtifactProvider.Register(artifactProviders);
    ```
 
 ---
@@ -127,7 +128,7 @@ Built-in primitives are step types used as `uses: builtin:my-primitive`.
 
 ## Schema Versioning
 
-When breaking changes to `repo.json` are needed:
+When breaking changes to `rexo.json` are needed:
 
 1. Create the next versioned schema files (for example `rexo.schema.v2.json` and `policy.schema.v2.json`).
 2. Add `"2.0"` to the supported schema versions in `RepoConfigurationLoader`.

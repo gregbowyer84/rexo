@@ -2,9 +2,17 @@ namespace Rexo.Cli;
 
 using System.Text.Json;
 using Rexo.Artifacts;
-using Rexo.Artifacts.Helm;
+using Rexo.Artifacts.DockerCompose;
 using Rexo.Artifacts.Docker;
+using Rexo.Artifacts.Generic;
+using Rexo.Artifacts.Gradle;
+using Rexo.Artifacts.Helm;
+using Rexo.Artifacts.Maven;
+using Rexo.Artifacts.Npm;
 using Rexo.Artifacts.NuGet;
+using Rexo.Artifacts.PyPi;
+using Rexo.Artifacts.RubyGems;
+using Rexo.Artifacts.Terraform;
 using Rexo.Configuration;
 using Rexo.Configuration.Models;
 using Rexo.Core.Models;
@@ -81,9 +89,18 @@ internal static class CliBootstrapper
         var templateRenderer = new TemplateRenderer();
         var versionProviders = VersionProviderRegistry.CreateDefault();
         var artifactProviders = new ArtifactProviderRegistry();
-        artifactProviders.Register("helm-oci", new HelmOciArtifactProvider());
-        artifactProviders.Register("docker", new DockerArtifactProvider());
-        artifactProviders.Register("nuget", new NuGetArtifactProvider());
+        DockerArtifactProvider.Register(artifactProviders);
+        DockerComposeArtifactProvider.Register(artifactProviders);
+        GenericArtifactProvider.Register(artifactProviders);
+        GradleArtifactProvider.Register(artifactProviders);
+        HelmArtifactProvider.Register(artifactProviders);
+        HelmOciArtifactProvider.Register(artifactProviders);
+        MavenArtifactProvider.Register(artifactProviders);
+        NpmArtifactProvider.Register(artifactProviders);
+        NuGetArtifactProvider.Register(artifactProviders);
+        PyPiArtifactProvider.Register(artifactProviders);
+        RubyGemsArtifactProvider.Register(artifactProviders);
+        TerraformArtifactProvider.Register(artifactProviders);
 
         var builtinRegistry = new BuiltinRegistry();
         var configLoader = new ConfigCommandLoader(

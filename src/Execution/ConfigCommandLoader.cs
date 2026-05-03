@@ -752,14 +752,14 @@ public sealed class ConfigCommandLoader
             ],
             "nuget" =>
             [
-                ToPlanCredentialCheck(Artifacts.FeedAuthResolver.ResolveNuGet(
+                ToPlanCredentialCheck(ResolvePlanNuGetAuth(
                     TryGetArtifactSettingString(artifact.Settings, "source") ?? "https://api.nuget.org/v3/index.json",
                     TryGetArtifactSettingString(artifact.Settings, "apiKeyEnv"),
                     fileEnv))
             ],
             "helm-oci" =>
             [
-                ToPlanCredentialCheck(Artifacts.FeedAuthResolver.ResolveHelm(
+                ToPlanCredentialCheck(ResolvePlanHelmOciAuth(
                     TryGetArtifactSettingString(artifact.Settings, "registry"),
                     fileEnv))
             ],
@@ -771,6 +771,70 @@ public sealed class ConfigCommandLoader
         new(resolution.HasCredentials, resolution.HasCredentials
             ? $"Credentials available via {resolution.Source}."
             : resolution.Error ?? $"Credentials not resolved ({resolution.Source}).");
+
+    // Preflight credential checks used by the plan/dry-run output.  These mirror the auth
+    // resolution each provider performs at push time, but return only a presence/source
+    // signal rather than the actual secrets.
+
+    private static Artifacts.FeedAuthResolution ResolvePlanNuGetAuth(
+        string source,
+        string? configuredApiKeyEnv,
+        IReadOnlyDictionary<string, string> fileEnv)
+    {
+        var envName = string.IsNullOrWhiteSpace(configuredApiKeyEnv) ? "NUGET_API_KEY" : configuredApiKeyEnv;
+        var secret = Artifacts.FeedAuthResolver.GetEnv(envName, fileEnv)
+                     ?? Artifacts.FeedAuthResolver.GetEnv("NUGET_AUTH_TOKEN", fileEnv);
+
+        if (string.IsNullOrWhiteSpace(secret))
+        {
+            secret = source.Contains("nuget.pkg.github.com", StringComparison.OrdinalIgnoreCase)
+                ? Environment.GetEnvironmentVariable("GITHUB_TOKEN")
+                : Environment.GetEnvironmentVariable("SYSTEM_ACCESSTOKEN");
+
+            if (!string.IsNullOrWhiteSpace(secret))
+            {
+                return new Artifacts.FeedAuthResolution(true, null, secret, source, null, "ci-token");
+            }
+
+            return new Artifacts.FeedAuthResolution(false, null, null, source, null, "none");
+        }
+
+        return new Artifacts.FeedAuthResolution(true, null, secret, source, null, "env");
+    }
+
+    private static Artifacts.FeedAuthResolution ResolvePlanHelmOciAuth(
+        string? configuredRegistry,
+        IReadOnlyDictionary<string, string> fileEnv)
+    {
+        var username = Artifacts.FeedAuthResolver.GetEnv("HELM_REGISTRY_USERNAME", fileEnv);
+        var secret = Artifacts.FeedAuthResolver.GetEnv("HELM_REGISTRY_PASSWORD", fileEnv);
+        var endpoint = Artifacts.FeedAuthResolver.GetEnv("HELM_REGISTRY", fileEnv) ?? configuredRegistry;
+
+        if (string.IsNullOrWhiteSpace(username) && string.IsNullOrWhiteSpace(secret))
+        {
+            if (!string.IsNullOrWhiteSpace(endpoint) &&
+                endpoint.Contains("ghcr.io", StringComparison.OrdinalIgnoreCase))
+            {
+                var actor = Environment.GetEnvironmentVariable("GITHUB_ACTOR");
+                var token = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+                if (!string.IsNullOrWhiteSpace(actor) && !string.IsNullOrWhiteSpace(token))
+                {
+                    return new Artifacts.FeedAuthResolution(true, actor, token, endpoint, null, "github-token");
+                }
+            }
+
+            return new Artifacts.FeedAuthResolution(false, null, null, endpoint, null, "none");
+        }
+
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(secret))
+        {
+            return new Artifacts.FeedAuthResolution(false, null, null, endpoint,
+                "HELM_REGISTRY_USERNAME and HELM_REGISTRY_PASSWORD must both be set.", "env");
+        }
+
+        return new Artifacts.FeedAuthResolution(true, username, secret, endpoint, null, "env");
+    }
+
 
     private static string? InferDockerRegistry(string? image)
     {

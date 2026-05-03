@@ -449,6 +449,27 @@ After `builtin:push-artifacts` completes, a manifest is written to
 `<runtime.output.root>/manifest.json` (default: `artifacts/manifest.json`) listing each
 artifact's type, name, push status, and published references.
 
+### Artifact provider references
+
+Use provider-specific documentation for settings, auth, fallback, and examples:
+
+| Type | Provider doc |
+| --- | --- |
+| `docker` | [artifacts/docker.md](artifacts/docker.md) |
+| `docker-compose` | [artifacts/docker-compose.md](artifacts/docker-compose.md) |
+| `nuget` | [artifacts/nuget.md](artifacts/nuget.md) |
+| `helm-oci` | [artifacts/helm-oci.md](artifacts/helm-oci.md) |
+| `helm` | [artifacts/helm.md](artifacts/helm.md) |
+| `npm` | [artifacts/npm.md](artifacts/npm.md) |
+| `pypi` | [artifacts/pypi.md](artifacts/pypi.md) |
+| `maven` | [artifacts/maven.md](artifacts/maven.md) |
+| `gradle` | [artifacts/gradle.md](artifacts/gradle.md) |
+| `rubygems` | [artifacts/rubygems.md](artifacts/rubygems.md) |
+| `terraform` | [artifacts/terraform.md](artifacts/terraform.md) |
+| custom provider (`generic`) | [artifacts/generic.md](artifacts/generic.md) |
+
+Index page: [artifacts/README.md](artifacts/README.md)
+
 ## `runtime.output`
 
 Controls filesystem artifact emission and the root output folder.
@@ -1053,7 +1074,7 @@ rx run config materialize
 # Change the version provider for a single run
 rx build --set versioning.provider=env
 
-# Disable push without editing repo.json
+# Disable push without editing rexo.json
 rx release --set runtime.push.enabled=false
 
 # Override a fallback version
@@ -1063,7 +1084,7 @@ rx version --set versioning.fallback=0.0.0-local
 rx release --set versioning.provider=fixed --set versioning.fallback=1.2.3
 ```
 
-The key path uses dot-notation that matches the `repo.json` property hierarchy (case-insensitive). Values that look like JSON booleans, numbers, or `null` are parsed as their native types; everything else is treated as a string.
+The key path uses dot-notation that matches the `rexo.json` property hierarchy (case-insensitive). Values that look like JSON booleans, numbers, or `null` are parsed as their native types; everything else is treated as a string.
 
 For full functional requirements see [scope.md](scope.md).
 
@@ -1138,5 +1159,5 @@ The following features are defined in the product scope but not yet implemented:
 
 ### UI and Interactive Features
 
-- Running `rx` with no arguments launches an interactive project picker when multiple `repo.json`-bearing sibling directories are found, then shows the command list for the selected project.
+- Running `rx` with no arguments launches an interactive project picker when multiple config-bearing sibling directories are found, then shows the command list for the selected project.
 - The command picker shows available commands but does not support keyboard navigation (arrow-key selection is not implemented).

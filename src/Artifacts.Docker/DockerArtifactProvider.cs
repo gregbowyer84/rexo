@@ -11,6 +11,9 @@ using Rexo.Core.Models;
 
 public sealed class DockerArtifactProvider : IArtifactProvider
 {
+    public static void Register(ArtifactProviderRegistry registry) =>
+        registry.Register("docker", new DockerArtifactProvider());
+
     private const string DefaultRunner = "build";
     private const string BuildxRunner = "buildx";
     private const string CleanupModeAuto = "auto";
