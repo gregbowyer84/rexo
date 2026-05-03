@@ -686,6 +686,7 @@ public static class BuiltinCommandRegistration
         var withInstructions = IsTrue(options, "with-instructions") || !string.IsNullOrWhiteSpace(instructionsPathOption);
         var withDockerArtifact = IsTrue(options, "with-docker-artifact");
         var withoutDockerArtifact = IsTrue(options, "without-docker-artifact");
+        var wantArtifacts = false; // set by wizard or implied by detection
 
         if (withDockerArtifact && withoutDockerArtifact)
         {
@@ -736,6 +737,31 @@ public static class BuiltinCommandRegistration
                 InitSchemaSourceChoices,
                 "remote");
 
+            // Ask whether the repo will publish artifacts. This drives whether
+            // embedded:standard lifecycle commands are included in the scaffold.
+            var anyArtifactsDetected = detection.HasDockerfile || detection.HasDockerCompose ||
+                detection.HasPomXml || detection.HasBuildGradle || detection.HasGemfile ||
+                detection.HasTerraform || detection.HasHelmChart;
+            var wantArtifactsAnswer = PromptChoice(
+                "Will this repo build and publish artifacts? (Docker images, packages, charts, etc.)",
+                InitYesNoChoices,
+                anyArtifactsDetected ? "yes" : "no");
+            wantArtifacts = wantArtifactsAnswer.Equals("yes", StringComparison.OrdinalIgnoreCase);
+
+            if (wantArtifacts && detection.HasDockerfile)
+            {
+                var addDockerArtifactAnswer = PromptChoice(
+                    "Dockerfile detected. Add starter docker artifact config?",
+                    InitYesNoChoices,
+                    "yes");
+                withDockerArtifact = addDockerArtifactAnswer.Equals("yes", StringComparison.OrdinalIgnoreCase);
+            }
+            else if (!wantArtifacts)
+            {
+                // User explicitly said no artifacts — suppress any file-based detection too.
+                withDockerArtifact = false;
+            }
+
             var createPolicyAnswer = PromptChoice(
                 "Create a starter policy file? (embedded policy is used automatically if none exists)",
                 InitYesNoChoices,
@@ -747,15 +773,6 @@ public static class BuiltinCommandRegistration
                 InitYesNoChoices,
                 "no");
             withInstructions = createInstructionsAnswer.Equals("yes", StringComparison.OrdinalIgnoreCase);
-
-            if (detection.HasDockerfile)
-            {
-                var addDockerArtifactAnswer = PromptChoice(
-                    "Dockerfile detected. Add starter docker artifact config?",
-                    InitYesNoChoices,
-                    "yes");
-                withDockerArtifact = addDockerArtifactAnswer.Equals("yes", StringComparison.OrdinalIgnoreCase);
-            }
 
             if (withPolicy)
             {
@@ -876,6 +893,7 @@ public static class BuiltinCommandRegistration
             schemaValue,
             withPolicy ? policyTemplate : null,
             withDockerArtifact,
+            wantArtifacts,
             detection);
 
         string? rexoSchemaPath = null;
@@ -1474,6 +1492,7 @@ public static class BuiltinCommandRegistration
         string schemaValue,
         string? policyTemplate,
         bool withDockerArtifact,
+        bool wantArtifacts,
         InitDetection detection)
     {
         var commands = template switch
@@ -1618,14 +1637,32 @@ public static class BuiltinCommandRegistration
             commands = RenameCollidingStarterCommands(commands, policyTemplate);
         }
 
-        // blank intentionally emits no extends so the config remains policy-free by default.
-        // A specific policy template stacks on top of standard so both lifecycle sets are available.
-        string[]? extendsValue = template.Equals("blank", StringComparison.OrdinalIgnoreCase)
-            ? null
-            : (!string.IsNullOrWhiteSpace(policyTemplate) &&
+        // Determine whether any artifacts will be scaffolded (blank never gets artifacts).
+        // This drives the extends decision: artifacts need lifecycle commands to be useful,
+        // so standard policy is added automatically when artifacts are present.
+        var isBlank = template.Equals("blank", StringComparison.OrdinalIgnoreCase);
+        var hasArtifacts = !isBlank && (
+            wantArtifacts ||           // explicit user intent from wizard
+            withDockerArtifact ||
+            detection.HasDockerCompose ||
+            detection.HasPomXml ||
+            detection.HasBuildGradle ||
+            detection.HasGemfile ||
+            detection.HasTerraform ||
+            detection.HasHelmChart);
+
+        // extends rules:
+        //   blank → never (policy-free by default)
+        //   --with-policy → always (explicit opt-in, stack policyTemplate on standard if needed)
+        //   artifacts detected → embedded:standard added automatically (lifecycle needed to drive them)
+        //   no artifacts → omit (pure command-alias scaffold; user adds policy when ready)
+        var needsStandard = !isBlank && (!string.IsNullOrWhiteSpace(policyTemplate) || hasArtifacts);
+        string[]? extendsValue = needsStandard
+            ? (!string.IsNullOrWhiteSpace(policyTemplate) &&
                !policyTemplate.Equals("standard", StringComparison.OrdinalIgnoreCase)
                 ? ["embedded:standard", $"embedded:{policyTemplate}"]
-                : ["embedded:standard"]);
+                : ["embedded:standard"])
+            : null;
 
         var doc = new Dictionary<string, object?>
         {
@@ -1644,7 +1681,7 @@ public static class BuiltinCommandRegistration
 
         // Collect artifacts to scaffold based on what was detected and what was requested.
         // blank template intentionally omits artifacts — the user adds them explicitly.
-        if (!template.Equals("blank", StringComparison.OrdinalIgnoreCase))
+        if (!isBlank)
         {
             var artifacts = new List<object>();
 

@@ -175,8 +175,8 @@ Steps:
 
 Behavior notes:
 
-- Local (non-CI) push requires explicit confirmation.
-- `rx push` succeeds but skips push with clear guidance.
+- Push is opt-in everywhere (local and CI) — `--confirm` is always required.
+- `rx push` succeeds but skips push with clear guidance when `--confirm` is not passed.
 - `rx push --confirm` attempts actual push subject to policy/provider gates.
 
 #### release

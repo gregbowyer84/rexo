@@ -935,18 +935,20 @@ Use as `uses: builtin:<name>` in a step:
 | `python` | Python project (compileall, pytest steps) |
 | `go` | Go project (go build, go test steps) |
 | `generic` | Generic shell-based commands |
-| `blank` | Empty `rexo.json` that explicitly opts out of all built-in lifecycle via `embedded:none`; you add everything manually |
+| `blank` | Empty `rexo.json` with no `extends` — a pure command/alias runtime. Add everything manually. |
 
 Detection behavior notes:
 
 - `auto` detects project type (`dotnet`, `node`, `python`, `go`, `generic`) and also inspects `.csproj` metadata for .NET library vs app/service hints.
 - Dockerfiles are detected and surfaced as packaging hints.
-- During `rx init`, when a Dockerfile is detected, docker artifact scaffolding defaults to `yes`.
+- During `rx init`, the wizard asks "Will this repo build and publish artifacts? (Docker images, packages, charts, etc.)". If you answer yes (or if artifacts are auto-detected in non-interactive mode), `embedded:standard` is added to `extends` automatically so lifecycle commands (`plan`, `build`, `release`, etc.) are available.
+- When a Dockerfile is detected **and** the artifacts question is answered yes, docker artifact scaffolding defaults to `yes` as a follow-up question.
 - Use `--without-docker-artifact` to keep a non-interactive run minimal even when Dockerfiles are present.
 - When `--with-policy` is used with `--template auto` and a .NET repo is detected:
   - library-like repos prefer `dotnet-library` when available.
   - repos with Dockerfile signals prefer `dotnet-api` when available.
-- `blank` is the only template that does not require `--with-policy` — it generates `embedded:none` unconditionally. Using `--with-policy` with `blank` requires an explicit `--policy-template` value.
+- `blank` never generates `extends` — it is always policy-free. Using `--with-policy` with `blank` is an error.
+- Non-blank templates add `embedded:standard` automatically **only when artifacts are present** (detected or explicitly requested). A command-only scaffold omits `extends` entirely regardless of template.
 
 Docker artifact scaffold behavior:
 
@@ -954,13 +956,15 @@ Docker artifact scaffold behavior:
 - The scaffolded artifact omits `image`; providers resolve image defaults from artifact naming and environment settings.
 - `settings.dockerfile` and `settings.context` are only emitted when the detected Dockerfile is not discoverable by provider defaults.
 
-**Extends wiring when `--with-policy` is used:**
+**Extends wiring rules:**
 
-| Selected policy template | Generated `extends` |
+| Scenario | Generated `extends` |
 | --- | --- |
-| none / `standard` | `["embedded:standard"]` |
-| `dotnet`, `dotnet-api`, `dotnet-library`, etc. | `["embedded:standard", "embedded:<policy>"]` |
-| `blank` (no policy) | `["embedded:none"]` |
+| `blank` template | *(omitted)* — always policy-free |
+| Artifacts detected or requested, no `--with-policy` | `["embedded:standard"]` — added automatically |
+| `--with-policy --policy-template standard` | `["embedded:standard"]` |
+| `--with-policy --policy-template dotnet-api` (or any non-standard) | `["embedded:standard", "embedded:dotnet-api"]` |
+| No artifacts, no `--with-policy` | *(omitted)* — pure command/alias config |
 
 Examples:
 

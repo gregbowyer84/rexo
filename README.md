@@ -10,8 +10,11 @@ Rexo is a config-driven repository command runtime for local and CI workflows. U
 # Install Rexo globally
 dotnet tool install --global Rexo.Cli
 
-# Initialize a minimal repository command runtime
-rx init --template minimal --yes
+# Initialize — the wizard asks what you need
+rx init
+
+# Or non-interactive with no policy (pure command/alias runtime)
+rx init --template blank --yes
 
 # Run a configured command
 rx hello
@@ -20,16 +23,20 @@ rx hello
 ### Standard lifecycle (opt-in)
 
 ```bash
-# Initialize with an explicit policy template
+# Initialize — answer yes to "Will this repo build and publish artifacts?"
+# and the wizard adds embedded:standard automatically
+rx init
+
+# Or non-interactive with explicit policy
 rx init --template auto --with-policy --yes
 
 # See what would happen
 rx plan
 
-# Run the full release pipeline
+# Run the full release pipeline (build + tag, no push)
 rx release
 
-# Push artifacts (with confirmation on local machine)
+# Push artifacts — requires explicit opt-in everywhere (local and CI)
 rx release --push
 ```
 
