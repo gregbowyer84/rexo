@@ -1944,6 +1944,111 @@ Machine output via JSON.
 
 ---
 
+## 53. Artifact System Architecture
+
+### Current state
+
+`IArtifactProvider` is defined in `src/Core/Abstractions/`. Built-in providers (Docker, NuGet, Helm OCI) live in dedicated projects (`src/Artifacts.Docker/`, `src/Artifacts.NuGet/`, `src/Artifacts.Helm/`). Provider registration is hardcoded in the CLI bootstrapper (`CliBootstrapper.cs`/`Program.cs`). All providers are registered eagerly.
+
+### Required structural changes
+
+#### 1. Treat artifact implementations as true provider libraries
+
+- Keep `IArtifactProvider` in `src/Core/Abstractions/`
+- Each provider lives in its own package/project
+- Provider projects depend only on `Rexo.Core` — no reference to CLI or Execution internals
+- Provider implementation detail is isolated from the CLI and command runtime
+
+#### 2. Make provider registration pluggable
+
+- Remove hardcoded `artifactProviders.Register(...)` calls from CLI bootstrap
+- Introduce plugin/discovery mechanism for providers
+- Support provider registration from:
+  - Configuration-driven type names
+  - Provider assemblies dropped into a plugin folder
+  - NuGet package references / package-based extension model
+  - Explicit host registration API
+
+#### 3. Keep runtime contract stable
+
+`IArtifactProvider` contract remains minimal:
+
+```csharp
+string Type { get; }
+BuildAsync(...)
+TagAsync(...)
+PushAsync(...)
+GetPlannedTags(...)  // optional
+```
+
+Provider libraries implement that contract only.
+
+#### 4. Separate artifact metadata from provider runtime
+
+- Artifact type schema is provider-agnostic at the core level
+- Provider-specific settings are validated by each provider
+- Provider-specific settings namespaced under `artifacts[].settings`
+
+#### 5. Support optional provider loading
+
+- If a repo config references `type: "npm"` and provider is unavailable, error clearly
+- CLI can run in command-aggregator mode without requiring all provider packages
+- `rx doctor` reports "provider available" vs "provider missing" diagnostics
+
+#### 6. Preserve built-in artifact lifecycle semantics
+
+- `builtin:build-artifacts`, `builtin:tag-artifacts`, `builtin:push-artifacts`, `builtin:plan-artifacts`, `builtin:ship-artifacts`, `builtin:all-artifacts` remain host primitives
+- Those builtins delegate only to providers resolved from the registry
+- Provider libraries do not register builtins directly; the host wires artifact lifecycles to provider behaviour
+
+### Host / provider boundary
+
+**Host owns:**
+
+- Artifact registry / discovery
+- Command lifecycle builtins
+- Artifact planning and filtering
+- Execution context + version data
+
+**Provider owns:**
+
+- Build/tag/push implementation for its artifact type
+- Provider-specific config validation and defaults
+- Tag planning logic if needed (`GetPlannedTags`)
+
+### Provider backlog
+
+#### High-priority candidates
+
+| Package | Type key |
+| --- | --- |
+| `Rexo.Artifacts.Npm` | `npm` |
+| `Rexo.Artifacts.PyPi` | `pypi` |
+| `Rexo.Artifacts.Maven` | `maven` |
+| `Rexo.Artifacts.Generic` | `generic` |
+
+#### Medium-priority candidates
+
+| Package | Type key |
+| --- | --- |
+| `Rexo.Artifacts.Gradle` | `gradle` |
+| `Rexo.Artifacts.RubyGems` | `rubygems` |
+| `Rexo.Artifacts.Terraform` | `terraform` |
+| `Rexo.Artifacts.Helm` | `helm` (non-OCI / generic chart) |
+| `Rexo.Artifacts.DockerCompose` | `docker-compose` |
+
+#### Lower-priority / niche candidates
+
+`rpm`, `deb`, `aws-lambda`, `azure-function`, `gcp-function`, `npm-workspace`, `cargo`, `composer`, `conda`
+
+#### Supporting providers for broader adoption
+
+- Registry-credentials helper / shared auth provider abstraction
+- Artifact-manifest producer (if output format differs per ecosystem)
+- Package-index provider for GitHub Packages / Artifactory / Azure Artifacts
+
+---
+
 ## 53. `doctor`
 
 `repo doctor` should check:

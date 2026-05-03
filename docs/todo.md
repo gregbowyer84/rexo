@@ -220,3 +220,42 @@ Items expected in MVP (per scope section 56) and status:
 - [x] Add CI-native identity fallback for feed authentication (OIDC/service connection/token providers) with env fallback
 - [x] Add auth preflight validation + secret-safe diagnostics for missing/invalid feed credentials
 - [x] Smarter `rx init` repo introspection (language/framework detection, richer templates, policy template recommendations)
+
+## 20) Artifact System Restructuring (see scope §53)
+
+### Provider architecture
+
+- [ ] Remove hardcoded `artifactProviders.Register(...)` calls from CLI bootstrapper
+- [ ] Introduce pluggable provider discovery/registration mechanism (config-driven, plugin folder, NuGet extension model, explicit host API)
+- [ ] Ensure provider projects (`Artifacts.Docker`, `Artifacts.NuGet`, `Artifacts.Helm`) depend only on `Rexo.Core` — no CLI/Execution references
+- [ ] Add provider-availability diagnostics to `rx doctor` ("provider available" vs "provider missing")
+- [ ] Clear error when a config references an unknown provider type (e.g. `type: "npm"` without provider loaded)
+
+### Lifecycle builtins
+
+- [ ] Confirm `builtin:build-artifacts` / `builtin:tag-artifacts` / `builtin:push-artifacts` / `builtin:plan-artifacts` / `builtin:ship-artifacts` / `builtin:all-artifacts` remain host-owned and delegate only to the registry
+- [ ] Provider libraries must not register builtins directly
+
+### Provider backlog — high priority
+
+- [ ] `Rexo.Artifacts.Npm` — `type: "npm"` provider (npm pack / npm publish)
+- [ ] `Rexo.Artifacts.PyPi` — `type: "pypi"` provider (build wheel / twine upload)
+- [ ] `Rexo.Artifacts.Maven` — `type: "maven"` provider (mvn package / mvn deploy)
+- [ ] `Rexo.Artifacts.Generic` — `type: "generic"` provider (archive zip/tar.gz, copy to output)
+
+### Provider backlog — medium priority
+
+- [ ] `Rexo.Artifacts.Gradle` — `type: "gradle"`
+- [ ] `Rexo.Artifacts.RubyGems` — `type: "rubygems"`
+- [ ] `Rexo.Artifacts.Terraform` — `type: "terraform"`
+- [ ] `Rexo.Artifacts.Helm` — `type: "helm"` (non-OCI / generic chart, separate from existing helm-oci)
+- [ ] `Rexo.Artifacts.DockerCompose` — `type: "docker-compose"`
+
+### Provider backlog — lower priority / niche
+
+- [ ] `rpm`, `deb`, `aws-lambda`, `azure-function`, `gcp-function`, `npm-workspace`, `cargo`, `composer`, `conda`
+
+### Supporting infrastructure
+
+- [ ] Registry-credentials helper / shared auth provider abstraction (usable by any provider)
+- [ ] Package-index provider for GitHub Packages / Artifactory / Azure Artifacts
