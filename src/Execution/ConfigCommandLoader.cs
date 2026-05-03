@@ -383,7 +383,7 @@ public sealed class ConfigCommandLoader
         var globalPolicy = ParsePushPolicyRules(config);
         var confirmRequested = ResolveConfirmRequested(ctx.Options);
 
-        if (!ctx.IsCi && !confirmRequested)
+        if (!confirmRequested)
         {
             foreach (var artifactCfg in artifacts)
             {
