@@ -196,4 +196,235 @@ public sealed class BuiltinCommandRegistrationTests
             if (Directory.Exists(dir)) Directory.Delete(dir, true);
         }
     }
+
+    [Fact]
+    public async Task DoctorIncludesHelmCheckWhenHelmOciArtifactConfigured()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"rexo-doctor-helm-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var config = new RepoConfig(
+                "test",
+                Commands: null,
+                Aliases: null)
+            {
+                Artifacts = [new RepoArtifactConfig("helm-oci", "my-chart")]
+            };
+
+            var registry = BuiltinCommandRegistration.CreateDefault(config);
+            var executor = new DefaultCommandExecutor(registry);
+            var invocation = new CommandInvocation(
+                new Dictionary<string, string>(),
+                new Dictionary<string, string?>(),
+                Json: false,
+                JsonFile: null,
+                WorkingDirectory: dir);
+
+            var result = await executor.ExecuteAsync("doctor", invocation, CancellationToken.None);
+
+            // helm check appears in output (pass or fail depending on environment)
+            Assert.Contains("helm", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Theory]
+    [InlineData("gitversion", "gitversion")]
+    [InlineData("minver", "minver")]
+    [InlineData("nbgv", "nbgv")]
+    public async Task DoctorIncludesVersionProviderCheckWhenExternalProviderConfigured(
+        string providerKey, string expectedCheckName)
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"rexo-doctor-vp-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var config = new RepoConfig(
+                "test",
+                Commands: null,
+                Aliases: null)
+            {
+                Versioning = new RepoVersioningConfig(providerKey)
+            };
+
+            var registry = BuiltinCommandRegistration.CreateDefault(config);
+            var executor = new DefaultCommandExecutor(registry);
+            var invocation = new CommandInvocation(
+                new Dictionary<string, string>(),
+                new Dictionary<string, string?>(),
+                Json: false,
+                JsonFile: null,
+                WorkingDirectory: dir);
+
+            var result = await executor.ExecuteAsync("doctor", invocation, CancellationToken.None);
+
+            Assert.Contains(expectedCheckName, result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public async Task DoctorDoesNotIncludeVersionProviderCheckForFixedProvider()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"rexo-doctor-fixed-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var config = new RepoConfig(
+                "test",
+                Commands: null,
+                Aliases: null)
+            {
+                Versioning = new RepoVersioningConfig("fixed", Fallback: "1.0.0")
+            };
+
+            var registry = BuiltinCommandRegistration.CreateDefault(config);
+            var executor = new DefaultCommandExecutor(registry);
+            var invocation = new CommandInvocation(
+                new Dictionary<string, string>(),
+                new Dictionary<string, string?>(),
+                Json: false,
+                JsonFile: null,
+                WorkingDirectory: dir);
+
+            var result = await executor.ExecuteAsync("doctor", invocation, CancellationToken.None);
+
+            // fixed provider needs no external tool — should not see gitversion/minver/nbgv in output
+            Assert.DoesNotContain("gitversion", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("minver", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("nbgv", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public async Task ExplainReturnsAliasTargetInfo()
+    {
+        var config = new RepoConfig(
+            Name: "test",
+            Commands: new Dictionary<string, RepoCommandConfig>
+            {
+                ["release"] = new RepoCommandConfig(
+                    Description: "Full release workflow",
+                    Options: new Dictionary<string, RepoOptionConfig>
+                    {
+                        ["push"] = new RepoOptionConfig("bool")
+                    },
+                    Steps: [new RepoStepConfig { Uses = "builtin:resolve-version" }])
+            },
+            Aliases: new Dictionary<string, string> { ["rel"] = "release" })
+        { SchemaVersion = "1.0" };
+
+        var registry = BuiltinCommandRegistration.CreateDefault(config);
+        var executor = new DefaultCommandExecutor(registry);
+
+        var invocation = new CommandInvocation(
+            new Dictionary<string, string> { ["command"] = "rel" },
+            new Dictionary<string, string?>(),
+            Json: false,
+            JsonFile: null,
+            WorkingDirectory: "C:\\repo");
+
+        var result = await executor.ExecuteAsync("explain", invocation, CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Contains("rel", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("release", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("alias", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ExplainAliasWithNoMatchingCommandShowsAliasOnly()
+    {
+        var config = new RepoConfig(
+            Name: "test",
+            Commands: new Dictionary<string, RepoCommandConfig>(),
+            Aliases: new Dictionary<string, string> { ["r"] = "restore" })
+        { SchemaVersion = "1.0" };
+
+        var registry = BuiltinCommandRegistration.CreateDefault(config);
+        var executor = new DefaultCommandExecutor(registry);
+
+        var invocation = new CommandInvocation(
+            new Dictionary<string, string> { ["command"] = "r" },
+            new Dictionary<string, string?>(),
+            Json: false,
+            JsonFile: null,
+            WorkingDirectory: "C:\\repo");
+
+        var result = await executor.ExecuteAsync("explain", invocation, CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Contains("r", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("restore", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ExplainUnknownNameReturnsFailure()
+    {
+        var config = new RepoConfig(
+            Name: "test",
+            Commands: new Dictionary<string, RepoCommandConfig>(),
+            Aliases: new Dictionary<string, string>())
+        { SchemaVersion = "1.0" };
+
+        var registry = BuiltinCommandRegistration.CreateDefault(config);
+        var executor = new DefaultCommandExecutor(registry);
+
+        var invocation = new CommandInvocation(
+            new Dictionary<string, string> { ["command"] = "no-such-command" },
+            new Dictionary<string, string?>(),
+            Json: false,
+            JsonFile: null,
+            WorkingDirectory: "C:\\repo");
+
+        var result = await executor.ExecuteAsync("explain", invocation, CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal(8, result.ExitCode);
+    }
+
+    [Fact]
+    public async Task ListIncludesConfigSubCommands()
+    {
+        var registry = BuiltinCommandRegistration.CreateDefault();
+        var executor = new DefaultCommandExecutor(registry);
+
+        var result = await executor.ExecuteAsync("list", EmptyInvocation(), CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Contains("config resolved", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("config sources", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("config materialize", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("explain version", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ExplainRecognizesConfigResolvedAsBuiltin()
+    {
+        var registry = BuiltinCommandRegistration.CreateDefault();
+        var executor = new DefaultCommandExecutor(registry);
+
+        var invocation = new CommandInvocation(
+            new Dictionary<string, string> { ["command"] = "config resolved" },
+            new Dictionary<string, string?>(),
+            Json: false,
+            JsonFile: null,
+            WorkingDirectory: "C:\\repo");
+
+        var result = await executor.ExecuteAsync("explain", invocation, CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Contains("built-in", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
 }

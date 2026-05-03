@@ -216,10 +216,18 @@ Inputs:
 Outputs:
 
 - `message`
-- `plan` (JSON string of per-artifact plan model)
+- `plan` (JSON string with `repo`, `version`, `artifacts`, and `push` sections)
 - `pushRequested` (`bool`)
 - `canPush` (`bool`)
 - `skipReasons` (`string[]`)
+
+Structured `plan` payload includes, per artifact:
+
+- build settings (for example `image`, `dockerfile`, `context`, `project`, `source`)
+- planned tags
+- expected output references
+- required credential hints
+- per-artifact push requested/eligible state and skip reasons
 
 Exit behavior:
 

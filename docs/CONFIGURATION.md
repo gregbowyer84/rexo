@@ -138,14 +138,55 @@ template references.
 Supported entry types:
 
 - Local path: `./base/rexo.json`
-- Embedded template: `embedded:standard`, `embedded:dotnet`
+- Embedded template: `embedded:standard`, `embedded:dotnet`, `embedded:none`, …
 
 Merge behavior:
 
+- Circular references are detected and rejected.
 - Configs are merged breadth-first.
 - Child properties win over base properties.
 - Commands and aliases are merged (child additions take priority).
-- Circular references are detected and rejected.
+
+### Minimal-by-default lifecycle
+
+Rexo now uses an explicit lifecycle model. If you do not set `extends`, no embedded policy
+commands are added automatically. An artifacts-only config remains minimal until you opt in
+to a policy template.
+
+To keep a config explicitly minimal, include `embedded:none` in `extends`:
+
+```json
+{ "extends": ["embedded:none"] }
+```
+
+`embedded:none` is an empty policy that carries no commands or aliases. It is useful for
+making minimal intent explicit in shared templates.
+
+### Policy template stacking
+
+When a project-specific embedded policy is selected (e.g. `dotnet-api`) it should be
+stacked *on top of* `embedded:standard` so both the shared lifecycle commands (`build`,
+`test`, `verify`, `release`) and the project-specific commands (`ci`, `restore`,
+`format`, `stage`) are available together:
+
+```json
+{ "extends": ["embedded:standard", "embedded:dotnet-api"] }
+```
+
+This is what `rx init` generates automatically when `--with-policy` is used with a
+recognized policy template that is not `standard`.
+
+### Command naming convention
+
+Lifecycle commands provided by policy templates (`build`, `test`, `verify`, `release`,
+etc.) are designed to be the primary entry points. Project-specific developer convenience
+commands should use a `local` prefix to avoid name collisions:
+
+- **Policy lifecycle**: `build`, `test`, `verify`, `release` (from `embedded:standard`)
+- **Project-specific**: `local build`, `local test` (scaffolded by `rx init`)
+
+This allows both sets of commands to coexist cleanly. `rx local build` runs your
+project's custom build step; `rx build` runs the full policy-driven lifecycle.
 
 Examples:
 
@@ -154,8 +195,31 @@ Examples:
 ```
 
 ```json
+{ "extends": ["embedded:standard", "embedded:dotnet-api"] }
+```
+
+```json
+{ "extends": ["embedded:none"] }
+```
+
+```json
 { "extends": ["embedded:dotnet", "../../shared/rexo.json"] }
 ```
+
+```json
+{
+  "name": "orders-api",
+  "artifacts": [
+    {
+      "type": "docker",
+      "name": "api",
+      "settings": { "image": "ghcr.io/acme/orders-api" }
+    }
+  ]
+}
+```
+
+The last example remains minimal until you explicitly add an `extends` entry.
 
 ---
 
@@ -236,6 +300,13 @@ Command-level concurrency is controlled with `maxParallel`:
 `with` is most useful when invoking reusable built-ins. It lets a command map its
 own option names into step-local option names consumed by that builtin.
 
+Resolution precedence for values consumed by built-ins is:
+
+1. `step.with`
+2. command options/args
+3. execution context defaults
+4. provider-specific defaults
+
 Example:
 
 ```json
@@ -247,6 +318,9 @@ Example:
   }
 }
 ```
+
+This makes intent explicit without forcing the builtin to understand every command-specific
+option name.
 
 ```jsonc
 {
@@ -812,16 +886,121 @@ Use as `uses: builtin:<name>` in a step:
 | `rx explain <cmd>` | Show command description, args, options, steps |
 | `rx doctor` | Check tool and provider availability |
 | `rx init` | Create a starter `rexo.json` (defaults to `.rexo/rexo.json`) |
+| `rx new` | Alias for `rx init` |
+| `rx init detect` | Preview auto-detection and policy recommendations without writing files |
 | `rx config resolved` | Print the effective merged config (`rexo.json`) as JSON |
 | `rx config sources` | Show config file path and load status |
 
 `rx init` also supports interactive policy setup and these non-interactive flags:
 
-- `--template auto|dotnet|node|python|go|generic`
+- `--template auto|dotnet|node|python|go|generic|blank`
+- `--detect` / `--dry-run` (preview only, no files written)
 - `--schema-source local|remote`
 - `--with-policy`
-- `--policy-template <name>` (e.g. `standard`, `dotnet`)
+- `--policy-template <name>` (e.g. `standard`, `dotnet`, `dotnet-api`, `dotnet-library`)
+- `--with-docker-artifact`
+- `--without-docker-artifact` (non-interactive opt-out when Dockerfile is detected)
 - `--yes` and `--force`
+
+**Template descriptions:**
+
+| Template | What it scaffolds |
+| --- | --- |
+| `auto` | Detects project type from files in the working directory |
+| `dotnet` | .NET project (restore, build, test steps) |
+| `node` | Node.js project (npm install, npm test steps) |
+| `python` | Python project (compileall, pytest steps) |
+| `go` | Go project (go build, go test steps) |
+| `generic` | Generic shell-based commands |
+| `blank` | Empty `rexo.json` that explicitly opts out of all built-in lifecycle via `embedded:none`; you add everything manually |
+
+Detection behavior notes:
+
+- `auto` detects project type (`dotnet`, `node`, `python`, `go`, `generic`) and also inspects `.csproj` metadata for .NET library vs app/service hints.
+- Dockerfiles are detected and surfaced as packaging hints.
+- During `rx init`, when a Dockerfile is detected, docker artifact scaffolding defaults to `yes`.
+- Use `--without-docker-artifact` to keep a non-interactive run minimal even when Dockerfiles are present.
+- When `--with-policy` is used with `--template auto` and a .NET repo is detected:
+  - library-like repos prefer `dotnet-library` when available.
+  - repos with Dockerfile signals prefer `dotnet-api` when available.
+- `blank` is the only template that does not require `--with-policy` — it generates `embedded:none` unconditionally. Using `--with-policy` with `blank` requires an explicit `--policy-template` value.
+
+Docker artifact scaffold behavior:
+
+- The scaffolded artifact omits `name` so it inherits the repository root `name`.
+- The scaffolded artifact omits `image`; providers resolve image defaults from artifact naming and environment settings.
+- `settings.dockerfile` and `settings.context` are only emitted when the detected Dockerfile is not discoverable by provider defaults.
+
+**Extends wiring when `--with-policy` is used:**
+
+| Selected policy template | Generated `extends` |
+| --- | --- |
+| none / `standard` | `["embedded:standard"]` |
+| `dotnet`, `dotnet-api`, `dotnet-library`, etc. | `["embedded:standard", "embedded:<policy>"]` |
+| `blank` (no policy) | `["embedded:none"]` |
+
+Examples:
+
+```bash
+# dotnet-style experience
+rx new --yes
+
+# blank canvas — add your own commands
+rx init --yes --template blank
+
+# preview auto detection and recommendation
+rx init detect
+
+# preview with explicit auto template and JSON output
+rx init --template auto --detect --json
+
+# scaffold config and include starter docker artifact
+rx init --yes --template auto --with-docker-artifact
+
+# keep non-interactive init minimal even when Dockerfile is detected
+rx init --yes --template auto --without-docker-artifact
+
+# use a specific policy template (stacks standard + dotnet-api in extends)
+rx init --yes --template dotnet --with-policy --policy-template dotnet-api
+```
+
+`rx init detect --json` returns a richer machine-readable contract that includes versioned detection metadata and ranked recommendations:
+
+- `contractVersion`
+- `detection`
+- `recommendations[]` with `kind`, `value`, `confidence`, and `reasons[]`
+
+Example (truncated):
+
+```json
+{
+  "Command": "init detect",
+  "Outputs": {
+    "contractVersion": "1.1",
+    "detection": {
+      "DetectedTemplate": "dotnet",
+      "ResolvedTemplate": "dotnet",
+      "DotnetProjectKind": "app/service",
+      "HasDockerfile": true,
+      "Signals": ["template-detected:dotnet", "dockerfile:present"]
+    },
+    "recommendations": [
+      {
+        "Kind": "policy-template",
+        "Value": "dotnet-api",
+        "Confidence": 0.9,
+        "Reasons": ["Dockerfile detected; API/service workflow likely."]
+      },
+      {
+        "Kind": "docker-artifact",
+        "Value": "consider-enable",
+        "Confidence": 0.85,
+        "Reasons": ["Dockerfile detected. Starter docker artifact can speed setup."]
+      }
+    ]
+  }
+}
+```
 
 CI scaffolding mode:
 

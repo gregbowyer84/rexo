@@ -32,6 +32,15 @@ public sealed class ArtifactWorkflowBuiltinTests
         Assert.Contains(allPlanItems, item => item.Type == "docker" && item.Name == "docker-app");
         Assert.Contains(allPlanItems, item => item.Type == "nuget" && item.Name == "nuget-lib");
 
+        var dockerItem = Assert.Single(allPlanItems, item => item.Type == "docker");
+        Assert.Equal("ghcr.io/acme/docker-app", dockerItem.BuildSettings["image"]);
+        Assert.NotEmpty(dockerItem.ExpectedOutputs);
+        Assert.Contains("DOCKER_LOGIN_USERNAME", dockerItem.RequiredCredentials);
+        Assert.True(dockerItem.Build);
+        Assert.False(dockerItem.Push.Requested);
+        Assert.True(dockerItem.Push.Eligible);
+        Assert.Equal("Push not requested.", dockerItem.Push.Decision);
+
         var dockerPlan = await ExecuteAsync(executor, "docker-plan");
         Assert.True(dockerPlan.Success);
 
@@ -39,6 +48,34 @@ public sealed class ArtifactWorkflowBuiltinTests
         Assert.Single(dockerPlanItems);
         Assert.Equal("docker", dockerPlanItems[0].Type);
         Assert.Equal("docker-app", dockerPlanItems[0].Name);
+    }
+
+    [Fact]
+    public async Task PlanWithPushReportsEligibilityAndSkipReasons()
+    {
+        var dockerProvider = new RecordingArtifactProvider("docker");
+        var nugetProvider = new RecordingArtifactProvider("nuget");
+        var executor = CreateExecutor(dockerProvider, nugetProvider);
+
+        var result = await executor.ExecuteAsync(
+            "plan",
+            new CommandInvocation(
+                new Dictionary<string, string>(),
+                new Dictionary<string, string?> { ["push"] = "true" },
+                Json: false,
+                JsonFile: null,
+                WorkingDirectory: Path.GetTempPath()),
+            CancellationToken.None);
+
+        Assert.True(result.Success);
+
+        var payload = ParsePlanPayload(result, "plan");
+        Assert.True(payload.Push.Requested);
+        Assert.False(payload.Push.Eligible);
+        Assert.NotEmpty(payload.Push.SkipReasons);
+        Assert.Contains(payload.Push.SkipReasons, reason => reason.Contains("Credentials", StringComparison.OrdinalIgnoreCase)
+            || reason.Contains("not resolved", StringComparison.OrdinalIgnoreCase));
+        Assert.All(payload.Artifacts, artifact => Assert.True(artifact.Push.Requested));
     }
 
     [Fact]
@@ -230,12 +267,15 @@ public sealed class ArtifactWorkflowBuiltinTests
                 WorkingDirectory: Path.GetTempPath()),
             CancellationToken.None);
 
-    private static List<PlanItem> ParsePlan(CommandResult result, string stepId)
+    private static List<PlanItem> ParsePlan(CommandResult result, string stepId) =>
+        ParsePlanPayload(result, stepId).Artifacts;
+
+    private static PlanPayload ParsePlanPayload(CommandResult result, string stepId)
     {
         var step = result.Steps.Single(s => s.StepId == stepId);
         var json = Assert.IsType<string>(step.Outputs["plan"]);
-        var parsed = JsonSerializer.Deserialize<List<PlanItem>>(json);
-        return Assert.IsType<List<PlanItem>>(parsed);
+        var parsed = JsonSerializer.Deserialize<PlanPayload>(json);
+        return Assert.IsType<PlanPayload>(parsed);
     }
 
     private sealed class RecordingArtifactProvider(string type) : IArtifactProvider
@@ -271,5 +311,18 @@ public sealed class ArtifactWorkflowBuiltinTests
         }
     }
 
-    private sealed record PlanItem(string Type, string Name);
+    private sealed record PlanPayload(PlanRepo Repo, PlanVersion? Version, List<PlanItem> Artifacts, PlanPush Push);
+    private sealed record PlanRepo(string Name, string? Branch, string? CommitSha, string? RemoteUrl);
+    private sealed record PlanVersion(string SemVer, string? DockerVersion, string? NuGetVersion, string InformationalVersion);
+    private sealed record PlanPush(bool Requested, bool? Eligible, string Decision, IReadOnlyList<string> SkipReasons);
+    private sealed record PlanArtifactPush(bool Requested, bool Eligible, string Decision, IReadOnlyList<string> SkipReasons);
+    private sealed record PlanItem(
+        string Type,
+        string Name,
+        IReadOnlyDictionary<string, string> BuildSettings,
+        IReadOnlyList<string> Tags,
+        bool Build,
+        IReadOnlyList<string> ExpectedOutputs,
+        IReadOnlyList<string> RequiredCredentials,
+        PlanArtifactPush Push);
 }

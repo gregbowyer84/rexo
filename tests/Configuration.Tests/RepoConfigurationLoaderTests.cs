@@ -1,6 +1,8 @@
 namespace Rexo.Configuration.Tests;
 
+using System.Text.Json;
 using Rexo.Configuration;
+using Rexo.Policies;
 
 [Collection("EnvironmentVariableSensitive")]
 public sealed class RepoConfigurationLoaderTests
@@ -689,6 +691,51 @@ public sealed class RepoConfigurationLoaderTests
   }
 
   [Fact]
+  public async Task LoadAsyncArtifactOnlyConfigDoesNotApplyStandardTemplateImplicitly()
+  {
+    var dir = Path.Combine(Path.GetTempPath(), $"rexo-implicit-standard-{Guid.NewGuid():N}");
+    Directory.CreateDirectory(dir);
+
+    var configPath = Path.Combine(dir, "rexo.json");
+    await File.WriteAllTextAsync(configPath, """
+      {
+        "$schema": "rexo.schema.json",
+        "schemaVersion": "1.0",
+        "name": "artifact-only",
+        "artifacts": [
+          { "type": "docker", "name": "api", "settings": { "image": "ghcr.io/acme/api" } }
+        ]
+      }
+      """);
+
+    await File.WriteAllTextAsync(Path.Combine(dir, "rexo.schema.json"), """
+      {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": ["$schema", "schemaVersion", "name"],
+        "properties": {
+          "$schema": { "type": "string" },
+          "schemaVersion": { "type": "string" },
+          "name": { "type": "string" },
+          "artifacts": { "type": "array" }
+        }
+      }
+      """);
+
+    try
+    {
+      var config = await RepoConfigurationLoader.LoadAsync(configPath, CancellationToken.None);
+
+      Assert.True(config.Commands is null || config.Commands.Count == 0);
+      Assert.True(config.Aliases is null || config.Aliases.Count == 0);
+    }
+    finally
+    {
+      Directory.Delete(dir, true);
+    }
+  }
+
+  [Fact]
   public async Task LoadAsyncParsesBooleanOptionDefault()
   {
     var dir = Path.Combine(Path.GetTempPath(), $"rexo-bool-default-{Guid.NewGuid():N}");
@@ -744,6 +791,131 @@ public sealed class RepoConfigurationLoaderTests
     {
       Directory.Delete(dir, true);
     }
+  }
+
+  [Fact]
+  public void EmbeddedDotnetTemplateBooleanDefaultsDeserializeAsBooleans()
+  {
+    using var document = JsonDocument.Parse(EmbeddedPolicyTemplates.ReadTemplate("dotnet"));
+    var commands = document.RootElement.GetProperty("commands");
+
+    var releasePushDefault = commands
+      .GetProperty("release")
+      .GetProperty("options")
+      .GetProperty("push")
+      .GetProperty("default");
+
+    var formatFixDefault = commands
+      .GetProperty("format")
+      .GetProperty("options")
+      .GetProperty("fix")
+      .GetProperty("default");
+
+    Assert.Equal(JsonValueKind.False, releasePushDefault.ValueKind);
+    Assert.Equal(JsonValueKind.False, formatFixDefault.ValueKind);
+  }
+
+  [Fact]
+  public void EmbeddedDotnetTemplateKeepsOnlyShortConvenienceAliases()
+  {
+    using var document = JsonDocument.Parse(EmbeddedPolicyTemplates.ReadTemplate("dotnet"));
+    var aliases = document.RootElement.GetProperty("aliases");
+
+    Assert.True(aliases.TryGetProperty("r", out _));
+    Assert.True(aliases.TryGetProperty("f", out _));
+    Assert.False(aliases.TryGetProperty("build", out _));
+    Assert.False(aliases.TryGetProperty("publish", out _));
+  }
+
+  [Fact]
+  public void EmbeddedTemplateNamesIncludesDotnetLibraryAndDotnetApi()
+  {
+    var names = EmbeddedPolicyTemplates.TemplateNames;
+    Assert.Contains("dotnet-library", names);
+    Assert.Contains("dotnet-api", names);
+  }
+
+  [Fact]
+  public void EmbeddedDotnetLibraryTemplateHasExpectedCommandsAndAliases()
+  {
+    using var document = JsonDocument.Parse(EmbeddedPolicyTemplates.ReadTemplate("dotnet-library"));
+    var root = document.RootElement;
+    var commands = root.GetProperty("commands");
+
+    Assert.True(commands.TryGetProperty("ci", out _), "Should have 'ci'");
+    Assert.True(commands.TryGetProperty("release", out _), "Should have 'release'");
+    Assert.True(commands.TryGetProperty("restore", out _), "Should have 'restore'");
+    Assert.True(commands.TryGetProperty("format", out _), "Should have 'format'");
+    Assert.True(commands.TryGetProperty("pack", out _), "Should have 'pack'");
+    Assert.False(commands.TryGetProperty("stage", out _), "Should not have 'stage'");
+
+    var aliases = root.GetProperty("aliases");
+    Assert.True(aliases.TryGetProperty("r", out _), "Should have alias 'r'");
+    Assert.True(aliases.TryGetProperty("f", out _), "Should have alias 'f'");
+    Assert.True(aliases.TryGetProperty("p", out _), "Should have alias 'p'");
+  }
+
+  [Fact]
+  public void EmbeddedDotnetLibraryTemplateBooleanDefaultsDeserializeAsBooleans()
+  {
+    using var document = JsonDocument.Parse(EmbeddedPolicyTemplates.ReadTemplate("dotnet-library"));
+    var commands = document.RootElement.GetProperty("commands");
+
+    var releasePushDefault = commands
+      .GetProperty("release")
+      .GetProperty("options")
+      .GetProperty("push")
+      .GetProperty("default");
+
+    Assert.Equal(JsonValueKind.False, releasePushDefault.ValueKind);
+  }
+
+  [Fact]
+  public void EmbeddedDotnetApiTemplateHasExpectedCommandsAndAliases()
+  {
+    using var document = JsonDocument.Parse(EmbeddedPolicyTemplates.ReadTemplate("dotnet-api"));
+    var root = document.RootElement;
+    var commands = root.GetProperty("commands");
+
+    Assert.True(commands.TryGetProperty("ci", out _), "Should have 'ci'");
+    Assert.True(commands.TryGetProperty("release", out _), "Should have 'release'");
+    Assert.True(commands.TryGetProperty("restore", out _), "Should have 'restore'");
+    Assert.True(commands.TryGetProperty("format", out _), "Should have 'format'");
+    Assert.True(commands.TryGetProperty("stage", out _), "Should have 'stage'");
+    Assert.False(commands.TryGetProperty("pack", out _), "Should not have 'pack'");
+
+    var aliases = root.GetProperty("aliases");
+    Assert.True(aliases.TryGetProperty("r", out _), "Should have alias 'r'");
+    Assert.True(aliases.TryGetProperty("f", out _), "Should have alias 'f'");
+    Assert.True(aliases.TryGetProperty("s", out _), "Should have alias 's'");
+  }
+
+  [Fact]
+  public void EmbeddedDotnetApiTemplateBooleanDefaultsDeserializeAsBooleans()
+  {
+    using var document = JsonDocument.Parse(EmbeddedPolicyTemplates.ReadTemplate("dotnet-api"));
+    var commands = document.RootElement.GetProperty("commands");
+
+    var releasePushDefault = commands
+      .GetProperty("release")
+      .GetProperty("options")
+      .GetProperty("push")
+      .GetProperty("default");
+
+    Assert.Equal(JsonValueKind.False, releasePushDefault.ValueKind);
+  }
+
+  [Fact]
+  public void EmbeddedDotnetApiStageCommandRequiresStageArg()
+  {
+    using var document = JsonDocument.Parse(EmbeddedPolicyTemplates.ReadTemplate("dotnet-api"));
+    var stageCommand = document.RootElement
+      .GetProperty("commands")
+      .GetProperty("stage");
+
+    Assert.True(stageCommand.TryGetProperty("args", out var args), "stage command should declare args");
+    Assert.True(args.TryGetProperty("stage", out var stageArg), "Should declare 'stage' arg");
+    Assert.True(stageArg.GetProperty("required").GetBoolean(), "'stage' arg should be required");
   }
 }
 

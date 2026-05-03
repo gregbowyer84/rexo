@@ -1,3 +1,5 @@
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Rexo.Configuration.Tests")]
+
 namespace Rexo.Cli;
 
 using System.Text.Json;
@@ -54,9 +56,11 @@ public static class Program
             "version" => await RunBuiltinAsync(executor, "version", EmptyInvocation(workingDir, json, jsonFile), verbose, quiet, cancellationToken),
             "doctor" => await RunBuiltinAsync(executor, "doctor", EmptyInvocation(workingDir, json, jsonFile), verbose, quiet, cancellationToken),
             "init" => await RunInitBuiltinAsync(executor, cleanArgs, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
+            "new" => await RunInitBuiltinAsync(executor, cleanArgs, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
             "list" => await RunBuiltinAsync(executor, "list", EmptyInvocation(workingDir, json, jsonFile), verbose, quiet, cancellationToken),
             "explain" => await RunExplainAsync(executor, cleanArgs, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
             "config" => await RunConfigSubcommandAsync(cleanArgs, executor, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
+            "templates" => await RunTemplatesSubcommandAsync(cleanArgs, executor, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
             "ui" => await RunUiAsync(executor, config, workingDir, cancellationToken),
             "run" => await RunConfiguredAsync(cleanArgs, executor, config, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
             _ => await RunDirectAsync(command, cleanArgs, executor, config, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
@@ -322,6 +326,37 @@ public static class Program
             workingDir);
 
         var result = await ExecuteCommandAsync(executor, "explain", invocation, cancellationToken);
+        return await WriteResultAsync(result, invocation, verbose, quiet, cancellationToken);
+    }
+
+    private static async Task<int> RunTemplatesSubcommandAsync(
+        IReadOnlyList<string> args,
+        DefaultCommandExecutor executor,
+        string workingDir,
+        bool json,
+        string? jsonFile,
+        bool verbose,
+        bool quiet,
+        CancellationToken cancellationToken)
+    {
+        // args[0] == "templates", args[1] == sub-command, args[2..] == positional args
+        if (args.Count < 2)
+        {
+            Console.WriteLine("Usage: rx templates <list|show> [name]");
+            return 1;
+        }
+
+        var subCommand = $"templates {args[1].ToLowerInvariant()}";
+
+        // For "templates show <name>" pass the name as arg
+        var parsedArgs = new Dictionary<string, string>();
+        if (args.Count >= 3)
+        {
+            parsedArgs["name"] = args[2];
+        }
+
+        var invocation = new CommandInvocation(parsedArgs, new Dictionary<string, string?>(), json, jsonFile, workingDir);
+        var result = await ExecuteCommandAsync(executor, subCommand, invocation, cancellationToken);
         return await WriteResultAsync(result, invocation, verbose, quiet, cancellationToken);
     }
 
@@ -743,29 +778,44 @@ public static class Program
         Console.WriteLine($"  {cli} <command> [args] [options]");
         Console.WriteLine();
         Console.WriteLine("Built-in commands:");
-        Console.WriteLine("  version              Show tool version");
-        Console.WriteLine("  list                 List all available commands");
-        Console.WriteLine("  explain <command>    Explain a command");
-        Console.WriteLine("  doctor               Check environment and configuration");
-        Console.WriteLine("  init                 Create a starter rexo config");
-        Console.WriteLine("  init ci              Scaffold thin CI wrappers for rx release");
-        Console.WriteLine("      --provider       github|azdo|both (default: both)");
-        Console.WriteLine("      --yes            Non-interactive defaults");
-        Console.WriteLine("      --template       auto|dotnet|node|python|go|generic");
-        Console.WriteLine("      --schema-source  remote (default) or local");
-        Console.WriteLine("      --with-policy    Also create policy.json from a template");
-        Console.WriteLine("      --policy-template standard|dotnet (or any embedded template)");
-        Console.WriteLine("      --with-instructions Download docs/rexo.instructions.md into repo");
-        Console.WriteLine("      --instructions-path  Repo-relative destination (default: .github/instructions/rexo.instructions.md)");
-        Console.WriteLine("      --force          Overwrite existing config");
-        Console.WriteLine("  run <command>        Run a configured command");
-        Console.WriteLine("  ui                   Open the interactive UI");
-        Console.WriteLine("  help                 Show this help");
+        Console.WriteLine("  version                     Show tool version");
+        Console.WriteLine("  list                        List all available commands");
+        Console.WriteLine("  explain <command>           Explain a command (or alias)");
+        Console.WriteLine("  explain version             Show version provider configuration");
+        Console.WriteLine("  doctor                      Check environment and configuration");
+        Console.WriteLine("  init                        Create a starter rexo config");
+        Console.WriteLine("  new                         Alias for init");
+        Console.WriteLine("  init detect                 Preview auto detection and recommendations");
+        Console.WriteLine("  init ci                     Scaffold thin CI wrappers for rx release");
+        Console.WriteLine("      --provider              github|azdo|both (default: both)");
+        Console.WriteLine("      --yes                   Non-interactive defaults");
+        Console.WriteLine("      --template              auto|dotnet|node|python|go|generic");
+        Console.WriteLine("      --detect                Preview detection only (no files written)");
+        Console.WriteLine("      --dry-run               Alias for --detect");
+        Console.WriteLine("      --schema-source         remote (default) or local");
+        Console.WriteLine("      --with-policy           Also create policy.json from a template");
+        Console.WriteLine("      --policy-template       standard|dotnet (or any embedded template)");
+        Console.WriteLine("      --with-docker-artifact  Add starter docker artifact to generated config");
+        Console.WriteLine("      --without-docker-artifact  Skip docker artifact scaffolding (non-interactive)");
+        Console.WriteLine("      --with-instructions     Download rexo.instructions.md into repo");
+        Console.WriteLine("      --instructions-path     Repo-relative destination");
+        Console.WriteLine("      --force                 Overwrite existing config");
+        Console.WriteLine("  run <command>               Run a configured command");
+        Console.WriteLine("  config resolved             Show the fully-merged configuration");
+        Console.WriteLine("  config sources              Show config file sources in merge order");
+        Console.WriteLine("  config materialize          Write the merged config to a file");
+        Console.WriteLine("  templates list              List available embedded policy templates");
+        Console.WriteLine("  templates show <name>       Show an embedded policy template");
+        Console.WriteLine("  ui                          Open the interactive UI");
+        Console.WriteLine("  help                        Show this help");
         Console.WriteLine();
         Console.WriteLine("Global options:");
-        Console.WriteLine("  --json               Output as JSON");
-        Console.WriteLine("  --json-file <path>   Write JSON output to file");
-        Console.WriteLine("  --verbose            Show detailed step output");
+        Console.WriteLine("  --json                      Output as JSON");
+        Console.WriteLine("  --json-file <path>          Write JSON output to file");
+        Console.WriteLine("  --verbose                   Show detailed step output");
+        Console.WriteLine("  --quiet                     Suppress non-essential output");
+        Console.WriteLine("  --debug                     Show debug/diagnostic output");
+        Console.WriteLine("  --set <key.path=value>      Override a config value (repeatable)");
     }
 
     private static CommandInvocation EmptyInvocation(string workingDir, bool json, string? jsonFile) =>

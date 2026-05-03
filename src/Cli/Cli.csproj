@@ -13,6 +13,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <PackageReadmeFile>PACKAGE_README.md</PackageReadmeFile>
+    <InternalsVisibleTo>Rexo.Configuration.Tests</InternalsVisibleTo>
   </PropertyGroup>
   <ItemGroup>
     <None Include="PACKAGE_README.md" Pack="true" PackagePath="\" />

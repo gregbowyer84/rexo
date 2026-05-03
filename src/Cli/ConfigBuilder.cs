@@ -43,10 +43,9 @@ internal static class ConfigBuilder
 
     public static async Task<PolicyConfig> LoadAndMergePoliciesAsync(RepoConfig config, string workingDir, bool debug, CancellationToken cancellationToken)
     {
-        var embeddedPolicy = LoadEmbeddedPolicyTemplate("standard", debug);
         var remotePolicies = await PolicySourceLoader.LoadPoliciesFromEnvironmentAsync(workingDir, debug, cancellationToken);
         var localPolicy = await LoadLocalPolicyAsync(workingDir, debug, cancellationToken);
-        return MergePolicies(MergePolicies(embeddedPolicy, remotePolicies), localPolicy);
+        return MergePolicies(remotePolicies, localPolicy);
     }
 
     private static async Task<PolicyConfig> LoadLocalPolicyAsync(string workingDir, bool debug, CancellationToken cancellationToken)
@@ -224,19 +223,24 @@ internal static class ConfigBuilder
     /// This is the final (highest-priority) layer of the config merge pipeline.
     /// Paths are dotted JSON property names (case-insensitive).
     /// Values are parsed as JSON booleans/numbers/null when applicable; otherwise treated as strings.
+    /// Returns the effective config and a list of warnings for malformed overrides.
     /// </summary>
-    public static RepoConfig? ApplySetOverrides(RepoConfig? config, IReadOnlyList<string> setOverrides)
+    public static (RepoConfig? config, IReadOnlyList<string> warnings) ApplySetOverridesWithWarnings(
+        RepoConfig? config,
+        IReadOnlyList<string> setOverrides)
     {
+        var warnings = new List<string>();
+
         if (config is null || setOverrides.Count == 0)
         {
-            return config;
+            return (config, warnings);
         }
 
         var json = JsonSerializer.Serialize(config, JsonOptions);
         var node = JsonNode.Parse(json);
         if (node is null)
         {
-            return config;
+            return (config, warnings);
         }
 
         foreach (var setOverride in setOverrides)
@@ -244,15 +248,33 @@ internal static class ConfigBuilder
             var eqIdx = setOverride.IndexOf('=', StringComparison.Ordinal);
             if (eqIdx < 1)
             {
-                continue; // malformed — skip silently
+                warnings.Add($"Malformed --set override '{setOverride}': must be in format key.path=value");
+                continue;
             }
 
             var path = setOverride[..eqIdx];
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                warnings.Add($"Malformed --set override '{setOverride}': key path cannot be empty");
+                continue;
+            }
+
             var rawValue = setOverride[(eqIdx + 1)..];
             SetAtPath(node, path, rawValue);
         }
 
-        return JsonSerializer.Deserialize<RepoConfig>(node.ToJsonString(), JsonOptions) ?? config;
+        var result = JsonSerializer.Deserialize<RepoConfig>(node.ToJsonString(), JsonOptions) ?? config;
+        return (result, warnings);
+    }
+
+    /// <summary>
+    /// Applies <c>--set key.path=value</c> CLI overrides to the effective config (legacy signature for backward compatibility).
+    /// </summary>
+    [System.Obsolete("Use ApplySetOverridesWithWarnings instead to get warnings about malformed overrides")]
+    public static RepoConfig? ApplySetOverrides(RepoConfig? config, IReadOnlyList<string> setOverrides)
+    {
+        var (result, _) = ApplySetOverridesWithWarnings(config, setOverrides);
+        return result;
     }
 
     private static void SetAtPath(JsonNode root, string dotPath, string rawValue)

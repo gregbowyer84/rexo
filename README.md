@@ -21,10 +21,6 @@ rx release
 rx release --push
 ```
 
-## Status
-
-Early implementation bootstrap based on [docs/scope.md](docs/scope.md).
-
 ## Goals
 
 - Keep the CLI contract minimal and stable
@@ -42,7 +38,7 @@ Early implementation bootstrap based on [docs/scope.md](docs/scope.md).
 
 ## Minimal Configuration
 
-Rexo ships with a standard baseline policy that provides all default commands. A minimal config only needs to declare what your repository emits:
+Rexo applies the standard lifecycle policy automatically when a config does not define commands. In most repos you only need to declare what the repository emits:
 
 ```json
 {

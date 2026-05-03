@@ -12,13 +12,16 @@ using Rexo.Versioning;
 public sealed class ConfigCommandLoader
 {
     private const string DefaultOutputRoot = "artifacts";
-    private static readonly System.Text.Json.JsonSerializerOptions IndentedJsonOptions =
+    internal static readonly System.Text.Json.JsonSerializerOptions IndentedJsonOptions =
         new() { WriteIndented = true };
 
     private readonly BuiltinRegistry _builtinRegistry;
     private readonly ITemplateRenderer _templateRenderer;
     private readonly VersionProviderRegistry _versionProviders;
     private readonly Artifacts.ArtifactProviderRegistry _artifactProviders;
+
+    internal VersionProviderRegistry VersionProviders => _versionProviders;
+    internal Artifacts.ArtifactProviderRegistry ArtifactProviders => _artifactProviders;
 
     public ConfigCommandLoader(
         BuiltinRegistry builtinRegistry,
@@ -104,571 +107,21 @@ public sealed class ConfigCommandLoader
 
     private void RegisterBuiltins(RepoConfig config, string repositoryRoot)
     {
-        // builtin:resolve-version
-        _builtinRegistry.Register("builtin:resolve-version", async (step, ctx, ct) =>
+        var context = new ConfigBuiltinModuleContext(this, config, repositoryRoot);
+        IConfigBuiltinModule[] modules =
+        [
+            new VersionBuiltinModule(),
+            new ArtifactBuiltinModule(),
+            new DockerBuiltinModule(),
+            new VerificationBuiltinModule(),
+            new UtilityBuiltinModule(),
+            new ConfigBuiltinModule(),
+        ];
+
+        foreach (var module in modules)
         {
-            var versioningConfig = config.Versioning is not null
-                ? new VersioningConfig(
-                    config.Versioning.Provider,
-                    config.Versioning.Fallback,
-                    config.Versioning.Settings)
-                : new VersioningConfig("auto", "0.1.0-local");
-
-            var provider = _versionProviders.Resolve(versioningConfig.Provider);
-            var versionResult = await provider.ResolveAsync(versioningConfig, ctx, ct);
-
-            Console.WriteLine($"  Resolved version: {versionResult.SemVer}");
-
-            return new StepResult(
-                step.Id ?? "resolve-version",
-                true,
-                0,
-                TimeSpan.Zero,
-                new Dictionary<string, object?>
-                {
-                    ["__version"] = versionResult,
-                    ["semver"] = versionResult.SemVer,
-                    ["major"] = versionResult.Major.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    ["minor"] = versionResult.Minor.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    ["patch"] = versionResult.Patch.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    ["prerelease"] = versionResult.PreRelease,
-                    ["buildMetadata"] = versionResult.BuildMetadata,
-                    ["branch"] = versionResult.Branch,
-                    ["commitSha"] = versionResult.CommitSha,
-                    ["shortSha"] = versionResult.ShortSha,
-                    ["assemblyVersion"] = versionResult.AssemblyVersion,
-                    ["fileVersion"] = versionResult.FileVersion,
-                    ["informationalVersion"] = versionResult.InformationalVersion,
-                    ["nugetVersion"] = versionResult.NuGetVersion,
-                    ["dockerVersion"] = versionResult.DockerVersion,
-                    ["isPrerelease"] = versionResult.IsPreRelease.ToString().ToLowerInvariant(),
-                    ["isStable"] = versionResult.IsStable.ToString().ToLowerInvariant(),
-                    ["commitsSinceVersionSource"] = versionResult.CommitsSinceVersionSource?.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                });
-        });
-
-        // builtin:build-artifacts
-        _builtinRegistry.Register("builtin:build-artifacts", (step, ctx, ct) =>
-            BuildArtifactsAsync(
-                step.Id ?? "build-artifacts",
-                config,
-                ctx,
-                includePredicate: static _ => true,
-                successMessage: "All artifacts built.",
-            emptyMessage: "No artifacts configured.",
-            cancellationToken: ct));
-
-        // builtin:tag-artifacts
-        _builtinRegistry.Register("builtin:tag-artifacts", (step, ctx, ct) =>
-            TagArtifactsAsync(
-                step.Id ?? "tag-artifacts",
-                config,
-                ctx,
-                includePredicate: static _ => true,
-                successMessage: "All artifacts tagged.",
-            emptyMessage: "No artifacts configured.",
-            cancellationToken: ct));
-
-        // builtin:push-artifacts
-        _builtinRegistry.Register("builtin:push-artifacts", (step, ctx, ct) =>
-            PushArtifactsAsync(
-                step.Id ?? "push-artifacts",
-                config,
-                repositoryRoot,
-                ResolveOutputRoot(config),
-                ShouldEmitRuntimeFiles(config),
-                ctx,
-                includePredicate: static _ => true,
-                successMessage: "Artifact push phase completed.",
-            emptyMessage: "No artifacts configured.",
-            cancellationToken: ct));
-
-        // builtin:plan-artifacts
-        _builtinRegistry.Register("builtin:plan-artifacts", (step, ctx, ct) =>
-            Task.FromResult(PlanArtifacts(
-                step.Id ?? "plan-artifacts",
-                config,
-                ctx,
-                _artifactProviders,
-                pushRequested: TryGetOptionBoolean(ctx.Options, "push") == true,
-                includePredicate: static _ => true,
-                successMessage: "Planned all artifacts.",
-                emptyMessage: "No artifacts configured.")));
-
-        // builtin:ship-artifacts = tag + push
-        _builtinRegistry.Register("builtin:ship-artifacts", async (step, ctx, ct) =>
-        {
-            var tagResult = await TagArtifactsAsync(
-                step.Id ?? "ship-artifacts",
-                config,
-                ctx,
-                includePredicate: static _ => true,
-                successMessage: "Artifacts tagged.",
-                emptyMessage: "No artifacts configured.",
-                cancellationToken: ct);
-
-            if (!tagResult.Success)
-            {
-                return tagResult;
-            }
-
-            return await PushArtifactsAsync(
-                step.Id ?? "ship-artifacts",
-                config,
-                repositoryRoot,
-                ResolveOutputRoot(config),
-                ShouldEmitRuntimeFiles(config),
-                ctx,
-                includePredicate: static _ => true,
-                successMessage: "Ship completed.",
-                emptyMessage: "No artifacts configured.",
-                cancellationToken: ct);
-        });
-
-        // builtin:all-artifacts = build + tag + push
-        _builtinRegistry.Register("builtin:all-artifacts", async (step, ctx, ct) =>
-        {
-            var buildResult = await BuildArtifactsAsync(
-                step.Id ?? "all-artifacts",
-                config,
-                ctx,
-                includePredicate: static _ => true,
-                successMessage: "Artifacts built.",
-                emptyMessage: "No artifacts configured.",
-                cancellationToken: ct);
-
-            if (!buildResult.Success)
-            {
-                return buildResult;
-            }
-
-            var tagResult = await TagArtifactsAsync(
-                step.Id ?? "all-artifacts",
-                config,
-                ctx,
-                includePredicate: static _ => true,
-                successMessage: "Artifacts tagged.",
-                emptyMessage: "No artifacts configured.",
-                cancellationToken: ct);
-
-            if (!tagResult.Success)
-            {
-                return tagResult;
-            }
-
-            return await PushArtifactsAsync(
-                step.Id ?? "all-artifacts",
-                config,
-                repositoryRoot,
-                ResolveOutputRoot(config),
-                ShouldEmitRuntimeFiles(config),
-                ctx,
-                includePredicate: static _ => true,
-                successMessage: "All workflow completed.",
-                emptyMessage: "No artifacts configured.",
-                cancellationToken: ct);
-        });
-
-        // Dockship-style shorthand aliases, mapped to Rexo artifact workflows.
-        _builtinRegistry.Register("builtin:plan", (step, ctx, ct) =>
-            Task.FromResult(PlanArtifacts(
-                step.Id ?? "plan",
-                config,
-                ctx,
-                _artifactProviders,
-                pushRequested: TryGetOptionBoolean(ctx.Options, "push") == true,
-                includePredicate: static _ => true,
-                successMessage: "Planned all artifacts.",
-                emptyMessage: "No artifacts configured.")));
-
-        _builtinRegistry.Register("builtin:ship", async (step, ctx, ct) =>
-            await (_builtinRegistry.TryResolve("builtin:ship-artifacts", out var ship) && ship is not null
-                ? ship(step, ctx, ct)
-                : Task.FromResult(new StepResult(step.Id ?? "ship", false, 1, TimeSpan.Zero,
-                    new Dictionary<string, object?> { ["error"] = "builtin:ship-artifacts is not registered." }))));
-
-        _builtinRegistry.Register("builtin:all", async (step, ctx, ct) =>
-            await (_builtinRegistry.TryResolve("builtin:all-artifacts", out var all) && all is not null
-                ? all(step, ctx, ct)
-                : Task.FromResult(new StepResult(step.Id ?? "all", false, 1, TimeSpan.Zero,
-                    new Dictionary<string, object?> { ["error"] = "builtin:all-artifacts is not registered." }))));
-
-        // builtin:docker-plan
-        _builtinRegistry.Register("builtin:docker-plan", (step, ctx, ct) =>
-            Task.FromResult(PlanArtifacts(
-                step.Id ?? "docker-plan",
-                config,
-                ctx,
-                _artifactProviders,
-                pushRequested: TryGetOptionBoolean(ctx.Options, "push") == true,
-                includePredicate: static a => string.Equals(a.Type, "docker", StringComparison.OrdinalIgnoreCase),
-                successMessage: "Planned docker artifacts.",
-                emptyMessage: "No docker artifacts configured.")));
-
-        // builtin:docker-ship = tag + push (docker artifacts only)
-        _builtinRegistry.Register("builtin:docker-ship", async (step, ctx, ct) =>
-        {
-            var tagResult = await TagArtifactsAsync(
-                step.Id ?? "docker-ship",
-                config,
-                ctx,
-                includePredicate: static a => string.Equals(a.Type, "docker", StringComparison.OrdinalIgnoreCase),
-                successMessage: "Docker artifacts tagged.",
-                emptyMessage: "No docker artifacts configured.",
-                cancellationToken: ct);
-
-            if (!tagResult.Success)
-            {
-                return tagResult;
-            }
-
-            return await PushArtifactsAsync(
-                step.Id ?? "docker-ship",
-                config,
-                repositoryRoot,
-                ResolveOutputRoot(config),
-                ShouldEmitRuntimeFiles(config),
-                ctx,
-                includePredicate: static a => string.Equals(a.Type, "docker", StringComparison.OrdinalIgnoreCase),
-                successMessage: "Docker ship completed.",
-                emptyMessage: "No docker artifacts configured.",
-                cancellationToken: ct);
-        });
-
-        // builtin:docker-all = build + tag + push (docker artifacts only)
-        _builtinRegistry.Register("builtin:docker-all", async (step, ctx, ct) =>
-        {
-            var buildResult = await BuildArtifactsAsync(
-                step.Id ?? "docker-all",
-                config,
-                ctx,
-                includePredicate: static a => string.Equals(a.Type, "docker", StringComparison.OrdinalIgnoreCase),
-                successMessage: "Docker artifacts built.",
-                emptyMessage: "No docker artifacts configured.",
-                cancellationToken: ct);
-
-            if (!buildResult.Success)
-            {
-                return buildResult;
-            }
-
-            var tagResult = await TagArtifactsAsync(
-                step.Id ?? "docker-all",
-                config,
-                ctx,
-                includePredicate: static a => string.Equals(a.Type, "docker", StringComparison.OrdinalIgnoreCase),
-                successMessage: "Docker artifacts tagged.",
-                emptyMessage: "No docker artifacts configured.",
-                cancellationToken: ct);
-
-            if (!tagResult.Success)
-            {
-                return tagResult;
-            }
-
-            return await PushArtifactsAsync(
-                step.Id ?? "docker-all",
-                config,
-                repositoryRoot,
-                ResolveOutputRoot(config),
-                ShouldEmitRuntimeFiles(config),
-                ctx,
-                includePredicate: static a => string.Equals(a.Type, "docker", StringComparison.OrdinalIgnoreCase),
-                successMessage: "Docker all completed.",
-                emptyMessage: "No docker artifacts configured.",
-                cancellationToken: ct);
-        });
-
-        // builtin:docker-stage = build one named stage from artifact settings.stages
-        _builtinRegistry.Register("builtin:docker-stage", async (step, ctx, ct) =>
-        {
-            var stageName = ctx.Args.TryGetValue("stage", out var argStage) && !string.IsNullOrWhiteSpace(argStage)
-                ? argStage
-                : (ctx.Options.TryGetValue("stage", out var optionStage) ? optionStage : null);
-
-            if (string.IsNullOrWhiteSpace(stageName))
-            {
-                return new StepResult(
-                    step.Id ?? "docker-stage",
-                    false,
-                    2,
-                    TimeSpan.Zero,
-                    new Dictionary<string, object?> { ["error"] = "Missing stage name. Provide args.stage or --stage." });
-            }
-
-            var dockerArtifacts = (config.Artifacts ?? [])
-                .Where(a => string.Equals(a.Type, "docker", StringComparison.OrdinalIgnoreCase))
-                .ToList();
-
-            if (dockerArtifacts.Count == 0)
-            {
-                return new StepResult(
-                    step.Id ?? "docker-stage",
-                    true,
-                    0,
-                    TimeSpan.Zero,
-                    new Dictionary<string, object?> { ["message"] = "No docker artifacts configured." });
-            }
-
-            foreach (var artifactCfg in dockerArtifacts)
-            {
-                var provider = _artifactProviders.Resolve(artifactCfg.Type);
-                if (provider is null)
-                {
-                    continue;
-                }
-
-                if (artifactCfg.Settings is null ||
-                    !artifactCfg.Settings.TryGetValue("stages", out var stagesValue) ||
-                    stagesValue.ValueKind != JsonValueKind.Object ||
-                    !stagesValue.TryGetProperty(stageName, out var selectedStage) ||
-                    selectedStage.ValueKind != JsonValueKind.Object)
-                {
-                    var artifactName = ResolveArtifactName(artifactCfg, config);
-                    return new StepResult(
-                        step.Id ?? "docker-stage",
-                        false,
-                        2,
-                        TimeSpan.Zero,
-                        new Dictionary<string, object?>
-                        {
-                            ["error"] = $"Stage '{stageName}' not found for docker artifact '{artifactName}'.",
-                        });
-                }
-
-                var clonedSettings = CloneSettings(artifactCfg.Settings);
-                clonedSettings["stages"] = JsonSerializer.SerializeToElement(new Dictionary<string, JsonElement>
-                {
-                    [stageName] = selectedStage.Clone(),
-                });
-                clonedSettings["stageFallback"] = JsonSerializer.SerializeToElement(false);
-
-                var artifactConfig = new ArtifactConfig(
-                    artifactCfg.Type,
-                    ResolveArtifactName(artifactCfg, config),
-                    clonedSettings);
-
-                var result = await provider.BuildAsync(artifactConfig, ctx, ct);
-                if (!result.Success)
-                {
-                    var artifactName = ResolveArtifactName(artifactCfg, config);
-                    return new StepResult(
-                        step.Id ?? "docker-stage",
-                        false,
-                        5,
-                        TimeSpan.Zero,
-                        new Dictionary<string, object?>
-                        {
-                            ["error"] = $"Failed to build docker stage '{stageName}' for artifact '{artifactName}'.",
-                        });
-                }
-            }
-
-            return new StepResult(
-                step.Id ?? "docker-stage",
-                true,
-                0,
-                TimeSpan.Zero,
-                new Dictionary<string, object?>
-                {
-                    ["message"] = $"Docker stage '{stageName}' completed.",
-                });
-        });
-
-        // builtin:test
-        _builtinRegistry.Register("builtin:test", async (step, ctx, ct) =>
-        {
-            var testsConfig = config.Tests;
-            var verificationConfig = new Verification.VerificationConfig(
-                Enabled: testsConfig?.Enabled ?? true,
-                Projects: testsConfig?.Projects,
-                Configuration: testsConfig?.Configuration ?? "Release",
-                OutputRoot: ResolveOutputRoot(config),
-                ResultsOutput: testsConfig?.ResultsOutput,
-                CoverageOutput: testsConfig?.CoverageOutput,
-                LineCoverageThreshold: testsConfig?.CoverageThreshold,
-                BranchCoverageThreshold: null);
-
-            var result = await Verification.DotnetTestRunner.RunAsync(verificationConfig, repositoryRoot, ct);
-
-            Console.WriteLine($"  Tests: {result.PassedTests}/{result.TotalTests} passed.");
-            if (result.FailedTests > 0)
-            {
-                Console.Error.WriteLine($"  {result.FailedTests} tests failed.");
-            }
-
-            return new StepResult(
-                step.Id ?? "test",
-                result.Success,
-                result.Success ? 0 : 4,
-                TimeSpan.Zero,
-                new Dictionary<string, object?>
-                {
-                    ["total"] = result.TotalTests.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    ["passed"] = result.PassedTests.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    ["failed"] = result.FailedTests.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    ["skipped"] = result.SkippedTests.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                });
-        });
-
-        // builtin:analyze
-        _builtinRegistry.Register("builtin:analyze", async (step, ctx, ct) =>
-        {
-            var analysisResults = new List<Analysis.AnalysisResult>();
-
-            var formatResult = await Analysis.DotnetAnalysisRunner.RunFormatCheckAsync(repositoryRoot, ct);
-            analysisResults.Add(formatResult);
-            if (!formatResult.Success && (config.Analysis?.FailOnIssues ?? true))
-            {
-                return new StepResult(step.Id ?? "analyze", false, 1, TimeSpan.Zero,
-                    new Dictionary<string, object?> { ["error"] = string.Join("; ", formatResult.Issues) });
-            }
-
-            // Run custom analysis tools from config.Analysis.Tools
-            if (config.Analysis?.Tools is { Length: > 0 })
-            {
-                foreach (var toolCmd in config.Analysis.Tools)
-                {
-                    if (string.IsNullOrWhiteSpace(toolCmd)) continue;
-
-                    var toolResult = await Analysis.DotnetAnalysisRunner.RunCustomToolAsync(toolCmd, repositoryRoot, ct);
-                    analysisResults.Add(toolResult);
-
-                    if (!toolResult.Success && (config.Analysis.FailOnIssues))
-                    {
-                        // Write SARIF before returning failure
-                        await WriteSarifIfConfiguredAsync(analysisResults, repositoryRoot, config, ct);
-
-                        return new StepResult(step.Id ?? "analyze", false, 1, TimeSpan.Zero,
-                            new Dictionary<string, object?> { ["error"] = string.Join("; ", toolResult.Issues) });
-                    }
-                }
-            }
-
-            await WriteSarifIfConfiguredAsync(analysisResults, repositoryRoot, config, ct);
-
-            return new StepResult(step.Id ?? "analyze", true, 0, TimeSpan.Zero,
-                new Dictionary<string, object?> { ["message"] = "Analysis passed." });
-        });
-
-        // builtin:validate — check config is valid
-        _builtinRegistry.Register("builtin:validate", (step, ctx, ct) =>
-        {
-            Console.WriteLine("  Validating configuration...");
-            return Task.FromResult(new StepResult(
-                step.Id ?? "validate",
-                true,
-                0,
-                TimeSpan.Zero,
-                new Dictionary<string, object?> { ["message"] = "Configuration is valid." }));
-        });
-
-        // builtin:clean — remove generated output (artifacts/, .rexo/generated/)
-        _builtinRegistry.Register("builtin:clean", (step, ctx, ct) =>
-        {
-            Console.WriteLine("  Cleaning generated output...");
-            var artifactsDir = Path.Combine(repositoryRoot, ResolveOutputRoot(config));
-            var cleaned = new List<string>();
-
-            if (Directory.Exists(artifactsDir))
-            {
-                try
-                {
-                    Directory.Delete(artifactsDir, true);
-                    cleaned.Add(artifactsDir);
-                    Console.WriteLine($"    Removed: {artifactsDir}");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"    Failed to clean {artifactsDir}: {ex.Message}");
-                }
-            }
-
-            return Task.FromResult(new StepResult(
-                step.Id ?? "clean",
-                true,
-                0,
-                TimeSpan.Zero,
-                new Dictionary<string, object?>
-                {
-                    ["message"] = cleaned.Count > 0 ? $"Cleaned {cleaned.Count} directory(ies)." : "Nothing to clean.",
-                    ["cleaned"] = cleaned,
-                }));
-        });
-
-        // builtin:verify = test + analyze
-        _builtinRegistry.Register("builtin:verify", async (step, ctx, ct) =>
-        {
-            Console.WriteLine("  Running verification (test + analyze)...");
-            if (_builtinRegistry.TryResolve("builtin:test", out var testBuiltin) && testBuiltin is not null)
-            {
-                var testResult = await testBuiltin(step, ctx, ct);
-                if (!testResult.Success)
-                    return testResult with { StepId = step.Id ?? "verify" };
-            }
-
-            if (_builtinRegistry.TryResolve("builtin:analyze", out var analyzeBuiltin) && analyzeBuiltin is not null)
-            {
-                var analyzeResult = await analyzeBuiltin(step, ctx, ct);
-                if (!analyzeResult.Success)
-                    return analyzeResult with { StepId = step.Id ?? "verify" };
-            }
-
-            return new StepResult(step.Id ?? "verify", true, 0, TimeSpan.Zero,
-                new Dictionary<string, object?> { ["message"] = "Verification passed." });
-        });
-
-        // builtin:config-resolved — serialize current effective config to JSON
-        _builtinRegistry.Register("builtin:config-resolved", (step, ctx, ct) =>
-        {
-            var json = System.Text.Json.JsonSerializer.Serialize(config, IndentedJsonOptions);
-            Console.WriteLine(json);
-            return Task.FromResult(new StepResult(
-                step.Id ?? "config-resolved",
-                true,
-                0,
-                TimeSpan.Zero,
-                new Dictionary<string, object?> { ["json"] = json }));
-        });
-
-        // builtin:config-materialize — write provider config files (e.g. GitVersion.yml)
-        _builtinRegistry.Register("builtin:config-materialize", async (step, ctx, ct) =>
-        {
-            var materialized = new List<string>();
-
-            // If using gitversion provider, offer to write GitVersion.yml
-            if (string.Equals(config.Versioning?.Provider, "gitversion", StringComparison.OrdinalIgnoreCase))
-            {
-                var gvPath = Path.Combine(repositoryRoot, "GitVersion.yml");
-                if (!File.Exists(gvPath))
-                {
-                    var gvContent = """
-                        mode: ContinuousDeployment
-                        branches: {}
-                        ignore:
-                          sha: []
-                        """;
-                    await File.WriteAllTextAsync(gvPath, gvContent, ct);
-                    materialized.Add(gvPath);
-                    Console.WriteLine($"  Materialized: {gvPath}");
-                }
-            }
-
-            var message = materialized.Count > 0
-                ? $"Materialized {materialized.Count} file(s)."
-                : "Nothing to materialize.";
-
-            return new StepResult(
-                step.Id ?? "config-materialize",
-                true,
-                0,
-                TimeSpan.Zero,
-                new Dictionary<string, object?>
-                {
-                    ["message"] = message,
-                    ["files"] = string.Join(", ", materialized),
-                });
-        });
+            module.Register(_builtinRegistry, context);
+        }
     }
 
     private async Task<CommandResult> ExecuteConfigCommandAsync(
@@ -796,7 +249,7 @@ public sealed class ConfigCommandLoader
         };
     }
 
-    private static async Task WriteSarifIfConfiguredAsync(
+    internal static async Task WriteSarifIfConfiguredAsync(
         IReadOnlyList<Analysis.AnalysisResult> results,
         string repositoryRoot,
         RepoConfig config,
@@ -827,7 +280,7 @@ public sealed class ConfigCommandLoader
         }
     }
 
-    private async Task<StepResult> BuildArtifactsAsync(
+    internal async Task<StepResult> BuildArtifactsAsync(
         string stepId,
         RepoConfig config,
         ExecutionContext ctx,
@@ -869,7 +322,7 @@ public sealed class ConfigCommandLoader
             new Dictionary<string, object?> { ["message"] = successMessage });
     }
 
-    private async Task<StepResult> TagArtifactsAsync(
+    internal async Task<StepResult> TagArtifactsAsync(
         string stepId,
         RepoConfig config,
         ExecutionContext ctx,
@@ -903,7 +356,7 @@ public sealed class ConfigCommandLoader
             new Dictionary<string, object?> { ["message"] = successMessage });
     }
 
-    private async Task<StepResult> PushArtifactsAsync(
+    internal async Task<StepResult> PushArtifactsAsync(
         string stepId,
         RepoConfig config,
         string repositoryRoot,
@@ -1027,7 +480,7 @@ public sealed class ConfigCommandLoader
             });
     }
 
-    private static StepResult PlanArtifacts(
+    internal static StepResult PlanArtifacts(
         string stepId,
         RepoConfig config,
         ExecutionContext ctx,
@@ -1053,18 +506,27 @@ public sealed class ConfigCommandLoader
         var isPullRequest = ctx.IsPullRequest;
         var isCleanTree = ctx.IsCleanWorkingTree;
 
-        var plans = artifacts.Select(a => new
-        {
-            a.Type,
-            Name = ResolveArtifactName(a, config),
-            Image = TryGetArtifactSettingString(a.Settings, "image") ?? ResolveArtifactName(a, config),
-            Dockerfile = TryGetArtifactSettingString(a.Settings, "dockerfile") ?? "Dockerfile",
-            Context = TryGetArtifactSettingString(a.Settings, "context") ?? ".",
-            Runner = TryGetArtifactSettingString(a.Settings, "runner") ?? "build",
-            Stages = TryGetArtifactSettingObject(a.Settings, "stages")?.Select(p => p.Name).ToArray() ?? Array.Empty<string>(),
-            Version = version,
-            Branch = branch,
-        }).ToList();
+        var globalPolicy = ParsePushPolicyRules(config);
+        var planArtifacts = artifacts.Select(a => BuildPlanArtifact(a, config, ctx, artifactProviders, globalPolicy, pushRequested)).ToList();
+        var overallCanPush = pushRequested && planArtifacts.All(a => a.Push.Eligible);
+        var overallSkipReasons = pushRequested
+            ? planArtifacts.SelectMany(a => a.Push.SkipReasons).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+            : new List<string>();
+        var payload = new PlanPayload(
+            new PlanRepoSection(config.Name, branch, commitSha, ctx.RemoteUrl),
+            ctx.Version is null
+                ? null
+                : new PlanVersionSection(
+                    ctx.Version.SemVer,
+                    ctx.Version.DockerVersion,
+                    ctx.Version.NuGetVersion,
+                    ctx.Version.InformationalVersion),
+            planArtifacts,
+            new PlanPushSection(
+                pushRequested,
+                pushRequested ? overallCanPush : null,
+                pushRequested ? (overallCanPush ? "Push allowed by current policy." : "Push blocked by one or more policy or credential checks.") : "Push not requested.",
+                overallSkipReasons));
 
         // Generate human-readable plan output
         var planLines = new List<string>();
@@ -1072,61 +534,89 @@ public sealed class ConfigCommandLoader
         planLines.Add("Rexo plan");
         planLines.Add("");
 
+        planLines.Add("Repo:");
+        planLines.Add($"  name:    {config.Name}");
+        if (!string.IsNullOrWhiteSpace(branch))
+            planLines.Add($"  branch:  {branch}");
+        if (!string.IsNullOrWhiteSpace(commitSha))
+            planLines.Add($"  commit:  {commitSha}");
+        if (!string.IsNullOrWhiteSpace(ctx.RemoteUrl))
+            planLines.Add($"  remote:  {ctx.RemoteUrl}");
+        planLines.Add("");
+
         // Version section
-        if (version is not null)
+        if (ctx.Version is not null)
         {
             planLines.Add("Version:");
-            planLines.Add($"  semver:  {version}");
-            if (branch is not null)
-                planLines.Add($"  branch:  {branch}");
-            if (commitSha is not null)
-                planLines.Add($"  commit:  {commitSha}");
+            planLines.Add($"  semver:   {ctx.Version.SemVer}");
+            if (!string.IsNullOrWhiteSpace(ctx.Version.DockerVersion))
+                planLines.Add($"  docker:   {ctx.Version.DockerVersion}");
+            if (!string.IsNullOrWhiteSpace(ctx.Version.NuGetVersion))
+                planLines.Add($"  nuget:    {ctx.Version.NuGetVersion}");
+            planLines.Add($"  info:     {ctx.Version.InformationalVersion}");
             planLines.Add("");
         }
 
         // Artifacts section
         planLines.Add("Artifacts:");
-        foreach (var a in artifacts)
+        foreach (var artifact in planArtifacts)
         {
-            var artifactName = ResolveArtifactName(a, config);
-            var image = TryGetArtifactSettingString(a.Settings, "image") ?? artifactName;
-            planLines.Add($"  [{a.Type}] {artifactName}");
-            planLines.Add($"    image: {image}");
+            planLines.Add($"  [{artifact.Type}] {artifact.Name}");
             planLines.Add($"    build: yes");
-
-            var provider = artifactProviders.Resolve(a.Type);
-            if (provider is not null)
+            foreach (var setting in artifact.BuildSettings)
             {
-                var tags = provider.GetPlannedTags(new ArtifactConfig(a.Type, artifactName, a.Settings ?? new Dictionary<string, System.Text.Json.JsonElement>(StringComparer.Ordinal)), ctx);
-                if (tags.Count > 0)
-                {
-                    planLines.Add($"    tags:");
-                    foreach (var tag in tags)
-                        planLines.Add($"      - {tag}");
-                }
+                planLines.Add($"    {setting.Key}: {setting.Value}");
+            }
+
+            if (artifact.Tags.Count > 0)
+            {
+                planLines.Add("    tags:");
+                foreach (var tag in artifact.Tags)
+                    planLines.Add($"      - {tag}");
+            }
+
+            planLines.Add($"    push eligible: {(artifact.Push.Eligible ? "yes" : "no")}");
+            if (artifact.RequiredCredentials.Count > 0)
+            {
+                planLines.Add("    required credentials:");
+                foreach (var credential in artifact.RequiredCredentials)
+                    planLines.Add($"      - {credential}");
+            }
+
+            if (artifact.ExpectedOutputs.Count > 0)
+            {
+                planLines.Add("    expected outputs:");
+                foreach (var output in artifact.ExpectedOutputs)
+                    planLines.Add($"      - {output}");
+            }
+
+            if (artifact.Push.SkipReasons.Count > 0)
+            {
+                planLines.Add("    push blockers:");
+                foreach (var reason in artifact.Push.SkipReasons)
+                    planLines.Add($"      - {reason}");
             }
         }
         planLines.Add("");
 
         // Push eligibility section
-        var (canPush, skipReasons) = pushRequested
-            ? EvaluatePushEligibility(config, isPullRequest, isCleanTree)
-            : (false, new List<string>());
         planLines.Add("Push:");
         planLines.Add($"  requested: {(pushRequested ? "yes" : "no")}");
         if (pushRequested)
         {
-            planLines.Add($"  eligible: {(canPush ? "yes" : "no")}");
+            planLines.Add($"  eligible: {(overallCanPush ? "yes" : "no")}");
+            planLines.Add($"  decision: {payload.Push.Decision}");
         }
         else
         {
             planLines.Add("  eligible: not requested");
+            planLines.Add("  decision: will not push unless --push is supplied");
         }
 
-        if (pushRequested && !canPush && skipReasons.Count > 0)
+        if (pushRequested && !overallCanPush && overallSkipReasons.Count > 0)
         {
             planLines.Add("  skip reasons:");
-            foreach (var reason in skipReasons)
+            foreach (var reason in overallSkipReasons)
                 planLines.Add($"    - {reason}");
         }
         planLines.Add("");
@@ -1134,7 +624,7 @@ public sealed class ConfigCommandLoader
         var planOutput = string.Join(Environment.NewLine, planLines);
         Console.WriteLine(planOutput);
 
-        var json = JsonSerializer.Serialize(plans, IndentedJsonOptions);
+        var json = JsonSerializer.Serialize(payload, IndentedJsonOptions);
 
         return new StepResult(stepId, true, 0, TimeSpan.Zero,
             new Dictionary<string, object?>
@@ -1142,9 +632,155 @@ public sealed class ConfigCommandLoader
                 ["message"] = successMessage,
                 ["plan"] = json,
                 ["pushRequested"] = pushRequested,
-                ["canPush"] = canPush,
-                ["skipReasons"] = skipReasons,
+                ["canPush"] = overallCanPush,
+                ["skipReasons"] = overallSkipReasons,
             });
+    }
+
+    private static PlanArtifact BuildPlanArtifact(
+        RepoArtifactConfig artifact,
+        RepoConfig config,
+        Core.Models.ExecutionContext ctx,
+        Artifacts.ArtifactProviderRegistry artifactProviders,
+        PushPolicyRules globalPolicy,
+        bool pushRequested)
+    {
+        var artifactName = ResolveArtifactName(artifact, config);
+        var artifactConfig = new ArtifactConfig(artifact.Type, artifactName, artifact.Settings ?? new Dictionary<string, JsonElement>(StringComparer.Ordinal));
+        var provider = artifactProviders.Resolve(artifact.Type);
+        var tags = provider?.GetPlannedTags(artifactConfig, ctx) ?? Array.Empty<string>();
+        var effectivePolicy = BuildEffectivePushPolicy(globalPolicy, artifact.Settings);
+        var pushEligible = true;
+        var skipReasons = new List<string>();
+
+        if (pushRequested)
+        {
+            if (!IsPushAllowed(effectivePolicy, ctx, out var reason))
+            {
+                pushEligible = false;
+                skipReasons.Add(reason);
+            }
+
+            foreach (var credentialCheck in GetCredentialChecks(artifact, ctx.RepositoryRoot))
+            {
+                if (!credentialCheck.Available)
+                {
+                    pushEligible = false;
+                    if (!string.IsNullOrWhiteSpace(credentialCheck.Detail))
+                    {
+                        skipReasons.Add(credentialCheck.Detail);
+                    }
+                }
+            }
+        }
+
+        return new PlanArtifact(
+            artifact.Type,
+            artifactName,
+            GetArtifactBuildSettings(artifact, artifactName),
+            tags,
+            true,
+            GetExpectedOutputs(artifact, ctx, artifactName),
+            GetRequiredCredentialNames(artifact),
+            new PlanArtifactPush(pushRequested, pushEligible, pushRequested ? (pushEligible ? "Push allowed." : "Push blocked.") : "Push not requested.", skipReasons));
+    }
+
+    private static IReadOnlyDictionary<string, string> GetArtifactBuildSettings(RepoArtifactConfig artifact, string artifactName)
+    {
+        var settings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        switch (artifact.Type.ToLowerInvariant())
+        {
+            case "docker":
+                settings["image"] = TryGetArtifactSettingString(artifact.Settings, "image") ?? artifactName;
+                settings["dockerfile"] = TryGetArtifactSettingString(artifact.Settings, "dockerfile") ?? "Dockerfile";
+                settings["context"] = TryGetArtifactSettingString(artifact.Settings, "context") ?? ".";
+                settings["runner"] = TryGetArtifactSettingString(artifact.Settings, "runner") ?? "build";
+                break;
+            case "nuget":
+                settings["project"] = TryGetArtifactSettingString(artifact.Settings, "project") ?? string.Empty;
+                settings["source"] = TryGetArtifactSettingString(artifact.Settings, "source") ?? "https://api.nuget.org/v3/index.json";
+                settings["output"] = TryGetArtifactSettingString(artifact.Settings, "output") ?? Path.Combine("artifacts", "packages");
+                break;
+            case "helm-oci":
+                settings["chart"] = TryGetArtifactSettingString(artifact.Settings, "chart") ?? artifactName;
+                settings["chartPath"] = TryGetArtifactSettingString(artifact.Settings, "chartPath") ?? "chart";
+                settings["registry"] = TryGetArtifactSettingString(artifact.Settings, "registry") ?? string.Empty;
+                settings["output"] = TryGetArtifactSettingString(artifact.Settings, "output") ?? Path.Combine("artifacts", "charts");
+                break;
+        }
+
+        return settings;
+    }
+
+    private static IReadOnlyList<string> GetExpectedOutputs(RepoArtifactConfig artifact, Core.Models.ExecutionContext ctx, string artifactName)
+    {
+        return artifact.Type.ToLowerInvariant() switch
+        {
+            "nuget" => [Path.Combine(TryGetArtifactSettingString(artifact.Settings, "output") ?? Path.Combine("artifacts", "packages"), $"{artifactName}.*.nupkg")],
+            "helm-oci" => [Path.Combine(TryGetArtifactSettingString(artifact.Settings, "output") ?? Path.Combine("artifacts", "charts"), $"{(TryGetArtifactSettingString(artifact.Settings, "chart") ?? artifactName)}-{ctx.Version?.SemVer ?? "<version>"}.tgz")],
+            "docker" => (TryGetArtifactSettingString(artifact.Settings, "image") is { Length: > 0 } image)
+                ? [image]
+                : [artifactName],
+            _ => Array.Empty<string>(),
+        };
+    }
+
+    private static IReadOnlyList<string> GetRequiredCredentialNames(RepoArtifactConfig artifact)
+    {
+        return artifact.Type.ToLowerInvariant() switch
+        {
+            "docker" => ["DOCKER_LOGIN_USERNAME", "DOCKER_LOGIN_PASSWORD", "DOCKER_LOGIN_REGISTRY", "GITHUB_ACTOR/GITHUB_TOKEN (for ghcr.io in GitHub Actions)"],
+            "nuget" => [$"{TryGetArtifactSettingString(artifact.Settings, "apiKeyEnv") ?? "NUGET_API_KEY"}", "NUGET_AUTH_TOKEN", "GITHUB_TOKEN or SYSTEM_ACCESSTOKEN (CI fallback)"],
+            "helm-oci" => ["HELM_REGISTRY_USERNAME", "HELM_REGISTRY_PASSWORD", "HELM_REGISTRY", "GITHUB_ACTOR/GITHUB_TOKEN (for ghcr.io in GitHub Actions)"],
+            _ => Array.Empty<string>(),
+        };
+    }
+
+    private static IReadOnlyList<PlanCredentialCheck> GetCredentialChecks(RepoArtifactConfig artifact, string repositoryRoot)
+    {
+        var fileEnv = RepositoryEnvironmentFiles.Load(repositoryRoot);
+
+        return artifact.Type.ToLowerInvariant() switch
+        {
+            "docker" =>
+            [
+                ToPlanCredentialCheck(Artifacts.FeedAuthResolver.ResolveDocker(
+                    TryGetArtifactSettingString(artifact.Settings, "loginRegistry"),
+                    InferDockerRegistry(TryGetArtifactSettingString(artifact.Settings, "image")),
+                    fileEnv))
+            ],
+            "nuget" =>
+            [
+                ToPlanCredentialCheck(Artifacts.FeedAuthResolver.ResolveNuGet(
+                    TryGetArtifactSettingString(artifact.Settings, "source") ?? "https://api.nuget.org/v3/index.json",
+                    TryGetArtifactSettingString(artifact.Settings, "apiKeyEnv"),
+                    fileEnv))
+            ],
+            "helm-oci" =>
+            [
+                ToPlanCredentialCheck(Artifacts.FeedAuthResolver.ResolveHelm(
+                    TryGetArtifactSettingString(artifact.Settings, "registry"),
+                    fileEnv))
+            ],
+            _ => Array.Empty<PlanCredentialCheck>(),
+        };
+    }
+
+    private static PlanCredentialCheck ToPlanCredentialCheck(Artifacts.FeedAuthResolution resolution) =>
+        new(resolution.HasCredentials, resolution.HasCredentials
+            ? $"Credentials available via {resolution.Source}."
+            : resolution.Error ?? $"Credentials not resolved ({resolution.Source}).");
+
+    private static string? InferDockerRegistry(string? image)
+    {
+        if (string.IsNullOrWhiteSpace(image))
+        {
+            return null;
+        }
+
+        var firstSegment = image.Split('/')[0];
+        return firstSegment.Contains('.', StringComparison.Ordinal) ? firstSegment : null;
     }
 
     private static bool ResolveConfirmRequested(IReadOnlyDictionary<string, string?> options) =>
@@ -1152,7 +788,7 @@ public sealed class ConfigCommandLoader
         ?? TryGetOptionBoolean(options, "push")
         ?? false;
 
-    private static bool? TryGetOptionBoolean(IReadOnlyDictionary<string, string?> options, string key)
+    internal static bool? TryGetOptionBoolean(IReadOnlyDictionary<string, string?> options, string key)
     {
         if (!options.TryGetValue(key, out var value) || string.IsNullOrWhiteSpace(value))
         {
@@ -1217,7 +853,7 @@ public sealed class ConfigCommandLoader
             settings);
     }
 
-    private static string ResolveArtifactName(RepoArtifactConfig artifactCfg, RepoConfig config) =>
+    internal static string ResolveArtifactName(RepoArtifactConfig artifactCfg, RepoConfig config) =>
         string.IsNullOrWhiteSpace(artifactCfg.Name)
             ? config.Name
             : artifactCfg.Name;
@@ -1247,7 +883,7 @@ public sealed class ConfigCommandLoader
         return value.EnumerateObject();
     }
 
-    private static Dictionary<string, JsonElement> CloneSettings(Dictionary<string, JsonElement> settings)
+    internal static Dictionary<string, JsonElement> CloneSettings(Dictionary<string, JsonElement> settings)
     {
         var clone = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
         foreach (var (key, value) in settings)
@@ -1317,13 +953,57 @@ public sealed class ConfigCommandLoader
         Console.WriteLine($"  Artifact manifest written to {manifestPath}");
     }
 
-    private static string ResolveOutputRoot(RepoConfig config) =>
+    internal static string ResolveOutputRoot(RepoConfig config) =>
         string.IsNullOrWhiteSpace(config.Runtime?.Output?.Root)
             ? DefaultOutputRoot
             : config.Runtime.Output.Root!;
 
-    private static bool ShouldEmitRuntimeFiles(RepoConfig config) =>
+    internal static bool ShouldEmitRuntimeFiles(RepoConfig config) =>
         config.Runtime?.Output?.EmitRuntimeFiles ?? true;
+
+    private sealed record PlanPayload(
+        PlanRepoSection Repo,
+        PlanVersionSection? Version,
+        IReadOnlyList<PlanArtifact> Artifacts,
+        PlanPushSection Push);
+
+    private sealed record PlanRepoSection(
+        string Name,
+        string? Branch,
+        string? CommitSha,
+        string? RemoteUrl);
+
+    private sealed record PlanVersionSection(
+        string SemVer,
+        string? DockerVersion,
+        string? NuGetVersion,
+        string InformationalVersion);
+
+    private sealed record PlanArtifact(
+        string Type,
+        string Name,
+        IReadOnlyDictionary<string, string> BuildSettings,
+        IReadOnlyList<string> Tags,
+        bool Build,
+        IReadOnlyList<string> ExpectedOutputs,
+        IReadOnlyList<string> RequiredCredentials,
+        PlanArtifactPush Push);
+
+    private sealed record PlanArtifactPush(
+        bool Requested,
+        bool Eligible,
+        string Decision,
+        IReadOnlyList<string> SkipReasons);
+
+    private sealed record PlanPushSection(
+        bool Requested,
+        bool? Eligible,
+        string Decision,
+        IReadOnlyList<string> SkipReasons);
+
+    private sealed record PlanCredentialCheck(
+        bool Available,
+        string Detail);
 
     private static PushPolicyRules ParsePushPolicyRules(RepoConfig config)
     {

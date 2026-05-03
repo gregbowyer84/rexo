@@ -1,0 +1,8 @@
+{
+  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json",
+  "schemaVersion": "1.0",
+  "name": "none-policy",
+  "description": "Empty policy — no lifecycle commands are contributed. All commands come from the repository's rexo.json only. Use 'extends: [\"embedded:none\"]' in rexo.json to opt out of the implicit embedded:standard lifecycle.",
+  "commands": {},
+  "aliases": {}
+}

@@ -1,11 +1,11 @@
 {
   "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json",
   "schemaVersion": "1.0",
-  "name": "dotnet-policy",
-  "description": "Policy template for .NET repositories. Adds dotnet-specific commands plus generic artifact lifecycle commands.",
+  "name": "dotnet-api-policy",
+  "description": "Policy template for .NET web API and service projects. Provides the full dotnet lifecycle with Docker container lifecycle commands.",
   "commands": {
     "ci": {
-      "description": "Run the full CI pipeline: validate, test, analyze, and build configured artifacts.",
+      "description": "Run the full CI pipeline: validate, test, analyze, and build configured container artifacts.",
       "options": {},
       "steps": [
         {
@@ -26,12 +26,12 @@
         },
         {
           "uses": "builtin:build-artifacts",
-          "description": "Build configured artifacts"
+          "description": "Build container artifacts"
         }
       ]
     },
     "release": {
-      "description": "Run CI then tag and optionally push configured artifacts.",
+      "description": "Run CI then tag and optionally push configured container artifacts.",
       "options": {
         "push": {
           "type": "bool",
@@ -57,15 +57,15 @@
         },
         {
           "uses": "builtin:build-artifacts",
-          "description": "Build configured artifacts"
+          "description": "Build container artifacts"
         },
         {
           "uses": "builtin:tag-artifacts",
-          "description": "Tag artifacts"
+          "description": "Tag container artifacts"
         },
         {
           "uses": "builtin:push-artifacts",
-          "description": "Push artifacts",
+          "description": "Push container images",
           "when": "{{options.push}} == true",
           "with": {
             "confirm": "{{options.push}}"
@@ -101,19 +101,21 @@
         }
       ]
     },
-    "pack": {
-      "description": "Pack NuGet packages.",
-      "options": {
-        "configuration": { "type": "string", "default": "Release" }
+    "stage": {
+      "description": "Build and stage a Docker image for the named build stage.",
+      "args": {
+        "stage": { "required": true }
       },
+      "options": {},
       "steps": [
         { "uses": "builtin:resolve-version", "description": "Resolve version" },
-        { "uses": "builtin:build-artifacts",  "description": "Pack NuGet artifacts" }
+        { "uses": "builtin:docker-stage", "description": "Build Docker stage" }
       ]
     }
   },
   "aliases": {
     "r": "restore",
-    "f": "format"
+    "f": "format",
+    "s": "stage"
   }
 }

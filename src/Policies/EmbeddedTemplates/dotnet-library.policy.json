@@ -1,11 +1,11 @@
 {
   "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json",
   "schemaVersion": "1.0",
-  "name": "dotnet-policy",
-  "description": "Policy template for .NET repositories. Adds dotnet-specific commands plus generic artifact lifecycle commands.",
+  "name": "dotnet-library-policy",
+  "description": "Policy template for .NET library and NuGet package projects. Provides the full dotnet lifecycle with NuGet-focused artifact commands.",
   "commands": {
     "ci": {
-      "description": "Run the full CI pipeline: validate, test, analyze, and build configured artifacts.",
+      "description": "Run the full CI pipeline: validate, test, analyze, and pack configured artifacts.",
       "options": {},
       "steps": [
         {
@@ -26,12 +26,12 @@
         },
         {
           "uses": "builtin:build-artifacts",
-          "description": "Build configured artifacts"
+          "description": "Pack NuGet artifacts"
         }
       ]
     },
     "release": {
-      "description": "Run CI then tag and optionally push configured artifacts.",
+      "description": "Run CI then tag and optionally push configured NuGet artifacts.",
       "options": {
         "push": {
           "type": "bool",
@@ -57,7 +57,7 @@
         },
         {
           "uses": "builtin:build-artifacts",
-          "description": "Build configured artifacts"
+          "description": "Pack NuGet artifacts"
         },
         {
           "uses": "builtin:tag-artifacts",
@@ -65,7 +65,7 @@
         },
         {
           "uses": "builtin:push-artifacts",
-          "description": "Push artifacts",
+          "description": "Push NuGet packages",
           "when": "{{options.push}} == true",
           "with": {
             "confirm": "{{options.push}}"
@@ -108,12 +108,13 @@
       },
       "steps": [
         { "uses": "builtin:resolve-version", "description": "Resolve version" },
-        { "uses": "builtin:build-artifacts",  "description": "Pack NuGet artifacts" }
+        { "uses": "builtin:build-artifacts", "description": "Pack NuGet artifacts" }
       ]
     }
   },
   "aliases": {
     "r": "restore",
-    "f": "format"
+    "f": "format",
+    "p": "pack"
   }
 }

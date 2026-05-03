@@ -45,7 +45,14 @@ internal static class CliBootstrapper
                     Console.WriteLine($"[debug] --set override: {s}");
             }
 
-            effectiveConfig = ConfigBuilder.ApplySetOverrides(effectiveConfig, setOverrides);
+            var (mergedConfig, warnings) = ConfigBuilder.ApplySetOverridesWithWarnings(effectiveConfig, setOverrides);
+            effectiveConfig = mergedConfig;
+
+            // Emit warnings for malformed overrides
+            foreach (var warning in warnings)
+            {
+                Console.Error.WriteLine($"[warn] {warning}");
+            }
         }
 
         // Create command registry

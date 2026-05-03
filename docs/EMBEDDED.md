@@ -21,14 +21,14 @@ Current embedded templates:
 - `standard`
 - `dotnet`
 
-In configuration, use them through `extends`:
+Artifact-only configs are minimal by default.
+Use `extends` to opt into an embedded lifecycle template explicitly:
 
 ```json
 {
   "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
   "schemaVersion": "1.0",
   "name": "orders-api",
-  "extends": ["embedded:standard"],
   "artifacts": [
     {
       "type": "docker",
@@ -45,13 +45,14 @@ Design intent:
 
 - Repo config says what this repo emits (artifacts, versioning, analysis/test details).
 - Embedded policy says how this repo behaves (lifecycle command shape).
+- `embedded:standard` is the recommended lifecycle baseline when you want policy-provided commands.
 
 ## Embedded Template: standard
 
 Purpose:
 
 - General lifecycle policy for most repositories.
-- Works well with artifact-only config.
+- Works well with artifact-only config when explicitly added via `extends`.
 
 ### Commands
 
@@ -236,11 +237,12 @@ Description: Run CI flow, tag artifacts, optionally push.
 
 Options:
 
-- `--push` (`bool`, default currently set as string `"false"` in template)
+- `--push` (`bool`, default `false`)
 
 Behavior notes:
 
 - Push step is guarded by a `when` expression.
+- Push intent is forwarded into the builtin via `with.confirm = {{options.push}}`.
 
 #### restore
 
@@ -254,7 +256,7 @@ Description: Verify or apply `dotnet format`.
 
 Options:
 
-- `--fix` (`bool`, default currently set as string `"false"` in template)
+- `--fix` (`bool`, default `false`)
 
 Behavior notes:
 
@@ -271,8 +273,6 @@ Options:
 
 ### Aliases
 
-- `build` -> `ci`
-- `publish` -> `release`
 - `r` -> `restore`
 - `f` -> `format`
 
@@ -411,11 +411,12 @@ Choose `embedded:standard` when:
 
 - You want consistent cross-language lifecycle defaults.
 - You want release and push semantics aligned with explicit local confirmation.
+- You want an artifact-only config to include lifecycle commands via explicit opt-in.
 
 Choose `embedded:dotnet` when:
 
 - You want restore/format/ci convenience commands out of the box.
-- You are intentionally using dotnet-centric aliases.
+- You want additive dotnet-specific commands on top of the standard lifecycle baseline.
 
 ## Practical Notes
 

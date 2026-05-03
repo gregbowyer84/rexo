@@ -299,7 +299,7 @@
     },
     "artifact": {
       "description": "Artifact declaration. Choose docker, nuget, or a custom provider type.",
-      "oneOf": [
+      "anyOf": [
         {
           "$ref": "#/$defs/dockerArtifact"
         },

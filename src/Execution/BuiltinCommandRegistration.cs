@@ -2,6 +2,7 @@ namespace Rexo.Execution;
 
 using System.Net.Http;
 using System.Text.Json;
+using System.Xml.Linq;
 using Rexo.Configuration;
 using Rexo.Ci;
 using Rexo.Configuration.Models;
@@ -13,7 +14,7 @@ public static class BuiltinCommandRegistration
 {
     private static readonly JsonSerializerOptions IndentedJsonOptions = new() { WriteIndented = true };
     private static readonly HttpClient HttpClient = new();
-    private static readonly string[] InitTemplateChoices = ["dotnet", "node", "python", "go", "generic"];
+    private static readonly string[] InitTemplateChoices = ["dotnet", "node", "python", "go", "generic", "blank"];
     private static readonly string[] InitSchemaSourceChoices = ["remote", "local"];
     private static readonly string[] InitYesNoChoices = ["yes", "no"];
     private const string DefaultInstructionsPath = ".github/instructions/rexo.instructions.md";
@@ -47,8 +48,17 @@ public static class BuiltinCommandRegistration
         registry.Register("init", async (invocation, ct) =>
             await RunInitAsync(invocation, ct));
 
+        registry.Register("new", async (invocation, ct) =>
+            await RunInitAsync(invocation, ct));
+
         registry.Register("explain version", (_, _) =>
             Task.FromResult(RunExplainVersion(config)));
+
+        registry.Register("templates list", (_, _) =>
+            Task.FromResult(RunTemplatesList()));
+
+        registry.Register("templates show", (invocation, _) =>
+            Task.FromResult(RunTemplatesShow(invocation)));
 
         return registry;
     }
@@ -85,6 +95,40 @@ public static class BuiltinCommandRegistration
         {
             var dockerOk = await IsToolAvailableAsync("docker", "--version", cancellationToken);
             checks.Add(("docker", dockerOk.ok, dockerOk.version));
+        }
+
+        // helm (only if helm-oci artifacts configured)
+        var needsHelm = config?.Artifacts?.Any(a => a.Type == "helm-oci") == true;
+        if (needsHelm)
+        {
+            var helmOk = await IsToolAvailableAsync("helm", "version --short", cancellationToken);
+            checks.Add(("helm", helmOk.ok, helmOk.ok ? helmOk.version : "not found — required for helm-oci artifacts"));
+        }
+
+        // version provider tool (only if an external tool is required)
+        var versionProvider = config?.Versioning?.Provider;
+        switch (versionProvider?.ToLowerInvariant())
+        {
+            case "gitversion":
+                {
+                    var gvOk = await IsToolAvailableAsync("gitversion", "/version", cancellationToken);
+                    if (!gvOk.ok)
+                        gvOk = await IsToolAvailableAsync("dotnet-gitversion", "/version", cancellationToken);
+                    checks.Add(("gitversion", gvOk.ok, gvOk.ok ? gvOk.version : "not found — install via 'dotnet tool install GitVersion.Tool'"));
+                    break;
+                }
+            case "minver":
+                {
+                    var minverOk = await IsToolAvailableAsync("dotnet", "minver --version", cancellationToken);
+                    checks.Add(("minver", minverOk.ok, minverOk.ok ? minverOk.version : "not found — install via 'dotnet tool install minver-cli'"));
+                    break;
+                }
+            case "nbgv":
+                {
+                    var nbgvOk = await IsToolAvailableAsync("nbgv", "--version", cancellationToken);
+                    checks.Add(("nbgv", nbgvOk.ok, nbgvOk.ok ? nbgvOk.version : "not found — install via 'dotnet tool install nbgv'"));
+                    break;
+                }
         }
 
         // config file
@@ -132,14 +176,22 @@ public static class BuiltinCommandRegistration
     {
         var lines = new List<string>();
         lines.Add("Built-in commands:");
-        lines.Add("  version         Show the version of repo");
-        lines.Add("  list            List all available commands");
-        lines.Add("  explain         Explain a command");
-        lines.Add("  doctor          Check environment and configuration");
-        lines.Add("  init            Create a starter rexo config");
-        lines.Add("  run <command>   Run a config-defined command");
-        lines.Add("  help            Show help");
-        lines.Add("  ui              Open the interactive UI");
+        lines.Add("  version              Show the version of repo");
+        lines.Add("  list                 List all available commands");
+        lines.Add("  explain <command>    Explain a command (or alias)");
+        lines.Add("  explain version      Show version provider configuration");
+        lines.Add("  doctor               Check environment and configuration");
+        lines.Add("  init                 Create a starter rexo config");
+        lines.Add("  init detect          Preview auto detection and recommendations");
+        lines.Add("  new                  Alias for init");
+        lines.Add("  run <command>        Run a config-defined command");
+        lines.Add("  config resolved      Show the fully-merged configuration");
+        lines.Add("  config sources       Show config file sources in merge order");
+        lines.Add("  config materialize   Write the merged config to a file");
+        lines.Add("  templates list       List available embedded policy templates");
+        lines.Add("  templates show       Show an embedded policy template");
+        lines.Add("  help                 Show help");
+        lines.Add("  ui                   Open the interactive UI");
 
         if (config is not null && config.Commands?.Count > 0)
         {
@@ -173,11 +225,73 @@ public static class BuiltinCommandRegistration
             return CommandResult.Fail("explain", 1, "Usage: repo explain <command>");
         }
 
-        // Check built-ins
-        var builtins = new[] { "version", "list", "explain", "doctor", "init", "run", "help", "ui" };
+        // Check built-ins (including sub-commands)
+        var builtins = new[] { "version", "list", "explain", "doctor", "init", "new", "run", "help", "ui",
+            "config", "config resolved", "config sources", "config materialize",
+            "templates", "templates list", "templates show", "explain version" };
         if (builtins.Contains(commandName, StringComparer.OrdinalIgnoreCase))
         {
             return CommandResult.Ok("explain", $"Built-in command: {commandName}\n  This is a built-in command that is always available.");
+        }
+
+        // Check aliases — resolve to target command and show its details
+        if (config?.Aliases?.TryGetValue(commandName, out var aliasTarget) == true && aliasTarget is not null)
+        {
+            var aliasLines = new List<string> { $"Alias: {commandName}  →  {aliasTarget}" };
+            if (config.Commands?.TryGetValue(aliasTarget, out var aliasCmd) == true && aliasCmd is not null)
+            {
+                aliasLines.Add($"Command: {aliasTarget} (via alias)");
+                if (!string.IsNullOrEmpty(aliasCmd.Description))
+                    aliasLines.Add($"  Description: {aliasCmd.Description}");
+                if (aliasCmd.Args is { Count: > 0 })
+                {
+                    aliasLines.Add("  Arguments:");
+                    foreach (var (argName, argCfg) in aliasCmd.Args)
+                    {
+                        var req = argCfg.Required ? "required" : "optional";
+                        aliasLines.Add($"    {argName} ({req}): {argCfg.Description ?? string.Empty}");
+                    }
+                }
+                if (aliasCmd.Options.Count > 0)
+                {
+                    aliasLines.Add("  Options:");
+                    foreach (var (optName, optCfg) in aliasCmd.Options)
+                    {
+                        var def = optCfg.Default is not null
+                            ? $" [default: {FormatOptionDefault(optCfg.Default.Value)}]"
+                            : string.Empty;
+                        aliasLines.Add($"    --{optName} ({optCfg.Type}){def}");
+                    }
+                }
+                if (aliasCmd.Steps.Count > 0)
+                {
+                    aliasLines.Add($"  Steps ({aliasCmd.Steps.Count} total):");
+                    var aliasStepIndex = 0;
+                    foreach (var step in aliasCmd.Steps)
+                    {
+                        aliasStepIndex++;
+                        var stepType = step switch
+                        {
+                            { Run: not null } => "run",
+                            { Uses: not null } => "uses",
+                            { Command: not null } => "command",
+                            _ => "unknown",
+                        };
+                        var stepBody = step switch
+                        {
+                            { Run: not null } => step.Run,
+                            { Uses: not null } => step.Uses,
+                            { Command: not null } => step.Command,
+                            _ => string.Empty,
+                        };
+                        var id = step.Id is not null ? $"[{step.Id}] " : $"[step-{aliasStepIndex}] ";
+                        aliasLines.Add($"    {id}{stepType}: {stepBody}");
+                        if (step.When is not null)
+                            aliasLines.Add($"        when: {step.When}");
+                    }
+                }
+            }
+            return CommandResult.Ok("explain", string.Join("\n", aliasLines));
         }
 
         // Check config commands
@@ -373,6 +487,41 @@ public static class BuiltinCommandRegistration
         return CommandResult.Ok("config materialize", message);
     }
 
+    private static CommandResult RunTemplatesList()
+    {
+        var names = Rexo.Policies.EmbeddedPolicyTemplates.TemplateNames;
+        var lines = new List<string> { "Embedded policy templates:" };
+        foreach (var name in names)
+        {
+            lines.Add($"  {name}");
+        }
+
+        return new CommandResult("templates list", true, 0, string.Join("\n", lines),
+            new Dictionary<string, object?> { ["templates"] = names });
+    }
+
+    private static CommandResult RunTemplatesShow(CommandInvocation invocation)
+    {
+        if (!invocation.Args.TryGetValue("name", out var templateName) || string.IsNullOrWhiteSpace(templateName))
+        {
+            return CommandResult.Fail("templates show", 1, "Usage: rx templates show <name>");
+        }
+
+        string json;
+        try
+        {
+            json = Rexo.Policies.EmbeddedPolicyTemplates.ReadTemplate(templateName);
+        }
+        catch (ArgumentException)
+        {
+            var available = string.Join(", ", Rexo.Policies.EmbeddedPolicyTemplates.TemplateNames);
+            return CommandResult.Fail("templates show", 1,
+                $"Template '{templateName}' not found. Available templates: {available}");
+        }
+
+        return CommandResult.Ok("templates show", json);
+    }
+
     private static CommandResult RunExplainVersion(RepoConfig? config)
     {
         if (config?.Versioning is null)
@@ -444,6 +593,18 @@ public static class BuiltinCommandRegistration
             return await RunInitCiAsync(invocation, cancellationToken);
         }
 
+        var detection = DetectTemplate(workingDir);
+        var detectedTemplate = detection.Template;
+
+        if ((!string.IsNullOrWhiteSpace(initMode) &&
+            (initMode.Equals("detect", StringComparison.OrdinalIgnoreCase) ||
+             initMode.Equals("preview", StringComparison.OrdinalIgnoreCase))) ||
+            IsTrue(options, "detect") ||
+            IsTrue(options, "dry-run"))
+        {
+            return RunInitDetect(invocation, detection);
+        }
+
         var force = IsTrue(options, "force");
         var nonInteractive = IsTrue(options, "yes") || IsTrue(options, "non-interactive");
 
@@ -456,14 +617,32 @@ public static class BuiltinCommandRegistration
                 $"Configuration already exists at '{existingConfig}'. Use --force to overwrite.");
         }
 
-        var detectedTemplate = DetectTemplate(workingDir);
         var requestedLocation = ReadOption(options, "location");
-        var template = ReadOption(options, "template") ?? detectedTemplate;
+        var requestedTemplate = ReadOption(options, "template");
+        var template = requestedTemplate ?? detectedTemplate;
+        var autoTemplateRequested = string.IsNullOrWhiteSpace(requestedTemplate) || requestedTemplate.Equals("auto", StringComparison.OrdinalIgnoreCase);
         var schemaSource = ReadOption(options, "schema-source") ?? "remote";
         var withPolicy = IsTrue(options, "with-policy");
         var policyTemplate = ReadOption(options, "policy-template");
         var instructionsPathOption = ReadOption(options, "instructions-path");
         var withInstructions = IsTrue(options, "with-instructions") || !string.IsNullOrWhiteSpace(instructionsPathOption);
+        var withDockerArtifact = IsTrue(options, "with-docker-artifact");
+        var withoutDockerArtifact = IsTrue(options, "without-docker-artifact");
+
+        if (withDockerArtifact && withoutDockerArtifact)
+        {
+            return CommandResult.Fail("init", 1, "Use either --with-docker-artifact or --without-docker-artifact, not both.");
+        }
+
+        if (withoutDockerArtifact)
+        {
+            withDockerArtifact = false;
+        }
+        else if (detection.HasDockerfile && !options.ContainsKey("with-docker-artifact"))
+        {
+            // Dockerfile repositories default to scaffolding a docker artifact.
+            withDockerArtifact = true;
+        }
 
         if (!string.IsNullOrWhiteSpace(requestedLocation) &&
             !requestedLocation.Equals(".rexo", StringComparison.OrdinalIgnoreCase) &&
@@ -479,6 +658,15 @@ public static class BuiltinCommandRegistration
         {
             Console.WriteLine("Rexo init");
             Console.WriteLine($"Detected repository template: {detectedTemplate}");
+            if (detectedTemplate.Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine($"Detected .NET project kind: {(detection.DotnetLibrary ? "library" : "app/service")}");
+            }
+
+            if (detection.HasDockerfile)
+            {
+                Console.WriteLine("Detected Dockerfile(s): yes (consider adding a docker artifact after init)");
+            }
 
             template = PromptChoice(
                 "Choose starter template:",
@@ -502,14 +690,22 @@ public static class BuiltinCommandRegistration
                 "no");
             withInstructions = createInstructionsAnswer.Equals("yes", StringComparison.OrdinalIgnoreCase);
 
+            if (detection.HasDockerfile)
+            {
+                var addDockerArtifactAnswer = PromptChoice(
+                    "Dockerfile detected. Add starter docker artifact config?",
+                    InitYesNoChoices,
+                    "yes");
+                withDockerArtifact = addDockerArtifactAnswer.Equals("yes", StringComparison.OrdinalIgnoreCase);
+            }
+
             if (withPolicy)
             {
                 var available = EmbeddedPolicyTemplates.TemplateNames;
-                var defaultPolicyTemplate = available.Contains(template, StringComparer.OrdinalIgnoreCase)
-                    ? template
-                    : available.Contains("standard", StringComparer.OrdinalIgnoreCase)
-                        ? "standard"
-                        : available.Count > 0 ? available[0] : "standard";
+                var defaultPolicyTemplate = SelectDefaultPolicyTemplate(template, detection, available, autoTemplateRequested)
+                    ?? "standard";
+
+                Console.WriteLine("Tip: run 'rx templates list' and 'rx templates show <name>' to inspect policy templates.");
 
                 policyTemplate = PromptChoice(
                     "Choose policy template:",
@@ -536,17 +732,13 @@ public static class BuiltinCommandRegistration
         if (withPolicy && string.IsNullOrWhiteSpace(policyTemplate))
         {
             var available = EmbeddedPolicyTemplates.TemplateNames;
-            policyTemplate = available.Contains(template, StringComparer.OrdinalIgnoreCase)
-                ? template
-                : available.Contains("standard", StringComparer.OrdinalIgnoreCase)
-                    ? "standard"
-                    : available.Count > 0 ? available[0] : null;
+            policyTemplate = SelectDefaultPolicyTemplate(template, detection, available, autoTemplateRequested);
         }
 
         template = NormalizeTemplate(template);
         if (template is null)
         {
-            return CommandResult.Fail("init", 1, "Invalid --template value. Use auto|dotnet|node|python|go|generic.");
+            return CommandResult.Fail("init", 1, "Invalid --template value. Use auto|dotnet|node|python|go|generic|blank.");
         }
 
         schemaSource = NormalizeSchemaSource(schemaSource);
@@ -557,7 +749,12 @@ public static class BuiltinCommandRegistration
 
         if (withPolicy && string.IsNullOrWhiteSpace(policyTemplate))
         {
-            return CommandResult.Fail("init", 1, "No policy templates are available to initialize.");
+            return CommandResult.Fail(
+                "init",
+                1,
+                template!.Equals("blank", StringComparison.OrdinalIgnoreCase)
+                    ? "The blank template has no default policy. Specify --policy-template explicitly, or omit --with-policy."
+                    : "No policy templates are available to initialize.");
         }
 
         if (withPolicy && !EmbeddedPolicyTemplates.TemplateNames.Contains(policyTemplate!, StringComparer.OrdinalIgnoreCase))
@@ -615,7 +812,13 @@ public static class BuiltinCommandRegistration
         var schemaValue = schemaSource.Equals("local", StringComparison.OrdinalIgnoreCase)
             ? RepoConfigurationLoader.SupportedRexoSchemaPath
             : RepoConfigurationLoader.SupportedRexoSchemaUri;
-        var configJson = BuildStarterConfigJson(repoName, template, schemaValue, withPolicy ? policyTemplate : null);
+        var configJson = BuildStarterConfigJson(
+            repoName,
+            template,
+            schemaValue,
+            withPolicy ? policyTemplate : null,
+            withDockerArtifact,
+            detection);
 
         string? rexoSchemaPath = null;
         string? policySchemaPath = null;
@@ -697,6 +900,9 @@ public static class BuiltinCommandRegistration
             withPolicy ? $"Policy template: {policyTemplate}" : "Policy template: none",
             withPolicy ? $"Initialized policy: {policyPath}" : "Policy file: not created",
             withInstructions ? $"Initialized instructions: {instructionsTargetPath}" : "Instructions file: not created",
+            withDockerArtifact ? "Initialized docker artifact: yes" : "Initialized docker artifact: no",
+            detection.HasDockerfile ? "Packaging hint: Dockerfile detected. Consider adding a docker artifact to .rexo/rexo.json." : "Packaging hint: none detected",
+            "Policy template tips: run 'rx templates list' and 'rx templates show <name>'",
             "Next steps:",
             "  1. Review and edit rexo.json for your workflow.",
             "  2. Run 'rx list' and then 'rx build' (or your configured command).",
@@ -704,6 +910,151 @@ public static class BuiltinCommandRegistration
         };
 
         return CommandResult.Ok("init", string.Join(Environment.NewLine, lines));
+    }
+
+    private static CommandResult RunInitDetect(CommandInvocation invocation, InitDetection detection)
+    {
+        var options = invocation.Options;
+        var requestedTemplate = ReadOption(options, "template");
+        var template = string.IsNullOrWhiteSpace(requestedTemplate) || requestedTemplate.Equals("auto", StringComparison.OrdinalIgnoreCase)
+            ? detection.Template
+            : requestedTemplate;
+
+        var normalizedTemplate = NormalizeTemplate(template);
+        if (normalizedTemplate is null)
+        {
+            return CommandResult.Fail("init", 1, "Invalid --template value. Use auto|dotnet|node|python|go|generic|blank.");
+        }
+
+        var available = EmbeddedPolicyTemplates.TemplateNames;
+        var recommendedPolicyTemplate = SelectDefaultPolicyTemplate(
+            normalizedTemplate,
+            detection,
+            available,
+            autoTemplateRequested: string.IsNullOrWhiteSpace(requestedTemplate) || requestedTemplate.Equals("auto", StringComparison.OrdinalIgnoreCase));
+        var detectContract = BuildInitDetectContract(
+            requestedTemplate,
+            normalizedTemplate,
+            detection,
+            recommendedPolicyTemplate,
+            available);
+
+        var lines = new List<string>
+        {
+            "Init detection preview:",
+            $"  detectedTemplate: {detection.Template}",
+            $"  resolvedTemplate: {normalizedTemplate}",
+            $"  dotnetProjectKind: {(detection.Template.Equals("dotnet", StringComparison.OrdinalIgnoreCase) ? (detection.DotnetLibrary ? "library" : "app/service") : "n/a")}",
+            $"  hasDockerfile: {(detection.HasDockerfile ? "yes" : "no")}",
+            $"  recommendedPolicyTemplate: {recommendedPolicyTemplate ?? "none"}",
+            "  tips: run 'rx templates list' and 'rx templates show <name>'",
+        };
+
+        return new CommandResult(
+            "init detect",
+            true,
+            0,
+            string.Join(Environment.NewLine, lines),
+            new Dictionary<string, object?>
+            {
+                ["contractVersion"] = detectContract.ContractVersion,
+                ["detectedTemplate"] = detection.Template,
+                ["resolvedTemplate"] = normalizedTemplate,
+                ["dotnetProjectKind"] = detection.Template.Equals("dotnet", StringComparison.OrdinalIgnoreCase)
+                    ? (detection.DotnetLibrary ? "library" : "app/service")
+                    : null,
+                ["hasDockerfile"] = detection.HasDockerfile,
+                ["recommendedPolicyTemplate"] = recommendedPolicyTemplate,
+                ["availablePolicyTemplates"] = available,
+                ["detection"] = detectContract.Detection,
+                ["recommendations"] = detectContract.Recommendations,
+            });
+    }
+
+    private static InitDetectContract BuildInitDetectContract(
+        string? requestedTemplate,
+        string resolvedTemplate,
+        InitDetection detection,
+        string? recommendedPolicyTemplate,
+        IReadOnlyList<string> availablePolicyTemplates)
+    {
+        var signals = new List<string>
+        {
+            $"template-detected:{detection.Template}",
+            detection.HasDockerfile ? "dockerfile:present" : "dockerfile:absent",
+            detection.Template.Equals("dotnet", StringComparison.OrdinalIgnoreCase)
+                ? $"dotnet-kind:{(detection.DotnetLibrary ? "library" : "app-service")}" : "dotnet-kind:n/a",
+        };
+
+        var recommendations = new List<InitRecommendation>();
+
+        if (string.IsNullOrWhiteSpace(requestedTemplate) || requestedTemplate.Equals("auto", StringComparison.OrdinalIgnoreCase))
+        {
+            recommendations.Add(new InitRecommendation(
+                "starter-template",
+                resolvedTemplate,
+                0.95,
+                [
+                    $"Auto detection selected '{resolvedTemplate}'.",
+                    $"Signals: {string.Join(", ", signals)}",
+                ]));
+        }
+        else
+        {
+            recommendations.Add(new InitRecommendation(
+                "starter-template",
+                resolvedTemplate,
+                1.0,
+                [
+                    $"User explicitly requested template '{requestedTemplate}'.",
+                ]));
+        }
+
+        if (!string.IsNullOrWhiteSpace(recommendedPolicyTemplate))
+        {
+            var reasons = new List<string>
+            {
+                $"'{recommendedPolicyTemplate}' is available in embedded policy templates.",
+            };
+
+            if (resolvedTemplate.Equals("dotnet", StringComparison.OrdinalIgnoreCase) && detection.DotnetLibrary &&
+                recommendedPolicyTemplate.Equals("dotnet-library", StringComparison.OrdinalIgnoreCase))
+            {
+                reasons.Add("All discovered .csproj files look like libraries.");
+            }
+
+            if (resolvedTemplate.Equals("dotnet", StringComparison.OrdinalIgnoreCase) && detection.HasDockerfile &&
+                recommendedPolicyTemplate.Equals("dotnet-api", StringComparison.OrdinalIgnoreCase))
+            {
+                reasons.Add("Dockerfile detected; API/service workflow likely.");
+            }
+
+            recommendations.Add(new InitRecommendation(
+                "policy-template",
+                recommendedPolicyTemplate,
+                recommendedPolicyTemplate.Equals("standard", StringComparison.OrdinalIgnoreCase) ? 0.65 : 0.9,
+                reasons));
+        }
+
+        recommendations.Add(new InitRecommendation(
+            "docker-artifact",
+            detection.HasDockerfile ? "consider-enable" : "not-recommended",
+            detection.HasDockerfile ? 0.85 : 0.5,
+            detection.HasDockerfile
+                ? ["Dockerfile detected. Starter docker artifact can speed setup."]
+                : ["No Dockerfile detected. Docker artifact is optional."]));
+
+        var detectionPayload = new InitDetectionPayload(
+            detection.Template,
+            resolvedTemplate,
+            detection.Template.Equals("dotnet", StringComparison.OrdinalIgnoreCase)
+                ? (detection.DotnetLibrary ? "library" : "app/service")
+                : null,
+            detection.HasDockerfile,
+            signals,
+            availablePolicyTemplates);
+
+        return new InitDetectContract("1.1", detectionPayload, recommendations);
     }
 
     private static async Task<CommandResult> RunInitCiAsync(
@@ -763,38 +1114,154 @@ public static class BuiltinCommandRegistration
         return CommandResult.Ok("init", string.Join(Environment.NewLine, lines));
     }
 
-    private static string DetectTemplate(string workingDir)
+    private static InitDetection DetectTemplate(string workingDir)
     {
+        var dockerfileCandidates = Directory
+            .EnumerateFiles(workingDir, "Dockerfile", SearchOption.AllDirectories)
+            .Select(path => Path.GetRelativePath(workingDir, path).Replace('\\', '/'))
+            .OrderBy(path => path.Equals("Dockerfile", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .ThenBy(path => path.Length)
+            .ThenBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var hasDockerfile = dockerfileCandidates.Count > 0;
+        var primaryDockerfile = hasDockerfile ? dockerfileCandidates[0] : null;
+
         if (File.Exists(Path.Combine(workingDir, "pyproject.toml")) ||
             File.Exists(Path.Combine(workingDir, "requirements.txt")) ||
             Directory.EnumerateFiles(workingDir, "*.py", SearchOption.TopDirectoryOnly).Any())
         {
-            return "python";
+            return new InitDetection("python", DotnetLibrary: false, hasDockerfile, primaryDockerfile);
         }
 
         if (File.Exists(Path.Combine(workingDir, "go.mod")))
         {
-            return "go";
+            return new InitDetection("go", DotnetLibrary: false, hasDockerfile, primaryDockerfile);
         }
 
+        var csprojFiles = Directory.EnumerateFiles(workingDir, "*.csproj", SearchOption.AllDirectories).ToList();
         if (Directory.EnumerateFiles(workingDir, "*.sln", SearchOption.TopDirectoryOnly).Any() ||
-            Directory.EnumerateFiles(workingDir, "*.csproj", SearchOption.AllDirectories).Any())
+            csprojFiles.Count > 0)
         {
-            return "dotnet";
+            var dotnetLibrary = csprojFiles.Count > 0 && csprojFiles.All(IsLibraryProject);
+            return new InitDetection("dotnet", dotnetLibrary, hasDockerfile, primaryDockerfile);
         }
 
         if (File.Exists(Path.Combine(workingDir, "package.json")))
         {
-            return "node";
+            return new InitDetection("node", DotnetLibrary: false, hasDockerfile, primaryDockerfile);
         }
 
-        return "generic";
+        return new InitDetection("generic", DotnetLibrary: false, hasDockerfile, primaryDockerfile);
     }
 
-        private static string? NormalizeCiProvider(string value)
+    private static bool IsLibraryProject(string csprojPath)
+    {
+        try
         {
-                var normalized = value.Trim().ToLowerInvariant();
-                return normalized is "github" or "azdo" or "both"
+            var document = XDocument.Load(csprojPath);
+            var sdk = document.Root?.Attribute("Sdk")?.Value ?? string.Empty;
+            if (sdk.Contains("Web", StringComparison.OrdinalIgnoreCase) ||
+                sdk.Contains("Worker", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            var outputType = document
+                .Descendants()
+                .FirstOrDefault(e => e.Name.LocalName.Equals("OutputType", StringComparison.OrdinalIgnoreCase))
+                ?.Value;
+
+            if (!string.IsNullOrWhiteSpace(outputType))
+            {
+                var normalized = outputType.Trim();
+                if (normalized.Equals("Exe", StringComparison.OrdinalIgnoreCase) ||
+                    normalized.Equals("WinExe", StringComparison.OrdinalIgnoreCase) ||
+                    normalized.Equals("AppContainerExe", StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+        catch (Exception)
+        {
+            // Fall back to app/service classification when project metadata cannot be parsed.
+            return false;
+        }
+    }
+
+    private static string? SelectDefaultPolicyTemplate(
+        string template,
+        InitDetection detection,
+        IReadOnlyList<string> available,
+        bool autoTemplateRequested)
+    {
+        if (available.Count == 0)
+        {
+            return null;
+        }
+
+        if (template.Equals("blank", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (template.Equals("dotnet", StringComparison.OrdinalIgnoreCase) && autoTemplateRequested)
+        {
+            if (detection.DotnetLibrary && available.Contains("dotnet-library", StringComparer.OrdinalIgnoreCase))
+            {
+                return "dotnet-library";
+            }
+
+            if (detection.HasDockerfile && available.Contains("dotnet-api", StringComparer.OrdinalIgnoreCase))
+            {
+                return "dotnet-api";
+            }
+        }
+
+        if (available.Contains(template, StringComparer.OrdinalIgnoreCase))
+        {
+            return template;
+        }
+
+        if (available.Contains("standard", StringComparer.OrdinalIgnoreCase))
+        {
+            return "standard";
+        }
+
+        return available[0];
+    }
+
+    private sealed record InitDetection(
+        string Template,
+        bool DotnetLibrary,
+        bool HasDockerfile,
+        string? PrimaryDockerfileRelativePath);
+
+    private sealed record InitDetectContract(
+        string ContractVersion,
+        InitDetectionPayload Detection,
+        IReadOnlyList<InitRecommendation> Recommendations);
+
+    private sealed record InitDetectionPayload(
+        string DetectedTemplate,
+        string ResolvedTemplate,
+        string? DotnetProjectKind,
+        bool HasDockerfile,
+        IReadOnlyList<string> Signals,
+        IReadOnlyList<string> AvailablePolicyTemplates);
+
+    private sealed record InitRecommendation(
+        string Kind,
+        string Value,
+        double Confidence,
+        IReadOnlyList<string> Reasons);
+
+    private static string? NormalizeCiProvider(string value)
+    {
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized is "github" or "azdo" or "both"
                         ? normalized
                         : null;
         }
@@ -859,7 +1326,7 @@ public static class BuiltinCommandRegistration
 
     private static string? NormalizeTemplate(string value)
     {
-        var known = new[] { "dotnet", "node", "python", "go", "generic" };
+        var known = new[] { "dotnet", "node", "python", "go", "generic", "blank" };
         return known.Contains(value, StringComparer.OrdinalIgnoreCase)
             ? value.ToLowerInvariant()
             : null;
@@ -893,36 +1360,42 @@ public static class BuiltinCommandRegistration
         return match ?? defaultChoice;
     }
 
-    private static string BuildStarterConfigJson(string repoName, string template, string schemaValue, string? policyTemplate)
+    private static string BuildStarterConfigJson(
+        string repoName,
+        string template,
+        string schemaValue,
+        string? policyTemplate,
+        bool withDockerArtifact,
+        InitDetection detection)
     {
         var commands = template switch
         {
             "dotnet" => new Dictionary<string, object>
             {
-                ["compile"] = new
+                ["local build"] = new
                 {
-                    description = "Restore and compile the solution",
+                    description = "Restore and build the solution locally",
                     steps = new object[]
                     {
                         new { id = "restore", run = "dotnet restore" },
-                        new { id = "compile", run = "dotnet build -c Release --no-restore" },
+                        new { id = "build", run = "dotnet build -c Release --no-restore" },
                     },
                 },
             },
             "node" => new Dictionary<string, object>
             {
-                ["compile"] = new
+                ["local build"] = new
                 {
-                    description = "Install and compile",
+                    description = "Install and build locally",
                     steps = new object[]
                     {
                         new { run = "npm ci" },
                         new { run = "npm run build" },
                     },
                 },
-                ["run-tests"] = new
+                ["local test"] = new
                 {
-                    description = "Run tests",
+                    description = "Run tests locally",
                     steps = new object[]
                     {
                         new { run = "npm test" },
@@ -931,18 +1404,18 @@ public static class BuiltinCommandRegistration
             },
             "python" => new Dictionary<string, object>
             {
-                ["compile"] = new
+                ["local build"] = new
                 {
-                    description = "Install dependencies and run a quick syntax pass",
+                    description = "Install dependencies and run a quick syntax pass locally",
                     steps = new object[]
                     {
                         new { run = "python -m pip install -r requirements.txt" },
                         new { run = "python -m compileall ." },
                     },
                 },
-                ["run-tests"] = new
+                ["local test"] = new
                 {
-                    description = "Run tests",
+                    description = "Run tests locally",
                     steps = new object[]
                     {
                         new { run = "python -m pytest" },
@@ -951,29 +1424,40 @@ public static class BuiltinCommandRegistration
             },
             "go" => new Dictionary<string, object>
             {
-                ["compile"] = new
+                ["local build"] = new
                 {
-                    description = "Download modules and build",
+                    description = "Download modules and build locally",
                     steps = new object[]
                     {
                         new { run = "go mod download" },
                         new { run = "go build ./..." },
                     },
                 },
-                ["run-tests"] = new
+                ["local test"] = new
                 {
-                    description = "Run tests",
+                    description = "Run tests locally",
                     steps = new object[]
                     {
                         new { run = "go test ./..." },
                     },
                 },
             },
+            "blank" => new Dictionary<string, object>
+            {
+                ["hello"] = new
+                {
+                    description = "Starter command — replace with your workflow",
+                    steps = new object[]
+                    {
+                        new { run = "echo Hello from Rexo!" },
+                    },
+                },
+            },
             _ => new Dictionary<string, object>
             {
-                ["compile"] = new
+                ["local build"] = new
                 {
-                    description = "Starter build command",
+                    description = "Starter build command — replace with your real build steps",
                     steps = new object[]
                     {
                         new { run = "echo TODO: replace with real build command" },
@@ -982,10 +1466,20 @@ public static class BuiltinCommandRegistration
             },
         };
 
-        if (!string.IsNullOrWhiteSpace(policyTemplate))
+        if (!string.IsNullOrWhiteSpace(policyTemplate) &&
+            !template.Equals("blank", StringComparison.OrdinalIgnoreCase))
         {
             commands = RenameCollidingStarterCommands(commands, policyTemplate);
         }
+
+        // blank opts out of all implicit lifecycle via embedded:none.
+        // A specific policy template stacks on top of standard so both lifecycle sets are available.
+        string[] extendsValue = template.Equals("blank", StringComparison.OrdinalIgnoreCase)
+            ? ["embedded:none"]
+            : (!string.IsNullOrWhiteSpace(policyTemplate) &&
+               !policyTemplate.Equals("standard", StringComparison.OrdinalIgnoreCase)
+                ? ["embedded:standard", $"embedded:{policyTemplate}"]
+                : ["embedded:standard"]);
 
         var doc = new Dictionary<string, object?>
         {
@@ -993,15 +1487,22 @@ public static class BuiltinCommandRegistration
             ["schemaVersion"] = "1.0",
             ["name"] = string.IsNullOrWhiteSpace(repoName) ? "my-repo" : repoName,
             ["description"] = "Generated by rx init",
-            ["extends"] = new[] { "embedded:standard" },
+            ["extends"] = extendsValue,
             ["versioning"] = new { provider = "auto", fallback = "0.1.0" },
             ["commands"] = commands,
         };
+
+        if (withDockerArtifact)
+        {
+            doc["artifacts"] = new object[] { BuildDockerArtifactTemplate(detection) };
+        }
 
         if (template == "dotnet")
         {
             doc["tests"] = new { enabled = true, configuration = "Release" };
         }
+
+        // blank template intentionally omits tests and artifacts — the user adds them explicitly.
 
         return JsonSerializer.Serialize(doc, IndentedJsonOptions);
     }
@@ -1029,6 +1530,51 @@ public static class BuiltinCommandRegistration
         }
 
         return result;
+    }
+
+    private static Dictionary<string, object> BuildDockerArtifactTemplate(InitDetection detection)
+    {
+        var artifact = new Dictionary<string, object>
+        {
+            ["type"] = "docker",
+        };
+
+        var settings = BuildDockerArtifactSettings(detection);
+        if (settings is not null)
+        {
+            artifact["settings"] = settings;
+        }
+
+        return artifact;
+    }
+
+    private static Dictionary<string, object>? BuildDockerArtifactSettings(InitDetection detection)
+    {
+        if (!detection.HasDockerfile)
+        {
+            return null;
+        }
+
+        var dockerfilePath = detection.PrimaryDockerfileRelativePath;
+        if (string.IsNullOrWhiteSpace(dockerfilePath) ||
+            dockerfilePath.Equals("Dockerfile", StringComparison.OrdinalIgnoreCase))
+        {
+            // Root Dockerfile + '.' context are provider defaults; omit settings entirely.
+            return null;
+        }
+
+        var settings = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["dockerfile"] = dockerfilePath,
+        };
+
+        var contextPath = Path.GetDirectoryName(dockerfilePath)?.Replace('\\', '/') ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(contextPath))
+        {
+            settings["context"] = contextPath;
+        }
+
+        return settings;
     }
 
     private static HashSet<string> GetPolicyReservedNames(string policyTemplate)

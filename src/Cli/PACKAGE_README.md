@@ -68,6 +68,24 @@ Custom destination for instructions file:
 rx init --yes --with-instructions --instructions-path .github/instructions/rexo.instructions.md
 ```
 
+### Docker artifact scaffolding
+
+When `rx init` detects a `Dockerfile` in the repository, it automatically scaffolds a minimal docker artifact in the generated config (defaulting to **yes** in interactive mode, and opting in automatically in non-interactive mode).
+
+To opt out in non-interactive mode:
+
+```bash
+rx init --yes --without-docker-artifact
+```
+
+To force docker artifact scaffolding even when no Dockerfile is detected:
+
+```bash
+rx init --yes --with-docker-artifact
+```
+
+> `--with-docker-artifact` and `--without-docker-artifact` cannot be combined — passing both is an error.
+
 Minimal example:
 
 ```json
