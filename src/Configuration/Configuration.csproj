@@ -1,9 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <!-- LogicalName derives from $(RexoSchemaVersion) extracted from rexo.schema.json $id in Directory.Build.props -->
     <EmbeddedResource Include="..\\..\\rexo.schema.json"
-      LogicalName="Rexo.Configuration.rexo.schema.1.0.json" />
+      LogicalName="Rexo.Configuration.rexo.schema.$(RexoSchemaVersion).json" />
     <EmbeddedResource Include="..\\..\\policy.schema.json"
-      LogicalName="Rexo.Configuration.policy.schema.1.0.json" />
+      LogicalName="Rexo.Configuration.policy.schema.$(RexoSchemaVersion).json" />
+  </ItemGroup>
+  <!-- Exclude the template from compilation; the generated copy in obj/ is added by the target below -->
+  <ItemGroup>
+    <Compile Remove="SchemaVersion.template.cs" />
+    <None Include="SchemaVersion.template.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\\Core\\Core.csproj" />
@@ -14,4 +20,26 @@
     <PackageReference Include="NJsonSchema" />
     <PackageReference Include="YamlDotNet" />
   </ItemGroup>
+  <!--
+    Generates obj/SchemaVersion.g.cs by replacing __REXO_SCHEMA_TAG__ and __REXO_SCHEMA_VERSION__
+    in SchemaVersion.template.cs. Tokens are resolved from $(RexoSchemaTag) and $(RexoSchemaVersion),
+    which are derived from the $id field in rexo.schema.json.
+  -->
+  <Target Name="GenerateSchemaVersionConstants" BeforeTargets="CoreCompile">
+    <PropertyGroup>
+      <_SchemaConstantsFile>$(MSBuildProjectDirectory)\$(BaseIntermediateOutputPath)SchemaVersion.g.cs</_SchemaConstantsFile>
+    </PropertyGroup>
+    <ReadLinesFromFile File="$(MSBuildProjectDirectory)\SchemaVersion.template.cs">
+      <Output TaskParameter="Lines" ItemName="_SchemaTemplateLines" />
+    </ReadLinesFromFile>
+    <ItemGroup>
+      <_SchemaGeneratedLines Include="@(_SchemaTemplateLines->Replace('__REXO_SCHEMA_TAG__', '$(RexoSchemaTag)')->Replace('__REXO_SCHEMA_VERSION__', '$(RexoSchemaVersion)'))" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(_SchemaConstantsFile)" Lines="@(_SchemaGeneratedLines)" Overwrite="true" />
+    <ItemGroup>
+      <_SchemaTemplateLines Remove="@(_SchemaTemplateLines)" />
+      <_SchemaGeneratedLines Remove="@(_SchemaGeneratedLines)" />
+      <Compile Include="$(_SchemaConstantsFile)" />
+    </ItemGroup>
+  </Target>
 </Project>

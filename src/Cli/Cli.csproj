@@ -23,6 +23,7 @@
     <PackageReadmeFile>PACKAGE_README.generated.md</PackageReadmeFile>
     <_DocTag Condition="'$(Version)' != ''">v$(Version)</_DocTag>
     <_DocTag Condition="'$(_DocTag)' == ''">release/next</_DocTag>
+    <!-- RexoSchemaTag is derived from rexo.schema.json $id in Directory.Build.props -->
     <InternalsVisibleTo>Rexo.Configuration.Tests</InternalsVisibleTo>
   </PropertyGroup>
   <!--
@@ -56,7 +57,7 @@
       <Output TaskParameter="Lines" ItemName="_MdTemplateLines" />
     </ReadLinesFromFile>
     <ItemGroup>
-      <_MdGeneratedLines Include="@(_MdTemplateLines->Replace('__REXO_DOC_TAG__', '$(_DocTag)'))" />
+      <_MdGeneratedLines Include="@(_MdTemplateLines->Replace('__REXO_DOC_TAG__', '$(_DocTag)')->Replace('__REXO_SCHEMA_TAG__', '$(RexoSchemaTag)'))" />
     </ItemGroup>
     <WriteLinesToFile File="%(PackagedMarkdownTemplate.GeneratedFile)" Lines="@(_MdGeneratedLines)" Overwrite="true" />
     <ItemGroup>
