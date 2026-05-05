@@ -26,14 +26,28 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Only auto-merge patch and minor updates.
-      - name: Approve and enable auto-merge for patch and minor updates
+      # GitHub Actions tokens are not allowed to submit approvals.
+      # Optionally provide DEPENDABOT_AUTO_APPROVE_TOKEN (PAT from a maintainer/bot user)
+      # if your branch protection requires an approval before merge.
+      - name: Optionally approve with bot token for patch and minor updates
+        if: >-
+          (steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+           steps.metadata.outputs.update-type == 'version-update:semver-minor') &&
+          secrets.DEPENDABOT_AUTO_APPROVE_TOKEN != ''
+        run: |
+          gh pr review "$PR_URL" --approve \
+            --body "Automatically approved: ${{ steps.metadata.outputs.update-type }} update."
+        env:
+          GH_TOKEN: ${{ secrets.DEPENDABOT_AUTO_APPROVE_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+
+      # Enable auto-merge for patch/minor updates. This queues the merge and GitHub
+      # will complete it after all required branch protection checks are satisfied.
+      - name: Enable auto-merge for patch and minor updates
         if: >-
           steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
           steps.metadata.outputs.update-type == 'version-update:semver-minor'
         run: |
-          gh pr review "$PR_URL" --approve \
-            --body "Automatically approved: ${{ steps.metadata.outputs.update-type }} update."
           gh pr merge "$PR_URL" --auto --squash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
