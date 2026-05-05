@@ -4,7 +4,14 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+    groups:
+      nuget-patch-minor:
+        update-types: [patch, minor]
+
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: weekly
+    groups:
+      actions-patch-minor:
+        update-types: [patch, minor]
