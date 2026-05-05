@@ -1,6 +1,6 @@
 # Rexo
 
-Rexo is a config-driven repository command runtime for local and CI workflows. Use it as a lightweight command/alias system, or opt into policy templates for build, verification, artifact production, and release orchestration.
+Rexo is a config-driven repository command runtime for local and CI workflows. Use it as a lightweight command/alias system, or opt into lifecycle policies for build, verification, artifact production, and release orchestration.
 
 ## Quickstart
 
@@ -14,7 +14,7 @@ dotnet tool install --global Rexo.Cli
 rx init
 
 # Or non-interactive with no policy (pure command/alias runtime)
-rx init --template blank --yes
+rx init --stack blank --yes
 
 # Run a configured command
 rx hello
@@ -28,7 +28,7 @@ rx hello
 rx init
 
 # Or non-interactive with explicit policy
-rx init --template auto --with-policy --yes
+rx init --stack auto --with-policy --yes
 
 # See what would happen
 rx plan
@@ -39,6 +39,14 @@ rx release
 # Push artifacts — requires explicit opt-in everywhere (local and CI)
 rx release --push
 ```
+
+## Stack vs Policy
+
+These two `rx init` concepts are distinct:
+
+**`--stack`** — the technology stack of the repository. Tells the wizard what kind of project you have so it can scaffold an appropriate starter `rexo.json`. Valid values: `auto` (detect from disk), `dotnet`, `node`, `python`, `go`, `java`, `ruby`, `generic`, `blank`. The stack shapes the generated config — which artifact type to add, what project-specific convenience commands to include (`local build`, `local test`), and so on. The stack choice is a one-time scaffolding decision.
+
+**`--policy`** — which embedded lifecycle policy to adopt. When you pass `--with-policy`, a `.rexo/policy.json` file is written and referenced from `rexo.json` via `extends`. The policy provides the shared lifecycle commands (`build`, `test`, `verify`, `release`, `plan`, `push`, etc.). Available policies: `standard` (language-agnostic), `dotnet` (extends standard with .NET-specific steps). A project's stack and policy are independent: you can have a `node` stack with a `standard` policy, or a `dotnet` stack with no policy at all.
 
 ## Goals
 
@@ -159,7 +167,7 @@ You can also run Rexo without installing it globally by using `dotnet`:
 
 ```bash
 dotnet tool run rx -- --help
-dotnet tool run rx -- init --yes --template auto
+dotnet tool run rx -- init --yes --stack auto
 ```
 
 ## Versioning

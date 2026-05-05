@@ -58,6 +58,11 @@ When `rx init --schema-source local --with-policy` is used, both schema files ar
   // Inherit from one or more base configs (local paths, resolved relative to this file)
   "extends": ["./base/rexo.json"],
 
+  // Opt-in remote policy sources (version-controlled, lower priority than REXO_POLICY_SOURCES)
+  "policySources": [
+    "nuget:MyOrg.Policies@1.2.0#policies/standard.json"
+  ],
+
   "commands": { ... },
   "aliases": { ... },
   "versioning": { ... },
@@ -916,18 +921,24 @@ Use as `uses: builtin:<name>` in a step:
 
 `rx init` also supports interactive policy setup and these non-interactive flags:
 
-- `--template auto|dotnet|node|python|go|generic|blank`
+- `--stack auto|dotnet|node|python|go|generic|blank` — the technology stack to scaffold
 - `--detect` / `--dry-run` (preview only, no files written)
 - `--schema-source local|remote`
 - `--with-policy`
-- `--policy-template <name>` (e.g. `standard`, `dotnet`, `dotnet-api`, `dotnet-library`)
+- `--policy <name>` (e.g. `standard`, `dotnet`, `dotnet-api`, `dotnet-library`)
 - `--with-docker-artifact`
 - `--without-docker-artifact` (non-interactive opt-out when Dockerfile is detected)
 - `--yes` and `--force`
 
-**Template descriptions:**
+> **Stack vs Policy**
+>
+> `--stack` describes the technology of your repository (what you build). It controls the shape of the generated `rexo.json` — artifact types, local convenience commands, etc. This is a one-time scaffolding choice.
+>
+> `--policy` selects an embedded lifecycle policy (how you manage releases). When combined with `--with-policy`, a `.rexo/policy.json` is written and referenced from `rexo.json` via `extends`. The policy provides shared commands (`build`, `test`, `verify`, `release`, `plan`, …). Stack and policy are independent: a `node` stack can use a `standard` policy.
 
-| Template | What it scaffolds |
+**Stack descriptions:**
+
+| Stack | What it scaffolds |
 | --- | --- |
 | `auto` | Detects project type from files in the working directory |
 | `dotnet` | .NET project (restore, build, test steps) |
@@ -944,7 +955,7 @@ Detection behavior notes:
 - During `rx init`, the wizard asks "Will this repo build and publish artifacts? (Docker images, packages, charts, etc.)". If you answer yes (or if artifacts are auto-detected in non-interactive mode), `embedded:standard` is added to `extends` automatically so lifecycle commands (`plan`, `build`, `release`, etc.) are available.
 - When a Dockerfile is detected **and** the artifacts question is answered yes, docker artifact scaffolding defaults to `yes` as a follow-up question.
 - Use `--without-docker-artifact` to keep a non-interactive run minimal even when Dockerfiles are present.
-- When `--with-policy` is used with `--template auto` and a .NET repo is detected:
+- When `--with-policy` is used with `--stack auto` and a .NET repo is detected:
   - library-like repos prefer `dotnet-library` when available.
   - repos with Dockerfile signals prefer `dotnet-api` when available.
 - `blank` never generates `extends` — it is always policy-free. Using `--with-policy` with `blank` is an error.
@@ -960,10 +971,10 @@ Docker artifact scaffold behavior:
 
 | Scenario | Generated `extends` |
 | --- | --- |
-| `blank` template | *(omitted)* — always policy-free |
+| `blank` stack | *(omitted)* — always policy-free |
 | Artifacts detected or requested, no `--with-policy` | `["embedded:standard"]` — added automatically |
-| `--with-policy --policy-template standard` | `["embedded:standard"]` |
-| `--with-policy --policy-template dotnet-api` (or any non-standard) | `["embedded:standard", "embedded:dotnet-api"]` |
+| `--with-policy --policy standard` | `["embedded:standard"]` |
+| `--with-policy --policy dotnet-api` (or any non-standard) | `["embedded:standard", "embedded:dotnet-api"]` |
 | No artifacts, no `--with-policy` | *(omitted)* — pure command/alias config |
 
 Examples:
@@ -973,22 +984,22 @@ Examples:
 rx new --yes
 
 # blank canvas — add your own commands
-rx init --yes --template blank
+rx init --yes --stack blank
 
 # preview auto detection and recommendation
 rx init detect
 
-# preview with explicit auto template and JSON output
-rx init --template auto --detect --json
+# preview with explicit auto stack and JSON output
+rx init --stack auto --detect --json
 
 # scaffold config and include starter docker artifact
-rx init --yes --template auto --with-docker-artifact
+rx init --yes --stack auto --with-docker-artifact
 
 # keep non-interactive init minimal even when Dockerfile is detected
-rx init --yes --template auto --without-docker-artifact
+rx init --yes --stack auto --without-docker-artifact
 
-# use a specific policy template (stacks standard + dotnet-api in extends)
-rx init --yes --template dotnet --with-policy --policy-template dotnet-api
+# use a specific policy (stacks standard + dotnet-api in extends)
+rx init --yes --stack dotnet --with-policy --policy dotnet-api
 ```
 
 `rx init detect --json` returns a richer machine-readable contract that includes versioned detection metadata and ranked recommendations:
@@ -1132,20 +1143,168 @@ These fields are all available in templates as `{{version.<field>}}` after `buil
 
 ---
 
+## Remote Policy Sources
+
+Policy files can be loaded from remote locations — not just from the local filesystem. This lets platform or infra teams publish a shared `policy.json` once and have every repository consume it automatically without any per-repo changes.
+
+Remote sources can be declared in two places:
+
+- **`policySources` in `rexo.json`** — opt-in, version-controlled alongside the repo. Ideal for teams that share a policy by choice.
+- **`REXO_POLICY_SOURCES` environment variable** — org-enforced, set in CI by the platform team. Repos cannot override it.
+
+The full merge order (lowest → highest priority):
+
+```
+embedded:standard/dotnet (via extends)
+    ↑
+policySources in rexo.json         ← opt-in, repo controls
+    ↑
+REXO_POLICY_SOURCES env var        ← org-enforced, always wins over config
+    ↑
+local .rexo/policy.json            ← repo-local tweaks, highest priority
+    ↑
+rexo.json commands                 ← final authority
+```
+
+### `policySources` in `rexo.json`
+
+Declare policy sources directly in the config file. These are version-controlled and portable — anyone cloning the repo gets the same policies resolved.
+
+```jsonc
+{
+  "policySources": [
+    "nuget:MyOrg.Policies@1.2.0#policies/dotnet.json",
+    "https://raw.githubusercontent.com/my-org/policies/v3.0.0/base.json#sha256=e3b0c44..."
+  ]
+}
+```
+
+Supports the same source formats as `REXO_POLICY_SOURCES` (see below). Sources are evaluated in order; later entries override earlier ones.
+
+### `REXO_POLICY_SOURCES`
+
+A semicolon- or comma-separated list of policy sources to load via environment variable. Evaluated in order; later sources override earlier ones. Overrides anything declared in `policySources`. Supports four source types:
+
+#### HTTP / HTTPS
+
+```
+REXO_POLICY_SOURCES=https://raw.githubusercontent.com/my-org/policies/main/policy.json
+```
+
+Fetches a `policy.json` file over HTTPS. Append `#sha256=<hex>` to the URL to pin the content:
+
+```
+REXO_POLICY_SOURCES=https://raw.githubusercontent.com/my-org/policies/abc123/policy.json#sha256=e3b0c44298fc...
+```
+
+If the fetch fails, Rexo falls back to the cached copy under `.rexo/cache/policies/` if one exists.
+
+#### Git reference
+
+```
+REXO_POLICY_SOURCES=git+https://github.com/my-org/policies@abc1234#policies/standard.json
+```
+
+Format: `git+<repo>@<ref>#<path-in-repo>`
+
+- `<repo>` — HTTPS or SSH URL of the repository
+- `<ref>` — commit SHA, tag, or branch name (use a SHA or tag when pinning is required)
+- `<path-in-repo>` — relative path to the policy file inside the repository
+
+Runs `git show <ref>:<path>` locally, so the repository must be cloned and accessible.
+
+#### NuGet package
+
+```
+REXO_POLICY_SOURCES=nuget:MyOrg.Policies@1.2.0#policies/standard.json
+```
+
+Format: `nuget:<packageId>@<version>#<path-in-package>`
+
+- Downloads the `.nupkg` from the configured NuGet feed
+- Extracts the file at the specified path inside the package
+- `REXO_NUGET_POLICY_SOURCE` overrides the feed root (default: `https://api.nuget.org`)
+
+#### Local file (fallback)
+
+Any entry that does not start with `http://`, `https://`, `git+`, or `nuget:` is treated as a local path (absolute or relative to the working directory):
+
+```
+REXO_POLICY_SOURCES=/shared/infra/policy.json;./local-overrides.json
+```
+
+### `REXO_POLICY_TRUST`
+
+Controls which hosts are allowed to serve remote policies. Value is a semicolon- or comma-separated list of allowed hostnames. Subdomains are included automatically.
+
+Default (when the variable is not set):
+
+```
+raw.githubusercontent.com;github.com;api.nuget.org
+```
+
+To allow all hosts (e.g. in a private network):
+
+```
+REXO_POLICY_TRUST=allow-all
+```
+
+Attempts to load a policy from an untrusted host fail with a clear error rather than silently.
+
+### `REXO_POLICY_REQUIRE_PINNED`
+
+Set to `true` to enforce pinned references for all remote sources. When enabled:
+
+- HTTP sources must include a `#sha256=<hex>` fragment
+- Git sources must use a commit SHA or immutable tag (not `main`, `master`, or `latest`)
+- NuGet sources must specify an explicit version
+
+```
+REXO_POLICY_REQUIRE_PINNED=true
+```
+
+Recommended for production CI environments to prevent supply-chain surprises.
+
+### `REXO_NUGET_POLICY_SOURCE`
+
+Overrides the NuGet feed root used when loading `nuget:` sources. Useful for private package registries:
+
+```
+REXO_NUGET_POLICY_SOURCE=https://pkgs.dev.azure.com/my-org/_packaging/my-feed/nuget
+```
+
+### Caching
+
+Successfully fetched remote policies are cached under `.rexo/cache/policies/` (keyed by a SHA-256 of the source reference). If a subsequent fetch fails (network unavailable, repo unreachable), the cached copy is used automatically.
+
+Add `.rexo/cache/` to `.gitignore`.
+
+### Merge order
+
+Sources are resolved in this order (first to last = lowest to highest priority):
+
+1. Embedded `standard` policy (always applied as baseline, via `extends`)
+2. `policySources` entries in `rexo.json` (in listed order, later entries win)
+3. `REXO_POLICY_SOURCES` env var entries (in listed order, later entries win)
+4. Local `.rexo/policy.json` (highest priority — always wins)
+
+### Multiple sources example
+
+```bash
+# In rexo.json (opt-in, version-controlled)
+"policySources": ["nuget:MyOrg.BasePolicy@2.0.0#policies/base.json"]
+
+# In CI (org-enforced override)
+REXO_POLICY_SOURCES=nuget:MyOrg.DotNetPolicy@3.0.1#policies/dotnet.json
+REXO_POLICY_TRUST=api.nuget.org
+REXO_POLICY_REQUIRE_PINNED=true
+```
+
+---
+
 ## Known Limitations and Unresolved Features
 
 The following features are defined in the product scope but not yet implemented:
-
-### Policy Sources
-
-- Local policy files are still supported (`policy.json` alongside `rexo.json`, or files in `.rexo/`; `.repo/` remains backward compatible).
-- Additional policy sources can be loaded via `REXO_POLICY_SOURCES` (semicolon/comma separated):
-- HTTP/HTTPS URL: `https://.../policy.json` (optional pin: `#sha256=<hex>`)
-- Git reference: `git+<repo>@<ref>#<path>`
-- NuGet reference: `nuget:<packageId>@<version>#<pathInPackage>`
-- Loaded remote policies are cached under `.rexo/cache/policies/`.
-- Trust model is enforced via `REXO_POLICY_TRUST` (host allow-list, or `allow-all`).
-- Pin enforcement can be enabled with `REXO_POLICY_REQUIRE_PINNED=true`.
 
 ### Parallel Step Execution
 

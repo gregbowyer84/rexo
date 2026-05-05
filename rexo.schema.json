@@ -42,7 +42,14 @@
     },
     "extends": {
       "type": "array",
-      "description": "Reserved for future configuration composition/merge support.",
+      "description": "List of config sources to merge into this config before applying local values. Supports embedded lifecycle policies via the 'embedded:' URI scheme (e.g. 'embedded:standard', 'embedded:dotnet') and local file paths. Embedded policies provide shared lifecycle commands (build, test, verify, release, plan, push, etc.). Use 'rx policies list' to see available embedded policies.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "policySources": {
+      "type": "array",
+      "description": "Policy-only sources loaded and merged into the effective config before the local policy.json and REXO_POLICY_SOURCES env-var sources. Each entry supports the same source types as REXO_POLICY_SOURCES: HTTPS URL (optionally with #sha256=<hex> pin), git+ reference (git+<repo>@<ref>#<path>), nuget: reference (nuget:<id>@<version>#<path>), or a local file path. REXO_POLICY_SOURCES always wins over config-declared sources. Use this for opt-in team policies that should be version-controlled alongside the repo.",
       "items": {
         "type": "string"
       }
@@ -83,147 +90,22 @@
     "settings": {
       "description": "Toolchain-specific settings available as {{settings.*}} in policy command templates.",
       "$ref": "#/$defs/settings"
+    },
+    "vars": {
+      "description": "Free-form template variable bag. All values are accessible as {{vars.*}} in step run strings and support arbitrary nesting (e.g. {{vars.dotnet.solution}}).",
+      "$ref": "#/$defs/vars"
     }
   },
   "$defs": {
     "settings": {
       "type": "object",
-      "description": "Toolchain-specific settings used by embedded policy templates.",
-      "additionalProperties": true,
-      "properties": {
-        "dotnet": {
-          "$ref": "#/$defs/dotnetSettings"
-        },
-        "node": {
-          "$ref": "#/$defs/nodeSettings"
-        }
-      }
+      "description": "Free-form toolchain settings bag available as {{settings.*}} in templates.",
+      "additionalProperties": true
     },
-    "dotnetSettings": {
+    "vars": {
       "type": "object",
-      "description": "Settings for embedded:dotnet command templates.",
-      "additionalProperties": true,
-      "properties": {
-        "solution": {
-          "type": "string",
-          "description": "Solution or project path passed to dotnet CLI commands. Empty means current directory."
-        },
-        "configuration": {
-          "type": "string",
-          "description": "Build configuration passed to dotnet build/test commands.",
-          "default": "Release"
-        },
-        "test": {
-          "type": "object",
-          "description": "dotnet test command settings.",
-          "additionalProperties": true,
-          "properties": {
-            "logger": {
-              "type": "string",
-              "description": "Value passed to --logger for dotnet test.",
-              "default": "trx"
-            },
-            "coverageArgs": {
-              "type": "string",
-              "description": "Additional raw arguments for coverage collection/output appended to dotnet test."
-            },
-            "args": {
-              "type": "string",
-              "description": "Additional raw arguments appended to dotnet test."
-            }
-          }
-        },
-        "analyze": {
-          "type": "object",
-          "description": "dotnet analyze command settings.",
-          "additionalProperties": true,
-          "properties": {
-            "formatArgs": {
-              "type": "string",
-              "description": "Additional raw arguments appended to dotnet format --verify-no-changes."
-            },
-            "buildArgs": {
-              "type": "string",
-              "description": "Additional raw arguments appended to dotnet build -warnaserror --no-restore."
-            },
-            "errorLogArgs": {
-              "type": "string",
-              "description": "Additional raw arguments appended to dotnet build for ErrorLog/SARIF customization."
-            }
-          }
-        }
-      }
-    },
-    "nodeSettings": {
-      "type": "object",
-      "description": "Settings for embedded:node command templates.",
-      "additionalProperties": true,
-      "properties": {
-        "packageManager": {
-          "type": "string",
-          "description": "Node.js package manager binary.",
-          "default": "npm"
-        },
-        "buildScript": {
-          "type": "string",
-          "description": "Script name used by the build command.",
-          "default": "build"
-        },
-        "testScript": {
-          "type": "string",
-          "description": "Script name used by the test command.",
-          "default": "test"
-        },
-        "lintScript": {
-          "type": "string",
-          "description": "Script name used by the analyze command.",
-          "default": "lint"
-        },
-        "auditLevel": {
-          "type": "string",
-          "description": "Minimum severity threshold for npm audit.",
-          "default": "high"
-        },
-        "test": {
-          "type": "object",
-          "description": "node test command settings.",
-          "additionalProperties": true,
-          "properties": {
-            "args": {
-              "type": "string",
-              "description": "Additional raw arguments appended to the node test script invocation."
-            },
-            "coverageArgs": {
-              "type": "string",
-              "description": "Additional raw arguments appended to the node test script for coverage collection (e.g. --coverage for Jest)."
-            }
-          }
-        },
-        "analyze": {
-          "type": "object",
-          "description": "node analyze command settings.",
-          "additionalProperties": true,
-          "properties": {
-            "args": {
-              "type": "string",
-              "description": "Additional raw arguments appended to the node lint script invocation."
-            },
-            "sarifScript": {
-              "type": "string",
-              "description": "npm script name that produces SARIF output to outputs.analysis.sarif. Defaults to 'lint:sarif'.",
-              "default": "lint:sarif"
-            },
-            "sarifArgs": {
-              "type": "string",
-              "description": "Additional raw arguments appended to the SARIF lint script invocation."
-            }
-          }
-        },
-        "auditArgs": {
-          "type": "string",
-          "description": "Additional raw arguments appended to npm audit."
-        }
-      }
+      "description": "Free-form template variable bag. Accessible as {{vars.*}} in step run strings. Values can be strings, numbers, booleans, or arbitrarily nested objects.",
+      "additionalProperties": true
     },
     "repoCommand": {
       "type": "object",
@@ -1703,8 +1585,8 @@
             },
             "sarif": {
               "type": "string",
-              "description": "Full file path for the primary SARIF output file.",
-              "default": "artifacts/analysis/build.sarif"
+              "description": "SARIF output directory.",
+              "default": "artifacts/analysis/sarif"
             }
           }
         },
@@ -1717,6 +1599,16 @@
               "type": "string",
               "description": "Full file path for the npm/security audit JSON output.",
               "default": "artifacts/security/audit.json"
+            },
+            "reports": {
+              "type": "string",
+              "description": "Security report output directory.",
+              "default": "artifacts/security"
+            },
+            "sarif": {
+              "type": "string",
+              "description": "SARIF output directory for security findings.",
+              "default": "artifacts/security/sarif"
             }
           }
         },

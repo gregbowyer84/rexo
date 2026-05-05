@@ -81,6 +81,11 @@
           "uses": "builtin:validate"
         },
         {
+          "id": "pre-verify",
+          "command": "pre-verify",
+          "whenExists": true
+        },
+        {
           "id": "verify-contributions",
           "command": "verify",
           "whenExists": true
@@ -99,6 +104,11 @@
           "id": "security",
           "command": "security",
           "whenExists": true
+        },
+        {
+          "id": "post-verify",
+          "command": "post-verify",
+          "whenExists": true
         }
       ]
     },
@@ -115,12 +125,22 @@
           "uses": "builtin:resolve-version"
         },
         {
+          "id": "pre-build",
+          "command": "pre-build",
+          "whenExists": true
+        },
+        {
           "id": "build-artifacts",
           "uses": "builtin:build-artifacts"
         },
         {
           "id": "tag-artifacts",
           "uses": "builtin:tag-artifacts"
+        },
+        {
+          "id": "post-build",
+          "command": "post-build",
+          "whenExists": true
         }
       ]
     },
@@ -166,6 +186,11 @@
       },
       "steps": [
         {
+          "id": "pre-release",
+          "command": "pre-release",
+          "whenExists": true
+        },
+        {
           "id": "verify",
           "command": "verify",
           "whenExists": true
@@ -175,12 +200,29 @@
           "command": "build"
         },
         {
+          "id": "pre-push",
+          "command": "pre-push",
+          "when": "{{options.push}}",
+          "whenExists": true
+        },
+        {
           "id": "push-artifacts",
           "uses": "builtin:push-artifacts",
           "when": "{{options.push}}",
           "with": {
             "confirm": "{{options.push}}"
           }
+        },
+        {
+          "id": "post-push",
+          "command": "post-push",
+          "when": "{{options.push}}",
+          "whenExists": true
+        },
+        {
+          "id": "post-release",
+          "command": "post-release",
+          "whenExists": true
         }
       ]
     },

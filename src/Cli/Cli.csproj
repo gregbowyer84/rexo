@@ -20,12 +20,50 @@
   </ItemGroup>
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <PackageReadmeFile>PACKAGE_README.md</PackageReadmeFile>
+    <PackageReadmeFile>PACKAGE_README.generated.md</PackageReadmeFile>
+    <_DocTag Condition="'$(Version)' != ''">v$(Version)</_DocTag>
+    <_DocTag Condition="'$(_DocTag)' == ''">release/next</_DocTag>
     <InternalsVisibleTo>Rexo.Configuration.Tests</InternalsVisibleTo>
   </PropertyGroup>
+  <!--
+    List every markdown file that should be token-processed and packed.
+    Add a new item here whenever a new .md file needs to be shipped in the package.
+    GeneratedFile = intermediate output path for the processed copy.
+    PackagePath   = destination folder inside the .nupkg (\ = root).
+  -->
   <ItemGroup>
-    <None Include="PACKAGE_README.md" Pack="true" PackagePath="\" />
+    <PackagedMarkdownTemplate Include="$(MSBuildProjectDirectory)\PACKAGE_README.md">
+      <GeneratedFile>$(MSBuildProjectDirectory)\$(BaseIntermediateOutputPath)PACKAGE_README.generated.md</GeneratedFile>
+      <PackagePath>\</PackagePath>
+    </PackagedMarkdownTemplate>
   </ItemGroup>
+  <!--
+    Register each generated file as a Pack=true None item so _GetPackageFiles
+    can collect them before GenerateNuspec runs. The item transform inherits
+    GeneratedFile and PackagePath metadata from PackagedMarkdownTemplate.
+  -->
+  <ItemGroup>
+    <None Include="@(PackagedMarkdownTemplate -> '%(GeneratedFile)')" Pack="true" PackagePath="%(PackagePath)" Visible="false" />
+  </ItemGroup>
+  <!--
+    Batched target: runs once per PackagedMarkdownTemplate item.
+    Replaces __REXO_DOC_TAG__ with the resolved doc tag and writes the generated file.
+  -->
+  <Target Name="GeneratePackagedMarkdown"
+          BeforeTargets="GenerateNuspec"
+          Outputs="%(PackagedMarkdownTemplate.GeneratedFile)">
+    <ReadLinesFromFile File="%(PackagedMarkdownTemplate.Identity)">
+      <Output TaskParameter="Lines" ItemName="_MdTemplateLines" />
+    </ReadLinesFromFile>
+    <ItemGroup>
+      <_MdGeneratedLines Include="@(_MdTemplateLines->Replace('__REXO_DOC_TAG__', '$(_DocTag)'))" />
+    </ItemGroup>
+    <WriteLinesToFile File="%(PackagedMarkdownTemplate.GeneratedFile)" Lines="@(_MdGeneratedLines)" Overwrite="true" />
+    <ItemGroup>
+      <_MdTemplateLines Remove="@(_MdTemplateLines)" />
+      <_MdGeneratedLines Remove="@(_MdGeneratedLines)" />
+    </ItemGroup>
+  </Target>
   <ItemGroup>
     <PackageReference Include="System.CommandLine" />
     <PackageReference Include="Spectre.Console" />

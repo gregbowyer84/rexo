@@ -84,4 +84,126 @@ public sealed class ConfigBuilderTests
         Assert.Empty(warnings);
         Assert.Equal("updated", resultConfig.Name);
     }
+
+    [Fact]
+    public async Task LoadPoliciesFromSourcesAsyncLoadsLocalFilePolicyAndMerges()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"rexo-policy-src-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        var policyFile = Path.Combine(dir, "team.policy.json");
+
+        await File.WriteAllTextAsync(policyFile,
+            """
+            {
+              "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json",
+              "schemaVersion": "1.0",
+              "name": "team-policy",
+              "commands": {
+                "team-check": {
+                  "description": "Run team check",
+                  "options": {},
+                  "steps": [{ "run": "echo team" }]
+                }
+              },
+              "aliases": {}
+            }
+            """);
+
+        try
+        {
+            var result = await PolicySourceLoader.LoadPoliciesFromSourcesAsync(
+                [policyFile],
+                dir,
+                debug: false,
+                CancellationToken.None);
+
+            Assert.NotNull(result.Commands);
+            Assert.True(result.Commands!.ContainsKey("team-check"));
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public async Task LoadPoliciesFromSourcesAsyncMergesMultipleSourcesInOrder()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"rexo-policy-multi-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+
+        var base1 = Path.Combine(dir, "base.policy.json");
+        var override1 = Path.Combine(dir, "override.policy.json");
+
+        await File.WriteAllTextAsync(base1,
+            """
+            {
+              "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json",
+              "schemaVersion": "1.0",
+              "name": "base-policy",
+              "commands": {
+                "shared-cmd": {
+                  "description": "Base version",
+                  "options": {},
+                  "steps": [{ "run": "echo base" }]
+                },
+                "base-only": {
+                  "description": "Only in base",
+                  "options": {},
+                  "steps": [{ "run": "echo base-only" }]
+                }
+              },
+              "aliases": {}
+            }
+            """);
+
+        await File.WriteAllTextAsync(override1,
+            """
+            {
+              "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json",
+              "schemaVersion": "1.0",
+              "name": "override-policy",
+              "commands": {
+                "shared-cmd": {
+                  "description": "Override version",
+                  "options": {},
+                  "steps": [{ "run": "echo override" }]
+                }
+              },
+              "aliases": {}
+            }
+            """);
+
+        try
+        {
+            var result = await PolicySourceLoader.LoadPoliciesFromSourcesAsync(
+                [base1, override1],
+                dir,
+                debug: false,
+                CancellationToken.None);
+
+            Assert.NotNull(result.Commands);
+            // override1 wins for shared-cmd
+            Assert.Equal("Override version", result.Commands!["shared-cmd"].Description);
+            // base-only survives from base1
+            Assert.True(result.Commands.ContainsKey("base-only"));
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public async Task LoadPoliciesFromSourcesAsyncEmptyListReturnsEmptyPolicy()
+    {
+        var result = await PolicySourceLoader.LoadPoliciesFromSourcesAsync(
+            [],
+            Path.GetTempPath(),
+            debug: false,
+            CancellationToken.None);
+
+        Assert.Null(result.Commands);
+        Assert.Null(result.Aliases);
+    }
 }

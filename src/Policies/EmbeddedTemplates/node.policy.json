@@ -9,7 +9,7 @@
       "steps": [
         {
           "id": "node-install",
-          "run": "{{settings.node.packageManager | default('npm')}} ci"
+          "run": "{{vars.node.packageManager | default('npm')}} ci"
         }
       ]
     },
@@ -18,7 +18,7 @@
       "steps": [
         {
           "id": "node-build",
-          "run": "{{settings.node.packageManager | default('npm')}} run {{settings.node.buildScript | default('build')}} --if-present"
+          "run": "{{vars.node.packageManager | default('npm')}} run build --if-present"
         }
       ]
     },
@@ -27,7 +27,7 @@
       "steps": [
         {
           "id": "node-test",
-          "run": "{{settings.node.packageManager | default('npm')}} run {{settings.node.testScript | default('test')}} --if-present {{settings.node.test.args | default('')}} {{settings.node.test.coverageArgs | default('')}}",
+          "run": "{{vars.node.packageManager | default('npm')}} test --if-present",
           "outputs": {
             "testResults": [
               "{{outputs.tests.results}}/**/*.xml",
@@ -45,7 +45,7 @@
       "steps": [
         {
           "id": "node-lint",
-          "run": "{{settings.node.packageManager | default('npm')}} run {{settings.node.lintScript | default('lint')}} --if-present {{settings.node.analyze.args | default('')}}",
+          "run": "{{vars.node.packageManager | default('npm')}} run lint --if-present",
           "outputs": {
             "analysisReports": [
               "{{outputs.analysis.reports}}/**/*"
@@ -54,10 +54,10 @@
         },
         {
           "id": "node-lint-sarif",
-          "run": "{{settings.node.packageManager | default('npm')}} run {{settings.node.analyze.sarifScript | default('lint:sarif')}} --if-present {{settings.node.analyze.sarifArgs | default('')}}",
+          "run": "{{vars.node.packageManager | default('npm')}} run lint:sarif --if-present",
           "outputs": {
             "sarifReports": [
-              "{{outputs.analysis.sarif}}"
+              "{{outputs.analysis.sarif}}/**/*.sarif"
             ]
           }
         }
@@ -68,7 +68,7 @@
       "steps": [
         {
           "id": "node-audit",
-          "run": "{{settings.node.packageManager | default('npm')}} audit --json --audit-level={{settings.node.auditLevel | default('high')}} {{settings.node.auditArgs | default('')}}{{outputs.security.audit | prefix(' > ')}}",
+          "run": "{{vars.node.packageManager | default('npm')}} audit --json --audit-level=high{{outputs.security.audit | prefix(' > ')}}",
           "outputs": {
             "securityReports": [
               "{{outputs.security.audit}}"
@@ -79,3 +79,4 @@
     }
   }
 }
+

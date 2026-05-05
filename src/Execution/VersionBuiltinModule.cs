@@ -8,6 +8,17 @@ internal sealed class VersionBuiltinModule : IConfigBuiltinModule
     {
         registry.Register("builtin:resolve-version", async (step, ctx, ct) =>
         {
+            const string cacheKey = "builtin:resolve-version";
+            if (context.Loader.RunCache.TryGetValue(cacheKey, out var cached))
+            {
+                if (cached.Outputs.TryGetValue("semver", out var cachedSemver))
+                {
+                    Console.WriteLine($"  Using cached version: {cachedSemver}.");
+                }
+
+                return cached;
+            }
+
             var versioningConfig = context.Config.Versioning is not null
                 ? new VersioningConfig(
                     context.Config.Versioning.Provider,
@@ -20,7 +31,7 @@ internal sealed class VersionBuiltinModule : IConfigBuiltinModule
 
             Console.WriteLine($"  Resolved version: {versionResult.SemVer}");
 
-            return new StepResult(
+            var result = new StepResult(
                 step.Id ?? "resolve-version",
                 true,
                 0,
@@ -46,6 +57,8 @@ internal sealed class VersionBuiltinModule : IConfigBuiltinModule
                     ["isStable"] = versionResult.IsStable.ToString().ToLowerInvariant(),
                     ["commitsSinceVersionSource"] = versionResult.CommitsSinceVersionSource?.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 });
+            context.Loader.RunCache[cacheKey] = result;
+            return result;
         });
     }
 }

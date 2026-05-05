@@ -25,11 +25,26 @@ internal static class PolicySourceLoader
             return new PolicyConfig();
         }
 
-        var merged = new PolicyConfig();
         var sources = sourcesValue
             .Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+
+        return await LoadPoliciesFromSourcesAsync(sources, workingDir, debug, cancellationToken);
+    }
+
+    public static async Task<PolicyConfig> LoadPoliciesFromSourcesAsync(
+        IReadOnlyList<string> sources,
+        string workingDir,
+        bool debug,
+        CancellationToken cancellationToken)
+    {
+        if (sources.Count == 0)
+        {
+            return new PolicyConfig();
+        }
+
+        var merged = new PolicyConfig();
 
         foreach (var source in sources)
         {

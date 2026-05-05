@@ -92,7 +92,7 @@ public sealed class InitCommandTests
                 {
                     ["yes"] = "true",
                     ["with-policy"] = "true",
-                    ["policy-template"] = "dotnet",
+                    ["policy"] = "dotnet",
                 },
                 Json: false,
                 JsonFile: null,
@@ -140,7 +140,7 @@ public sealed class InitCommandTests
                 {
                     ["yes"] = "true",
                     ["with-policy"] = "true",
-                    ["policy-template"] = "standard",
+                    ["policy"] = "standard",
                 },
                 Json: false,
                 JsonFile: null,
@@ -177,7 +177,7 @@ public sealed class InitCommandTests
                 {
                     ["yes"] = "true",
                     ["with-policy"] = "true",
-                    ["policy-template"] = "does-not-exist",
+                    ["policy"] = "does-not-exist",
                 },
                 Json: false,
                 JsonFile: null,
@@ -186,7 +186,7 @@ public sealed class InitCommandTests
             var result = await executor.ExecuteAsync("init", invocation, CancellationToken.None);
 
             Assert.False(result.Success);
-            Assert.Contains("Invalid --policy-template", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Invalid --policy", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -854,7 +854,7 @@ public sealed class InitCommandTests
 
             var invocation = new CommandInvocation(
                 new Dictionary<string, string>(),
-                new Dictionary<string, string?> { ["yes"] = "true", ["template"] = "blank" },
+                new Dictionary<string, string?> { ["yes"] = "true", ["stack"] = "blank" },
                 Json: false,
                 JsonFile: null,
                 WorkingDirectory: dir);
@@ -888,7 +888,7 @@ public sealed class InitCommandTests
 
             var invocation = new CommandInvocation(
                 new Dictionary<string, string>(),
-                new Dictionary<string, string?> { ["yes"] = "true", ["template"] = "blank", ["with-policy"] = "true" },
+                new Dictionary<string, string?> { ["yes"] = "true", ["stack"] = "blank", ["with-policy"] = "true" },
                 Json: false,
                 JsonFile: null,
                 WorkingDirectory: dir);
@@ -920,9 +920,9 @@ public sealed class InitCommandTests
                 new Dictionary<string, string?>
                 {
                     ["yes"] = "true",
-                    ["template"] = "dotnet",
+                    ["stack"] = "dotnet",
                     ["with-policy"] = "true",
-                    ["policy-template"] = "dotnet",
+                    ["policy"] = "dotnet",
                 },
                 Json: false,
                 JsonFile: null,
