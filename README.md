@@ -1,5 +1,11 @@
 # Rexo
 
+[![ci-build-test](https://github.com/agile-north/rexo/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/agile-north/rexo/actions/workflows/build.yml)
+[![CodeQL](https://github.com/agile-north/rexo/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/agile-north/rexo/actions/workflows/codeql.yml)
+[![NuGet version](https://img.shields.io/nuget/v/Rexo.Cli)](https://www.nuget.org/packages/Rexo.Cli)
+[![NuGet downloads](https://img.shields.io/nuget/dt/Rexo.Cli)](https://www.nuget.org/packages/Rexo.Cli)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
 Rexo is a config-driven repository command runtime for local and CI workflows. Use it as a lightweight command/alias system, or opt into lifecycle policies for build, verification, artifact production, and release orchestration.
 
 ## Quickstart

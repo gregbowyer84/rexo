@@ -5,6 +5,8 @@ tag-prefix: '[vV]'
 # Branching/versioning quick reference
 #
 # Stable/public lines (no prerelease label):
+#   main
+#   master (legacy)
 #   release/current
 #   release/<x> or release/<x.y>
 #   release/<customer>/current
@@ -44,19 +46,24 @@ tag-prefix: '[vV]'
 version-in-branch-pattern: '(?<version>[vV]?\d+(?:\.\d+){0,2})'
 
 branches:
-  # Transitional default branch support while migrating away from master/main.
-  # Example: 1.1.9-dev.44
+  # Stable public release branches.
+  # Produce public/stable versions with no prerelease suffix.
+  # Example: 1.1.9
   master:
     regex: ^master$
-    label: dev
+    mode: ContinuousDeployment
+    label: ''
     increment: Patch
     is-main-branch: true
+    is-release-branch: true
 
   main:
     regex: ^main$
-    label: dev
+    mode: ContinuousDeployment
+    label: ''
     increment: Patch
     is-main-branch: true
+    is-release-branch: true
 
   # Public stable branches.
   #
