@@ -103,7 +103,7 @@ public sealed class RepoConfigurationLoader
                     Commands: policyConfig.Commands is { Count: > 0 } ? policyConfig.Commands : null,
                     Aliases: policyConfig.Aliases is { Count: > 0 } ? policyConfig.Aliases : null);
 
-                merged = merged is null ? embeddedBase : MergeConfigs(merged, embeddedBase);
+                merged = merged is null ? embeddedBase : MergeConfigs(merged, embeddedBase, policyMerge: true);
                 continue;
             }
 
@@ -177,10 +177,10 @@ public sealed class RepoConfigurationLoader
     /// Merges <paramref name="child"/> on top of <paramref name="base"/>:
     /// child wins for scalar properties; collections are combined (child appended after base).
     /// </summary>
-    private static RepoConfig MergeConfigs(RepoConfig @base, RepoConfig child) =>
+    private static RepoConfig MergeConfigs(RepoConfig @base, RepoConfig child, bool policyMerge = false) =>
         new(
             Name: string.IsNullOrEmpty(child.Name) ? @base.Name : child.Name,
-            Commands: MergeDictionaries(@base.Commands, child.Commands),
+            Commands: MergeCommandDictionaries(@base.Commands, child.Commands, policyMerge),
             Aliases: MergeDictionaries(@base.Aliases, child.Aliases))
         {
             Schema = child.Schema ?? @base.Schema,
@@ -191,10 +191,158 @@ public sealed class RepoConfigurationLoader
             Versioning = child.Versioning ?? @base.Versioning,
             Artifacts = MergeLists(@base.Artifacts, child.Artifacts, child.MergeStrategy),
             Runtime = child.Runtime ?? @base.Runtime,
-            Tests = child.Tests ?? @base.Tests,
-            Analysis = child.Analysis ?? @base.Analysis,
             MergeStrategy = child.MergeStrategy ?? @base.MergeStrategy,
         };
+
+    private static Dictionary<string, RepoCommandConfig>? MergeCommandDictionaries(
+        Dictionary<string, RepoCommandConfig>? @base,
+        Dictionary<string, RepoCommandConfig>? child,
+        bool policyMerge = false)
+    {
+        if (@base is null or { Count: 0 }) return child;
+        if (child is null or { Count: 0 }) return @base;
+
+        var result = new Dictionary<string, RepoCommandConfig>(@base);
+        foreach (var kvp in child)
+        {
+            if (result.TryGetValue(kvp.Key, out var baseCmd))
+            {
+                result[kvp.Key] = MergeCommandConfigs(kvp.Key, baseCmd, kvp.Value, policyMerge);
+            }
+            else
+            {
+                result[kvp.Key] = kvp.Value;
+            }
+        }
+
+        return result;
+    }
+
+    private static RepoCommandConfig MergeCommandConfigs(
+        string commandName,
+        RepoCommandConfig baseCmd,
+        RepoCommandConfig childCmd,
+        bool policyMerge = false)
+    {
+        var explicitMerge = childCmd.Merge;
+
+        if (explicitMerge is not null)
+        {
+            return explicitMerge.ToUpperInvariant() switch
+            {
+                "LAYER" => baseCmd,
+                "REPLACE" => childCmd,
+                "APPEND" => MergeCommandAppend(baseCmd, childCmd),
+                "PREPEND" => MergeCommandPrepend(baseCmd, childCmd),
+                "WRAP" => MergeCommandWrap(commandName, baseCmd, childCmd),
+                _ => childCmd,
+            };
+        }
+
+        if (policyMerge)
+        {
+            // Auto-detect composition mode based on self-referential continuation steps.
+            var childHasSelfRef = childCmd.Steps.Exists(s =>
+                string.Equals(s.Command, commandName, StringComparison.OrdinalIgnoreCase));
+
+            if (childHasSelfRef)
+            {
+                return MergeCommandWrap(commandName, baseCmd, childCmd);
+            }
+
+            var baseHasSelfRef = baseCmd.Steps.Exists(s =>
+                string.Equals(s.Command, commandName, StringComparison.OrdinalIgnoreCase));
+
+            if (baseHasSelfRef)
+            {
+                return MergeCommandBaseWrap(commandName, baseCmd, childCmd);
+            }
+
+            // Neither side has a self-ref: base layer wins (child layer is suppressed).
+            return baseCmd;
+        }
+
+        // Default (non-policy, no explicit merge): child replaces base.
+        return childCmd;
+    }
+
+    private static RepoCommandConfig MergeCommandAppend(RepoCommandConfig baseCmd, RepoCommandConfig childCmd)
+    {
+        var steps = new List<RepoStepConfig>(baseCmd.Steps);
+        steps.AddRange(childCmd.Steps);
+        return baseCmd with { Steps = steps };
+    }
+
+    private static RepoCommandConfig MergeCommandPrepend(RepoCommandConfig baseCmd, RepoCommandConfig childCmd)
+    {
+        var steps = new List<RepoStepConfig>(childCmd.Steps);
+        steps.AddRange(baseCmd.Steps);
+        return childCmd with { Steps = steps };
+    }
+
+    private static RepoCommandConfig MergeCommandWrap(
+        string commandName,
+        RepoCommandConfig baseCmd,
+        RepoCommandConfig childCmd)
+    {
+        var continuationIdx = childCmd.Steps.FindIndex(s =>
+            string.Equals(s.Command, commandName, StringComparison.OrdinalIgnoreCase));
+
+        if (continuationIdx < 0)
+        {
+            // No continuation marker: fallback — child steps first, base steps after.
+            var fallback = new List<RepoStepConfig>(childCmd.Steps);
+            fallback.AddRange(baseCmd.Steps);
+            return childCmd with { Steps = fallback };
+        }
+
+        var steps = new List<RepoStepConfig>(childCmd.Steps.Count - 1 + baseCmd.Steps.Count);
+        for (var i = 0; i < childCmd.Steps.Count; i++)
+        {
+            if (i == continuationIdx)
+            {
+                steps.AddRange(baseCmd.Steps);
+            }
+            else
+            {
+                steps.Add(childCmd.Steps[i]);
+            }
+        }
+
+        return childCmd with { Steps = steps };
+    }
+
+    private static RepoCommandConfig MergeCommandBaseWrap(
+        string commandName,
+        RepoCommandConfig baseCmd,
+        RepoCommandConfig childCmd)
+    {
+        var continuationIdx = baseCmd.Steps.FindIndex(s =>
+            string.Equals(s.Command, commandName, StringComparison.OrdinalIgnoreCase));
+
+        if (continuationIdx < 0)
+        {
+            // No continuation marker in base: fallback — base steps first, child steps after.
+            var fallback = new List<RepoStepConfig>(baseCmd.Steps);
+            fallback.AddRange(childCmd.Steps);
+            return baseCmd with { Steps = fallback };
+        }
+
+        var steps = new List<RepoStepConfig>(baseCmd.Steps.Count - 1 + childCmd.Steps.Count);
+        for (var i = 0; i < baseCmd.Steps.Count; i++)
+        {
+            if (i == continuationIdx)
+            {
+                steps.AddRange(childCmd.Steps);
+            }
+            else
+            {
+                steps.Add(baseCmd.Steps[i]);
+            }
+        }
+
+        return baseCmd with { Steps = steps };
+    }
 
     private static Dictionary<TKey, TValue> MergeDictionaries<TKey, TValue>(
         Dictionary<TKey, TValue>? @base,

@@ -552,9 +552,10 @@ public sealed class CliSmokeTests
             var output = await File.ReadAllTextAsync(outFile);
             Assert.Contains("standard", output, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("dotnet", output, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("dotnet-library", output, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("dotnet-api", output, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("none", output, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("node", output, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("dotnet-library", output, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("dotnet-api", output, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -571,12 +572,12 @@ public sealed class CliSmokeTests
         {
             var outFile = Path.Combine(tempDir, "templates-show.json");
             var exitCode = await Program.ExecuteAsync(
-                ["--json", "--json-file", outFile, "templates", "show", "dotnet-library"],
+                ["--json", "--json-file", outFile, "templates", "show", "dotnet"],
                 CancellationToken.None);
             Assert.Equal(0, exitCode);
 
             var output = await File.ReadAllTextAsync(outFile);
-            Assert.Contains("dotnet-library-policy", output, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("dotnet-policy", output, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("commands", output, StringComparison.OrdinalIgnoreCase);
         }
         finally
@@ -624,7 +625,7 @@ public sealed class CliSmokeTests
             Assert.True(outputs.GetProperty("hasDockerfile").GetBoolean());
             Assert.Equal("dotnet", outputs.GetProperty("detectedTemplate").GetString());
             Assert.Equal("dotnet", outputs.GetProperty("resolvedTemplate").GetString());
-            Assert.Equal("dotnet-api", outputs.GetProperty("recommendedPolicyTemplate").GetString());
+            Assert.Equal("dotnet", outputs.GetProperty("recommendedPolicyTemplate").GetString());
 
             var detection = outputs.GetProperty("detection");
             Assert.Equal("dotnet", detection.GetProperty("DetectedTemplate").GetString());
@@ -637,7 +638,7 @@ public sealed class CliSmokeTests
 
             var policyRecommendation = recommendations.First(r =>
                 string.Equals(r.GetProperty("Kind").GetString(), "policy-template", StringComparison.OrdinalIgnoreCase));
-            Assert.Equal("dotnet-api", policyRecommendation.GetProperty("Value").GetString());
+            Assert.Equal("dotnet", policyRecommendation.GetProperty("Value").GetString());
             Assert.True(policyRecommendation.GetProperty("Confidence").GetDouble() >= 0.8);
             Assert.True(policyRecommendation.GetProperty("Reasons").GetArrayLength() > 0);
         }
@@ -707,6 +708,195 @@ public sealed class CliSmokeTests
         {
             Console.SetOut(originalOut);
             Console.SetError(originalError);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Layered command composition integration tests
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task StandardDotnetLayeredTestCommandExpandsAndExecutesSuccessfully()
+    {
+        // Verify that extends: ["embedded:dotnet", "embedded:standard"] correctly
+        // expands standard.test (wrap) around dotnet.test content at compile time.
+        var tempDir = Path.Combine(Path.GetTempPath(), $"rexo-layered-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        var originalDirectory = Environment.CurrentDirectory;
+
+        try
+        {
+            await File.WriteAllTextAsync(
+                Path.Combine(tempDir, "rexo.json"),
+                """
+                {
+                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+                    "schemaVersion": "1.0",
+                    "name": "sample",
+                    "extends": ["embedded:dotnet", "embedded:standard"],
+                    "versioning": {
+                        "provider": "fixed",
+                        "fallback": "1.2.3"
+                    }
+                }
+                """);
+
+            Environment.CurrentDirectory = tempDir;
+
+            // The 'test' command should exist (from both layers) and be executable
+            var listJsonPath = Path.Combine(tempDir, "list-layered.json");
+            var listExitCode = await Program.ExecuteAsync(["--json-file", listJsonPath, "--json", "list"], CancellationToken.None);
+            Assert.Equal(0, listExitCode);
+
+            var listOutput = await File.ReadAllTextAsync(listJsonPath);
+            Assert.Contains("test", listOutput, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("analyze", listOutput, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Environment.CurrentDirectory = originalDirectory;
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public async Task ExplainCommandShowsStepsForLayeredCommands()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"rexo-explain-merge-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        var originalDirectory = Environment.CurrentDirectory;
+
+        try
+        {
+            await File.WriteAllTextAsync(
+                Path.Combine(tempDir, "rexo.json"),
+                """
+                {
+                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+                    "schemaVersion": "1.0",
+                    "name": "sample",
+                    "extends": ["embedded:standard"],
+                    "versioning": {
+                        "provider": "fixed",
+                        "fallback": "1.2.3"
+                    }
+                }
+                """);
+
+            Environment.CurrentDirectory = tempDir;
+
+            // explain test via --json-file to get structured output containing the explain text
+            var explainJsonPath = Path.Combine(tempDir, "explain-test.json");
+            var exitCode = await Program.ExecuteAsync(
+                ["--json-file", explainJsonPath, "--json", "explain", "test"],
+                CancellationToken.None);
+
+            Assert.Equal(0, exitCode);
+            var output = await File.ReadAllTextAsync(explainJsonPath);
+            // The test command from standard shows its description and steps
+            Assert.Contains("test", output, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Run configured tests", output, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Environment.CurrentDirectory = originalDirectory;
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public async Task StandardTestStandaloneRunsGracefullyWithNoInnerLayer()
+    {
+        // When extends: ["embedded:standard"] is used alone (no dotnet/node layer),
+        // the 'test' command should succeed with a skipped continuation step.
+        var tempDir = Path.Combine(Path.GetTempPath(), $"rexo-standalone-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        var originalDirectory = Environment.CurrentDirectory;
+
+        try
+        {
+            await File.WriteAllTextAsync(
+                Path.Combine(tempDir, "rexo.json"),
+                """
+                {
+                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+                    "schemaVersion": "1.0",
+                    "name": "sample",
+                    "extends": ["embedded:standard"],
+                    "versioning": {
+                        "provider": "fixed",
+                        "fallback": "1.2.3"
+                    }
+                }
+                """);
+
+            Environment.CurrentDirectory = tempDir;
+
+            // 'test' runs without error even when no inner layer provides test steps
+            var testExitCode = await Program.ExecuteAsync(["test"], CancellationToken.None);
+            Assert.Equal(0, testExitCode);
+        }
+        finally
+        {
+            Environment.CurrentDirectory = originalDirectory;
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public async Task StandardDotnetLayerModeReleaseBuildCallDoesNotIncludeDotnetBuildSteps()
+    {
+        // Verify that when standard + dotnet are merged with layer mode,
+        // the 'build' command that 'release' calls does NOT include dotnet.build steps.
+        // This ensures release -> build is a fresh command lookup, not a layer continuation.
+        var tempDir = Path.Combine(Path.GetTempPath(), $"rexo-release-build-layer-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        var originalDirectory = Environment.CurrentDirectory;
+
+        try
+        {
+            await File.WriteAllTextAsync(
+                Path.Combine(tempDir, "rexo.json"),
+                """
+                {
+                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+                    "schemaVersion": "1.0",
+                    "name": "sample",
+                    "extends": ["embedded:standard", "embedded:dotnet"],
+                    "versioning": {
+                        "provider": "fixed",
+                        "fallback": "1.2.3"
+                    }
+                }
+                """);
+
+            Environment.CurrentDirectory = tempDir;
+
+            // explain build to see what steps will execute
+            var explainJsonPath = Path.Combine(tempDir, "explain-build.json");
+            var exitCode = await Program.ExecuteAsync(
+                ["--json-file", explainJsonPath, "--json", "explain", "build"],
+                CancellationToken.None);
+
+            Assert.Equal(0, exitCode);
+            var output = await File.ReadAllTextAsync(explainJsonPath);
+
+            // The build command should include standard lifecycle steps
+            Assert.Contains("build-artifacts", output, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("tag-artifacts", output, StringComparison.OrdinalIgnoreCase);
+
+            // But should NOT include dotnet-specific steps
+            Assert.DoesNotContain("dotnet build", output, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("dotnet-build", output, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Environment.CurrentDirectory = originalDirectory;
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
         }
     }
 }

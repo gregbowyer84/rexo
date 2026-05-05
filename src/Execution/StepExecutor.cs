@@ -57,7 +57,7 @@ public sealed class StepExecutor : IStepExecutor
         }
         else if (!string.IsNullOrEmpty(stepDefinition.Command))
         {
-            result = await ExecuteCommandStepAsync(stepId, stepDefinition.Command, stepContext, sw, cancellationToken);
+            result = await ExecuteCommandStepAsync(stepId, stepDefinition, stepContext, sw, cancellationToken);
         }
         else
         {
@@ -174,19 +174,88 @@ public sealed class StepExecutor : IStepExecutor
 
     private async Task<StepResult> ExecuteCommandStepAsync(
         string stepId,
-        string commandName,
+        StepDefinition stepDefinition,
         ExecutionContext context,
         System.Diagnostics.Stopwatch sw,
         CancellationToken cancellationToken)
     {
+        var commandName = stepDefinition.Command ?? string.Empty;
+        var currentCommandName = context.CommandCallStack.Count > 0
+            ? context.CommandCallStack[context.CommandCallStack.Count - 1]
+            : "";
+        var isCurrentCommand = string.Equals(commandName, currentCommandName, StringComparison.OrdinalIgnoreCase);
+
+        // Same-name continuation check: if this step calls the same command as the currently executing one,
+        // it's a layer continuation marker (e.g., inside test, calling {command: "test"}).
+        // This is allowed and should continue to lower layers (if any).
+        // Different-name calls always start fresh from the top layer of the target command.
+
+        // Self-referential continuation step (whenExists=true): this is a layer composition
+        // marker that was NOT expanded at compile time (no inner layers contributed steps).
+        // Skip gracefully — there is no inner-layer content.
+        if (stepDefinition.WhenExists && isCurrentCommand)
+        {
+            sw.Stop();
+            return new StepResult(
+                stepId,
+                true,
+                0,
+                sw.Elapsed,
+                new Dictionary<string, object?>
+                {
+                    ["skipped"] = true,
+                    ["skipReason"] = "no-layer-content",
+                    ["command"] = commandName,
+                });
+        }
+
+        // Cross-command cycle detection: detect cycles like build -> release -> build.
+        // Same-name continuations are allowed (test -> test is valid); only different-name cycles are errors.
+        if (!isCurrentCommand && context.CommandCallStack.Contains(commandName, StringComparer.OrdinalIgnoreCase))
+        {
+            sw.Stop();
+            var cyclePath = string.Join(" -> ", context.CommandCallStack.Append(commandName));
+            return new StepResult(
+                stepId,
+                false,
+                9,
+                sw.Elapsed,
+                new Dictionary<string, object?>
+                {
+                    ["error"] = $"REXO-CMD-CYCLE: Circular command reference detected\n\nPath:\n  {cyclePath}",
+                    ["errorCode"] = Rexo.Core.Models.ErrorCodes.CommandCycle,
+                });
+        }
+
         var invocation = new CommandInvocation(
             context.Args,
             context.Options,
             false,
             null,
-            context.RepositoryRoot);
+            context.RepositoryRoot)
+        {
+            CallStack = context.CommandCallStack,
+        };
 
         var result = await _commandExecutor.ExecuteAsync(commandName, invocation, cancellationToken);
+
+        if (stepDefinition.WhenExists && IsCommandMissingResult(result))
+        {
+            sw.Stop();
+            return new StepResult(
+                stepId,
+                true,
+                0,
+                sw.Elapsed,
+                new Dictionary<string, object?>
+                {
+                    ["message"] = $"Skipping optional command '{commandName}' because it does not exist.",
+                    ["skipped"] = true,
+                    ["skipReason"] = "command-not-found",
+                    ["command"] = commandName,
+                });
+        }
+
         sw.Stop();
 
         return new StepResult(
@@ -196,6 +265,11 @@ public sealed class StepExecutor : IStepExecutor
             sw.Elapsed,
             new Dictionary<string, object?> { ["message"] = result.Message });
     }
+
+    private static bool IsCommandMissingResult(CommandResult result) =>
+        result.ExitCode == 8 &&
+        !string.IsNullOrEmpty(result.Message) &&
+        result.Message.Contains("not found", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsTruthy(string value) =>
         value.Equals("true", StringComparison.OrdinalIgnoreCase) ||

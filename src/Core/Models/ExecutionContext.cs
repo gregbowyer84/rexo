@@ -26,6 +26,15 @@ public sealed record ExecutionContext(
     public VersionResult? Version { get; init; }
     public IReadOnlyDictionary<string, StepResult> CompletedSteps { get; init; } = new Dictionary<string, StepResult>();
 
+    /// <summary>Resolved output paths available as <c>{{outputs.*}}</c> in templates.</summary>
+    public IReadOnlyDictionary<string, object?> ResolvedOutputs { get; init; } = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Resolved toolchain settings available as <c>{{settings.*}}</c> in templates.</summary>
+    public IReadOnlyDictionary<string, object?> ResolvedSettings { get; init; } = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Tracks the command call stack for cross-command cycle detection.</summary>
+    public IReadOnlyList<string> CommandCallStack { get; init; } = [];
+
     public static ExecutionContext Empty(string repositoryRoot) =>
         new(repositoryRoot, null, null, new Dictionary<string, object?>())
         {

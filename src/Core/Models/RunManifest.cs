@@ -47,7 +47,12 @@ public sealed record StepManifestEntry(
     string StepId,
     bool Success,
     int ExitCode,
-    double DurationMs);
+    double DurationMs)
+{
+    /// <summary>Files produced by this step, keyed by logical output name.</summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> FileOutputs { get; init; } =
+        new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+}
 
 public sealed record ArtifactManifestEntry(
     string Type,

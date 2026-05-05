@@ -76,16 +76,155 @@
       "description": "Cross-cutting runtime policy configuration for output and push behavior.",
       "$ref": "#/$defs/runtime"
     },
-    "tests": {
-      "description": "Test execution configuration used by builtin:test.",
-      "$ref": "#/$defs/tests"
+    "outputs": {
+      "description": "Output path contract. Resolved paths are available as {{outputs.*}} in policy command templates.",
+      "$ref": "#/$defs/outputsConfig"
     },
-    "analysis": {
-      "description": "Static analysis configuration used by builtin:analyze.",
-      "$ref": "#/$defs/analysis"
+    "settings": {
+      "description": "Toolchain-specific settings available as {{settings.*}} in policy command templates.",
+      "$ref": "#/$defs/settings"
     }
   },
   "$defs": {
+    "settings": {
+      "type": "object",
+      "description": "Toolchain-specific settings used by embedded policy templates.",
+      "additionalProperties": true,
+      "properties": {
+        "dotnet": {
+          "$ref": "#/$defs/dotnetSettings"
+        },
+        "node": {
+          "$ref": "#/$defs/nodeSettings"
+        }
+      }
+    },
+    "dotnetSettings": {
+      "type": "object",
+      "description": "Settings for embedded:dotnet command templates.",
+      "additionalProperties": true,
+      "properties": {
+        "solution": {
+          "type": "string",
+          "description": "Solution or project path passed to dotnet CLI commands. Empty means current directory."
+        },
+        "configuration": {
+          "type": "string",
+          "description": "Build configuration passed to dotnet build/test commands.",
+          "default": "Release"
+        },
+        "test": {
+          "type": "object",
+          "description": "dotnet test command settings.",
+          "additionalProperties": true,
+          "properties": {
+            "logger": {
+              "type": "string",
+              "description": "Value passed to --logger for dotnet test.",
+              "default": "trx"
+            },
+            "coverageArgs": {
+              "type": "string",
+              "description": "Additional raw arguments for coverage collection/output appended to dotnet test."
+            },
+            "args": {
+              "type": "string",
+              "description": "Additional raw arguments appended to dotnet test."
+            }
+          }
+        },
+        "analyze": {
+          "type": "object",
+          "description": "dotnet analyze command settings.",
+          "additionalProperties": true,
+          "properties": {
+            "formatArgs": {
+              "type": "string",
+              "description": "Additional raw arguments appended to dotnet format --verify-no-changes."
+            },
+            "buildArgs": {
+              "type": "string",
+              "description": "Additional raw arguments appended to dotnet build -warnaserror --no-restore."
+            },
+            "errorLogArgs": {
+              "type": "string",
+              "description": "Additional raw arguments appended to dotnet build for ErrorLog/SARIF customization."
+            }
+          }
+        }
+      }
+    },
+    "nodeSettings": {
+      "type": "object",
+      "description": "Settings for embedded:node command templates.",
+      "additionalProperties": true,
+      "properties": {
+        "packageManager": {
+          "type": "string",
+          "description": "Node.js package manager binary.",
+          "default": "npm"
+        },
+        "buildScript": {
+          "type": "string",
+          "description": "Script name used by the build command.",
+          "default": "build"
+        },
+        "testScript": {
+          "type": "string",
+          "description": "Script name used by the test command.",
+          "default": "test"
+        },
+        "lintScript": {
+          "type": "string",
+          "description": "Script name used by the analyze command.",
+          "default": "lint"
+        },
+        "auditLevel": {
+          "type": "string",
+          "description": "Minimum severity threshold for npm audit.",
+          "default": "high"
+        },
+        "test": {
+          "type": "object",
+          "description": "node test command settings.",
+          "additionalProperties": true,
+          "properties": {
+            "args": {
+              "type": "string",
+              "description": "Additional raw arguments appended to the node test script invocation."
+            },
+            "coverageArgs": {
+              "type": "string",
+              "description": "Additional raw arguments appended to the node test script for coverage collection (e.g. --coverage for Jest)."
+            }
+          }
+        },
+        "analyze": {
+          "type": "object",
+          "description": "node analyze command settings.",
+          "additionalProperties": true,
+          "properties": {
+            "args": {
+              "type": "string",
+              "description": "Additional raw arguments appended to the node lint script invocation."
+            },
+            "sarifScript": {
+              "type": "string",
+              "description": "npm script name that produces SARIF output to outputs.analysis.sarif. Defaults to 'lint:sarif'.",
+              "default": "lint:sarif"
+            },
+            "sarifArgs": {
+              "type": "string",
+              "description": "Additional raw arguments appended to the SARIF lint script invocation."
+            }
+          }
+        },
+        "auditArgs": {
+          "type": "string",
+          "description": "Additional raw arguments appended to npm audit."
+        }
+      }
+    },
     "repoCommand": {
       "type": "object",
       "description": "Reusable command definition for both repository and policy commands.",
@@ -123,6 +262,17 @@
           "type": "integer",
           "description": "Maximum concurrent step execution when parallel groups are used.",
           "minimum": 1
+        },
+        "merge": {
+          "type": "string",
+          "description": "Layered command composition mode for this command.",
+          "enum": [
+            "layer",
+            "replace",
+            "append",
+            "prepend",
+            "wrap"
+          ]
         }
       }
     },
@@ -232,6 +382,10 @@
           "type": "string",
           "description": "Optional step summary shown in plan/log output."
         },
+        "whenExists": {
+          "type": "boolean",
+          "description": "Only for command steps. When true, missing target commands are skipped successfully instead of failing."
+        },
         "continueOnError": {
           "type": "boolean",
           "description": "Continue executing subsequent steps when this step fails."
@@ -254,6 +408,16 @@
         "outputFile": {
           "type": "string",
           "description": "Path to an output file consumed by compatible steps for captured outputs."
+        },
+        "outputs": {
+          "type": "object",
+          "description": "Step output declarations. Each key names an output category; values are arrays of glob patterns relative to the repository root that identify produced files.",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
         }
       },
       "anyOf": [
@@ -1490,57 +1654,91 @@
         }
       ]
     },
-    "tests": {
+    "outputsConfig": {
       "type": "object",
       "additionalProperties": false,
+      "description": "Output path contract. All paths default to subdirectories under the root output folder.",
       "properties": {
-        "enabled": {
+        "emit": {
           "type": "boolean",
-          "description": "Enable or disable test execution for builtin:test."
-        },
-        "projects": {
-          "type": "array",
-          "description": "Optional project globs passed to dotnet test; when omitted, dotnet test runs from the repository root.",
-          "items": {
-            "type": "string"
-          }
-        },
-        "configuration": {
-          "type": "string",
-          "description": "dotnet test build configuration.",
-          "default": "Release"
-        },
-        "resultsOutput": {
-          "type": "string",
-          "description": "Results directory for TRX output. When omitted, defaults to <runtime.output.root>/tests."
-        },
-        "coverageOutput": {
-          "type": "string",
-          "description": "Directory for XPlat Code Coverage output. Coverage collection is enabled when this is set."
-        },
-        "collectCoverage": {
-          "type": "boolean",
-          "description": "Reserved compatibility flag. Coverage behavior is driven by coverageOutput."
-        },
-        "coverageThreshold": {
-          "type": "integer",
-          "description": "Minimum required line coverage percent (0-100)."
-        }
-      }
-    },
-    "output": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "emitRuntimeFiles": {
-          "type": "boolean",
-          "description": "Controls whether runtime-generated files (for example artifact manifest files) are written.",
+          "description": "When false, Rexo does not collect or write any output files (manifests, step file outputs). Well-known overlay commands also skip passing output path arguments to toolchain CLIs.",
           "default": true
         },
         "root": {
           "type": "string",
-          "description": "Root folder for runtime outputs.",
+          "description": "Root folder for all generated outputs.",
           "default": "artifacts"
+        },
+        "tests": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Paths for test-related outputs.",
+          "properties": {
+            "results": {
+              "type": "string",
+              "description": "Directory for test result files (e.g. TRX, JUnit XML).",
+              "default": "artifacts/tests"
+            },
+            "coverage": {
+              "type": "string",
+              "description": "Directory for coverage data files.",
+              "default": "artifacts/coverage"
+            },
+            "reports": {
+              "type": "string",
+              "description": "Directory for generated coverage reports (HTML, etc.).",
+              "default": "artifacts/coverage/reports"
+            }
+          }
+        },
+        "analysis": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Paths for analysis-related outputs.",
+          "properties": {
+            "reports": {
+              "type": "string",
+              "description": "Directory for analysis report files.",
+              "default": "artifacts/analysis"
+            },
+            "sarif": {
+              "type": "string",
+              "description": "Full file path for the primary SARIF output file.",
+              "default": "artifacts/analysis/build.sarif"
+            }
+          }
+        },
+        "security": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Paths for security audit outputs.",
+          "properties": {
+            "audit": {
+              "type": "string",
+              "description": "Full file path for the npm/security audit JSON output.",
+              "default": "artifacts/security/audit.json"
+            }
+          }
+        },
+        "packages": {
+          "type": "string",
+          "description": "Directory for built artifact packages (NuGet, npm, Helm charts, etc.).",
+          "default": "artifacts/packages"
+        },
+        "manifests": {
+          "type": "string",
+          "description": "Directory for runtime manifest JSON files.",
+          "default": "artifacts/manifests"
+        },
+        "logs": {
+          "type": "string",
+          "description": "Directory for CI log files.",
+          "default": "artifacts/logs"
+        },
+        "temp": {
+          "type": "string",
+          "description": "Scratch directory for intermediate build artifacts.",
+          "default": "artifacts/tmp"
         }
       }
     },
@@ -1549,10 +1747,6 @@
       "additionalProperties": false,
       "examples": [
         {
-          "output": {
-            "emitRuntimeFiles": true,
-            "root": "artifacts"
-          },
           "push": {
             "enabled": true,
             "branches": ["main", "release/*"]
@@ -1560,10 +1754,6 @@
         }
       ],
       "properties": {
-        "output": {
-          "description": "Runtime output controls applied across tests, analysis, and artifact runtime files.",
-          "$ref": "#/$defs/output"
-        },
         "push": {
           "description": "Global push policy merged with per-artifact push overrides.",
           "$ref": "#/$defs/pushRules"
@@ -1607,33 +1797,6 @@
           "items": {
             "type": "string"
           }
-        }
-      }
-    },
-    "analysis": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "description": "Enable or disable analysis execution for builtin:analyze."
-        },
-        "failOnIssues": {
-          "type": "boolean",
-          "description": "Fail the command when analysis tools report issues.",
-          "default": true
-        },
-        "tools": {
-          "type": "array",
-          "description": "Optional additional analysis tool commands to execute after dotnet format.",
-          "default": [],
-          "items": {
-            "type": "string"
-          }
-        },
-        "configuration": {
-          "type": "string",
-          "description": "Analysis output/configuration path. If omitted, SARIF defaults to <runtime.output.root>/analysis.sarif.json."
         }
       }
     }

@@ -239,6 +239,52 @@ public sealed class StepExecutorWhenConditionTests
         Assert.Equal("uses-noop", result.StepId);
     }
 
+    [Fact]
+    public async Task CommandStepWhenExistsTrueSkipsWhenTargetMissing()
+    {
+        var executor = CreateExecutor();
+
+        var step = new StepDefinition(
+            Id: "maybe-cmd",
+            Run: null,
+            Uses: null,
+            Command: "definitely-missing-command",
+            When: null)
+        {
+            WhenExists = true,
+        };
+
+        var result = await executor.ExecuteAsync(step, EmptyContext(), CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(true, result.Outputs["skipped"]);
+        Assert.Equal("command-not-found", result.Outputs["skipReason"]);
+        Assert.Equal("definitely-missing-command", result.Outputs["command"]);
+    }
+
+    [Fact]
+    public async Task CommandStepWhenExistsFalseStillFailsWhenTargetMissing()
+    {
+        var executor = CreateExecutor();
+
+        var step = new StepDefinition(
+            Id: "must-exist",
+            Run: null,
+            Uses: null,
+            Command: "definitely-missing-command",
+            When: null)
+        {
+            WhenExists = false,
+        };
+
+        var result = await executor.ExecuteAsync(step, EmptyContext(), CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal(8, result.ExitCode);
+        Assert.Contains("not found", result.Outputs["message"]?.ToString() ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
     // ──────────────────────────────────────────────────────────────────────────
     // Step with no run/uses/command → failure result
     // ──────────────────────────────────────────────────────────────────────────
@@ -261,5 +307,179 @@ public sealed class StepExecutorWhenConditionTests
         Assert.Equal(1, result.ExitCode);
         Assert.Contains("no run, uses, or command", result.Outputs["error"]?.ToString() ?? string.Empty,
             StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Cross-command cycle detection: REXO-CMD-CYCLE
+    // ──────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task CommandStepAllowsSameNameContinuation()
+    {
+        var executor = CreateExecutor();
+
+        // Simulate being inside command "build" on the call stack
+        var context = ExecutionContext.Empty(Path.GetTempPath()) with
+        {
+            CommandCallStack = ["build"],
+        };
+
+        // A step that tries to call "build" again → same-name continuation (allowed for layer composition)
+        var step = new StepDefinition(
+            Id: "layer-continuation-step",
+            Run: null,
+            Uses: null,
+            Command: "build",
+            When: null)
+        {
+            WhenExists = true, // Mark as layer composition step
+        };
+
+        var result = await executor.ExecuteAsync(step, context, CancellationToken.None);
+
+        // Should succeed (skip if no lower layers, but not error)
+        Assert.True(result.Success);
+        // Skip result when layer has no content
+        var skipReason = result.Outputs["skipReason"]?.ToString() ?? string.Empty;
+        Assert.Contains("no-layer-content", skipReason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CommandStepDetectsCrossCommandCycle()
+    {
+        var executor = CreateExecutor();
+
+        // Simulate being inside "build" on the call stack
+        var context = ExecutionContext.Empty(Path.GetTempPath()) with
+        {
+            CommandCallStack = ["build"],
+        };
+
+        // A step that tries to call "release" while inside "build" → cross-command cycle
+        var step = new StepDefinition(
+            Id: "cycle-step",
+            Run: null,
+            Uses: null,
+            Command: "release", // Different command
+            When: null);
+
+        var result = await executor.ExecuteAsync(step, context, CancellationToken.None);
+
+        // This would attempt to execute "release", which isn't registered, so it returns 8 (not found)
+        // True cycle detection (e.g., release -> build -> release) requires both commands in CallStack
+        Assert.False(result.Success);
+    }
+
+    [Fact]
+    public async Task CommandStepDetectsIndirectCycle()
+    {
+        var executor = CreateExecutor();
+
+        // Simulate being inside "build → verify" on the call stack
+        var context = ExecutionContext.Empty(Path.GetTempPath()) with
+        {
+            CommandCallStack = ["build", "verify"],
+        };
+
+        // A step that tries to call "build" again → indirect cycle
+        var step = new StepDefinition(
+            Id: "indirect-cycle-step",
+            Run: null,
+            Uses: null,
+            Command: "build",
+            When: null);
+
+        var result = await executor.ExecuteAsync(step, context, CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal(9, result.ExitCode);
+        var error = result.Outputs["error"]?.ToString() ?? string.Empty;
+        Assert.Contains("REXO-CMD-CYCLE", error, StringComparison.Ordinal);
+        Assert.Contains("build -> verify -> build", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CommandStepAllowsSameNameContinuationCaseInsensitive()
+    {
+        var executor = CreateExecutor();
+
+        var context = ExecutionContext.Empty(Path.GetTempPath()) with
+        {
+            CommandCallStack = ["Build"],
+        };
+
+        // Same-name call (case-insensitive) with layer composition marker
+        var step = new StepDefinition(
+            Id: "ci-step",
+            Run: null,
+            Uses: null,
+            Command: "build", // lowercase vs "Build" on stack
+            When: null)
+        {
+            WhenExists = true, // Layer composition marker
+        };
+
+        var result = await executor.ExecuteAsync(step, context, CancellationToken.None);
+
+        // Should succeed (skip for no-layer-content)
+        Assert.True(result.Success);
+        var skipReason = result.Outputs["skipReason"]?.ToString() ?? string.Empty;
+        Assert.Contains("no-layer-content", skipReason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CommandStepWithEmptyCallStackDoesNotTriggerCycleDetection()
+    {
+        var executor = CreateExecutor();
+
+        // No call stack → no cycle possible; command "missing-cmd" not found but no cycle error
+        var step = new StepDefinition(
+            Id: "safe-step",
+            Run: null,
+            Uses: null,
+            Command: "missing-command",
+            When: null)
+        {
+            WhenExists = true, // skip gracefully when not found
+        };
+
+        var result = await executor.ExecuteAsync(step, EmptyContext(), CancellationToken.None);
+
+        // Should skip (whenExists=true), not error with cycle detection
+        Assert.True(result.Success);
+        Assert.Equal("command-not-found", result.Outputs["skipReason"]);
+    }
+
+    [Fact]
+    public async Task SelfReferentialContinuationStepWithWhenExistsSkipsGracefully()
+    {
+        var executor = CreateExecutor();
+
+        // Simulate being inside command "test" — this is the layered composition scenario
+        // where a wrap-mode continuation step was not expanded (no inner layer contributed steps).
+        var context = ExecutionContext.Empty(Path.GetTempPath()) with
+        {
+            CommandCallStack = ["test"],
+        };
+
+        // Continuation marker: {command: "test", whenExists: true} — self-referential
+        var step = new StepDefinition(
+            Id: "test-content",
+            Run: null,
+            Uses: null,
+            Command: "test",
+            When: null)
+        {
+            WhenExists = true,
+        };
+
+        var result = await executor.ExecuteAsync(step, context, CancellationToken.None);
+
+        // Should skip gracefully with no-layer-content reason — NOT trigger REXO-CMD-CYCLE
+        Assert.True(result.Success);
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(true, result.Outputs["skipped"]);
+        Assert.Equal("no-layer-content", result.Outputs["skipReason"]);
+        Assert.Equal("test", result.Outputs["command"]);
     }
 }

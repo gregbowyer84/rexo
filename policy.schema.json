@@ -89,6 +89,17 @@
           "items": {
             "$ref": "#/$defs/step"
           }
+        },
+        "merge": {
+          "type": "string",
+          "description": "Layered command composition mode for this command.",
+          "enum": [
+            "layer",
+            "replace",
+            "append",
+            "prepend",
+            "wrap"
+          ]
         }
       }
     },
@@ -197,6 +208,10 @@
         "description": {
           "type": "string",
           "description": "Optional step summary shown in plan/log output."
+        },
+        "whenExists": {
+          "type": "boolean",
+          "description": "Only for command steps. When true, missing target commands are skipped successfully instead of failing."
         },
         "continueOnError": {
           "type": "boolean",

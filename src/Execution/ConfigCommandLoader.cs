@@ -158,6 +158,9 @@ public sealed class ConfigCommandLoader
             Args = invocation.Args,
             Options = BuildOptionsWithDefaults(invocation.Options, normalizedCommandConfig),
             FileEnvironment = RepositoryEnvironmentFiles.Load(repositoryRoot),
+            CommandCallStack = [.. invocation.CallStack, commandName],
+            ResolvedOutputs = BuildOutputsContext(config),
+            ResolvedSettings = BuildSettingsContext(config),
         };
 
         var stepExecutor = new StepExecutor(commandExecutor, _templateRenderer, _builtinRegistry);
@@ -178,6 +181,7 @@ public sealed class ConfigCommandLoader
                 var stepConfig = group[0];
                 var stepDef = BuildStepDefinition(stepConfig);
                 var stepResult = await stepExecutor.ExecuteAsync(stepDef, currentContext, cancellationToken);
+                stepResult = EnrichWithFileOutputs(stepDef, stepResult, currentContext, repositoryRoot, _templateRenderer);
                 executed = [(stepConfig, stepResult)];
             }
             else
@@ -188,6 +192,15 @@ public sealed class ConfigCommandLoader
                     currentContext,
                     normalizedCommandConfig.MaxParallel,
                     cancellationToken);
+                // Enrich parallel results with file outputs
+                var enriched = new List<(RepoStepConfig Config, StepResult Result)>(executed.Count);
+                foreach (var (cfg, res) in executed)
+                {
+                    var def = BuildStepDefinition(cfg);
+                    enriched.Add((cfg, EnrichWithFileOutputs(def, res, currentContext, repositoryRoot, _templateRenderer)));
+                }
+
+                executed = enriched;
             }
 
             foreach (var (_, stepResult) in executed)
@@ -247,37 +260,6 @@ public sealed class ConfigCommandLoader
             Artifacts = artifactEntries,
             PushDecisions = pushDecisionEntries,
         };
-    }
-
-    internal static async Task WriteSarifIfConfiguredAsync(
-        IReadOnlyList<Analysis.AnalysisResult> results,
-        string repositoryRoot,
-        RepoConfig config,
-        CancellationToken cancellationToken)
-    {
-        if (config.Analysis?.Enabled == false)
-        {
-            return;
-        }
-
-        // Write SARIF output to configured path, or a sensible default under the output root.
-        var configuredPath = config.Analysis?.Configuration;
-        var defaultPath = Path.Combine(ResolveOutputRoot(config), "analysis.sarif.json");
-        var pathSetting = string.IsNullOrWhiteSpace(configuredPath)
-            ? defaultPath
-            : configuredPath;
-
-        var sarifPath = Path.IsPathRooted(pathSetting)
-            ? pathSetting
-            : Path.Combine(repositoryRoot, pathSetting);
-
-        // Only write SARIF if the path ends with .sarif or .sarif.json (to avoid overwriting arbitrary paths)
-        if (sarifPath.EndsWith(".sarif", StringComparison.OrdinalIgnoreCase) ||
-            sarifPath.EndsWith(".sarif.json", StringComparison.OrdinalIgnoreCase))
-        {
-            await Analysis.DotnetAnalysisRunner.WriteSarifReportAsync(results, sarifPath, cancellationToken);
-            Console.WriteLine($"  SARIF report written to: {sarifPath}");
-        }
     }
 
     internal async Task<StepResult> BuildArtifactsAsync(
@@ -992,6 +974,7 @@ public sealed class ConfigCommandLoader
             commandConfig.Steps ?? [])
         {
             Args = commandConfig.Args ?? [],
+            Merge = commandConfig.Merge,
             MaxParallel = commandConfig.MaxParallel,
         };
 
@@ -1018,12 +1001,12 @@ public sealed class ConfigCommandLoader
     }
 
     internal static string ResolveOutputRoot(RepoConfig config) =>
-        string.IsNullOrWhiteSpace(config.Runtime?.Output?.Root)
+        string.IsNullOrWhiteSpace(config.Outputs?.Root)
             ? DefaultOutputRoot
-            : config.Runtime.Output.Root!;
+            : config.Outputs.Root!;
 
     internal static bool ShouldEmitRuntimeFiles(RepoConfig config) =>
-        config.Runtime?.Output?.EmitRuntimeFiles ?? true;
+        config.Outputs?.Emit ?? true;
 
     private sealed record PlanPayload(
         PlanRepoSection Repo,
@@ -1267,6 +1250,114 @@ public sealed class ConfigCommandLoader
         public static PushPolicyRules Default => new(Branches: []);
     }
 
+    private static StepResult EnrichWithFileOutputs(
+        StepDefinition stepDef,
+        StepResult stepResult,
+        ExecutionContext context,
+        string repositoryRoot,
+        ITemplateRenderer templateRenderer)
+    {
+        if (stepDef.StepOutputs is null || stepDef.StepOutputs.Count == 0 || !stepResult.Success)
+        {
+            return stepResult;
+        }
+
+        var fileOutputs = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, patterns) in stepDef.StepOutputs)
+        {
+            var matchedFiles = new List<string>();
+            foreach (var pattern in patterns)
+            {
+                var resolvedPattern = templateRenderer.Render(pattern, context);
+                var files = CollectGlobMatches(resolvedPattern, repositoryRoot);
+                matchedFiles.AddRange(files);
+            }
+
+            if (matchedFiles.Count > 0)
+            {
+                fileOutputs[key] = matchedFiles;
+            }
+        }
+
+        if (fileOutputs.Count == 0)
+        {
+            return stepResult;
+        }
+
+        var updatedOutputs = new Dictionary<string, object?>(stepResult.Outputs) { ["__fileOutputs"] = fileOutputs };
+        return stepResult with { Outputs = updatedOutputs };
+    }
+
+    private static IEnumerable<string> CollectGlobMatches(string pattern, string repositoryRoot)
+    {
+        // Normalise the pattern: replace backslashes so glob logic is consistent
+        pattern = pattern.Replace('\\', '/');
+
+        // Split on ** to detect recursive patterns
+        var recursiveSep = "/**/";
+        var endsWithDoubleStar = pattern.EndsWith("/**", StringComparison.Ordinal);
+
+        int recursiveIdx = pattern.IndexOf(recursiveSep, StringComparison.Ordinal);
+        bool isRecursive = recursiveIdx >= 0 || endsWithDoubleStar;
+
+        string dirPattern;
+        string filePattern;
+
+        if (endsWithDoubleStar)
+        {
+            dirPattern = pattern[..^3]; // strip /**
+            filePattern = "*";
+        }
+        else if (isRecursive)
+        {
+            dirPattern = pattern[..recursiveIdx];
+            filePattern = pattern[(recursiveIdx + recursiveSep.Length)..];
+        }
+        else
+        {
+            // No recursive glob — just split on last /
+            var lastSlash = pattern.LastIndexOf('/');
+            if (lastSlash < 0)
+            {
+                dirPattern = ".";
+                filePattern = pattern;
+            }
+            else
+            {
+                dirPattern = pattern[..lastSlash];
+                filePattern = pattern[(lastSlash + 1)..];
+            }
+        }
+
+        // Resolve directory relative to repo root
+        var searchDir = Path.IsPathRooted(dirPattern)
+            ? dirPattern
+            : Path.Combine(repositoryRoot, dirPattern.Replace('/', Path.DirectorySeparatorChar));
+
+        if (!Directory.Exists(searchDir))
+        {
+            yield break;
+        }
+
+        var searchOption = isRecursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+        IEnumerable<string> files;
+        try
+        {
+            files = Directory.EnumerateFiles(searchDir, filePattern, searchOption);
+        }
+        catch (ArgumentException)
+        {
+            // filePattern contains invalid glob chars on this OS; yield nothing
+            yield break;
+        }
+
+        foreach (var file in files)
+        {
+            // Return relative paths from repository root
+            yield return Path.GetRelativePath(repositoryRoot, file).Replace('\\', '/');
+        }
+    }
+
     private static StepDefinition BuildStepDefinition(RepoStepConfig stepConfig) =>
         new(
             Id: stepConfig.Id,
@@ -1276,11 +1367,155 @@ public sealed class ConfigCommandLoader
             When: stepConfig.When)
         {
             With = stepConfig.With,
+            WhenExists = stepConfig.WhenExists ?? false,
             Parallel = stepConfig.Parallel ?? false,
             ContinueOnError = stepConfig.ContinueOnError ?? false,
             OutputPattern = stepConfig.OutputPattern,
             OutputFile = stepConfig.OutputFile,
+            StepOutputs = BuildStepOutputs(stepConfig.Outputs),
         };
+
+    private static IReadOnlyDictionary<string, IReadOnlyList<string>>? BuildStepOutputs(
+        Dictionary<string, string[]>? outputs)
+    {
+        if (outputs is null || outputs.Count == 0) return null;
+        var result = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, patterns) in outputs)
+        {
+            result[key] = patterns;
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Builds the nested <c>outputs.*</c> dictionary from the resolved output paths.
+    /// Missing values fall back to standard defaults under the artifacts root.
+    /// </summary>
+    public static IReadOnlyDictionary<string, object?> BuildOutputsContext(RepoConfig config)
+    {
+        var emit = config.Outputs?.Emit ?? true;
+        var root = config.Outputs?.Root ?? DefaultOutputRoot;
+
+        if (!emit)
+        {
+            return new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["emit"] = "false",
+                ["root"] = root,
+                ["tests"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["results"] = string.Empty,
+                    ["coverage"] = string.Empty,
+                    ["reports"] = string.Empty,
+                },
+                ["analysis"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["reports"] = string.Empty,
+                    ["sarif"] = string.Empty,
+                },
+                ["security"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["audit"] = string.Empty,
+                },
+                ["packages"] = string.Empty,
+                ["manifests"] = string.Empty,
+                ["logs"] = string.Empty,
+                ["temp"] = string.Empty,
+            };
+        }
+
+        var testsResults = config.Outputs?.Tests?.Results ?? $"{root}/tests";
+        var testsCoverage = config.Outputs?.Tests?.Coverage ?? $"{root}/coverage";
+        var testsReports = config.Outputs?.Tests?.Reports ?? $"{root}/tests/reports";
+        var analysisReports = config.Outputs?.Analysis?.Reports ?? $"{root}/analysis";
+        var analysisSarif = config.Outputs?.Analysis?.Sarif ?? $"{root}/analysis/build.sarif";
+        var securityAudit = config.Outputs?.Security?.Audit ?? $"{root}/security/audit.json";
+        var packages = config.Outputs?.Packages ?? $"{root}/packages";
+        var manifests = config.Outputs?.Manifests ?? $"{root}/manifests";
+        var logs = config.Outputs?.Logs ?? $"{root}/logs";
+        var temp = config.Outputs?.Temp ?? ".rexo/temp";
+
+        return new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["emit"] = "true",
+            ["root"] = root,
+            ["tests"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["results"] = testsResults,
+                ["coverage"] = testsCoverage,
+                ["reports"] = testsReports,
+            },
+            ["analysis"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["reports"] = analysisReports,
+                ["sarif"] = analysisSarif,
+            },
+            ["security"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["audit"] = securityAudit,
+            },
+            ["packages"] = packages,
+            ["manifests"] = manifests,
+            ["logs"] = logs,
+            ["temp"] = temp,
+        };
+    }
+
+    /// <summary>
+    /// Converts the freeform <c>settings</c> JSON dictionary from the repo config into a
+    /// nested <c>Dictionary&lt;string, object?&gt;</c> structure for template resolution.
+    /// </summary>
+    public static IReadOnlyDictionary<string, object?> BuildSettingsContext(RepoConfig config)
+    {
+        if (config.Settings is null || config.Settings.Count == 0)
+        {
+            return new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var result = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, element) in config.Settings)
+        {
+            result[key] = ConvertJsonElement(element);
+        }
+
+        return result;
+    }
+
+    private static object? ConvertJsonElement(JsonElement element) =>
+        element.ValueKind switch
+        {
+            JsonValueKind.Null or JsonValueKind.Undefined => null,
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            JsonValueKind.String => element.GetString(),
+            JsonValueKind.Number => element.ToString(),
+            JsonValueKind.Object => ConvertJsonObject(element),
+            JsonValueKind.Array => ConvertJsonArray(element),
+            _ => element.ToString(),
+        };
+
+    private static Dictionary<string, object?> ConvertJsonObject(JsonElement element)
+    {
+        var dict = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var property in element.EnumerateObject())
+        {
+            dict[property.Name] = ConvertJsonElement(property.Value);
+        }
+
+        return dict;
+    }
+
+    private static List<object?> ConvertJsonArray(JsonElement element)
+    {
+        var list = new List<object?>();
+        foreach (var item in element.EnumerateArray())
+        {
+            list.Add(ConvertJsonElement(item));
+        }
+
+        return list;
+    }
 
     /// <summary>
     /// Groups consecutive steps marked <c>parallel: true</c> into batches.

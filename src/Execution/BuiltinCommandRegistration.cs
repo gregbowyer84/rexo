@@ -346,6 +346,8 @@ public static class BuiltinCommandRegistration
                         aliasLines.Add($"    {id}{stepType}: {stepBody}");
                         if (step.When is not null)
                             aliasLines.Add($"        when: {step.When}");
+                        if (step.WhenExists == true)
+                            aliasLines.Add($"        whenExists: true");
                     }
                 }
             }
@@ -359,6 +361,9 @@ public static class BuiltinCommandRegistration
             lines.Add($"Command: {commandName}");
             if (!string.IsNullOrEmpty(cmd.Description))
                 lines.Add($"  Description: {cmd.Description}");
+
+            if (!string.IsNullOrEmpty(cmd.Merge))
+                lines.Add($"  Layer merge: {cmd.Merge}");
 
             if (cmd.MaxParallel.HasValue)
                 lines.Add($"  Max parallel steps: {cmd.MaxParallel.Value}");
@@ -415,6 +420,14 @@ public static class BuiltinCommandRegistration
 
                     if (step.When is not null)
                         lines.Add($"        when: {step.When}");
+                    if (step.WhenExists == true)
+                    {
+                        var isSelfRef = string.Equals(step.Command, commandName, StringComparison.OrdinalIgnoreCase);
+                        var whenExistsNote = isSelfRef
+                            ? "        whenExists: true  [layer composition marker — skips when no inner layer contributes steps]"
+                            : "        whenExists: true";
+                        lines.Add(whenExistsNote);
+                    }
                     if (step.Parallel == true)
                         lines.Add($"        parallel: true");
                     if (step.DependsOn is { Length: > 0 })
@@ -1093,18 +1106,6 @@ public static class BuiltinCommandRegistration
                 $"'{recommendedPolicyTemplate}' is available in embedded policy templates.",
             };
 
-            if (resolvedTemplate.Equals("dotnet", StringComparison.OrdinalIgnoreCase) && detection.DotnetLibrary &&
-                recommendedPolicyTemplate.Equals("dotnet-library", StringComparison.OrdinalIgnoreCase))
-            {
-                reasons.Add("All discovered .csproj files look like libraries.");
-            }
-
-            if (resolvedTemplate.Equals("dotnet", StringComparison.OrdinalIgnoreCase) && detection.HasDockerfile &&
-                recommendedPolicyTemplate.Equals("dotnet-api", StringComparison.OrdinalIgnoreCase))
-            {
-                reasons.Add("Dockerfile detected; API/service workflow likely.");
-            }
-
             recommendations.Add(new InitRecommendation(
                 "policy-template",
                 recommendedPolicyTemplate,
@@ -1328,14 +1329,9 @@ public static class BuiltinCommandRegistration
 
         if (template.Equals("dotnet", StringComparison.OrdinalIgnoreCase) && autoTemplateRequested)
         {
-            if (detection.DotnetLibrary && available.Contains("dotnet-library", StringComparer.OrdinalIgnoreCase))
+            if (available.Contains(template, StringComparer.OrdinalIgnoreCase))
             {
-                return "dotnet-library";
-            }
-
-            if (detection.HasDockerfile && available.Contains("dotnet-api", StringComparer.OrdinalIgnoreCase))
-            {
-                return "dotnet-api";
+                return template;
             }
         }
 
@@ -1660,7 +1656,7 @@ public static class BuiltinCommandRegistration
         string[]? extendsValue = needsStandard
             ? (!string.IsNullOrWhiteSpace(policyTemplate) &&
                !policyTemplate.Equals("standard", StringComparison.OrdinalIgnoreCase)
-                ? ["embedded:standard", $"embedded:{policyTemplate}"]
+                ? [$"embedded:{policyTemplate}", "embedded:standard"]
                 : ["embedded:standard"])
             : null;
 
@@ -1724,11 +1720,6 @@ public static class BuiltinCommandRegistration
             {
                 doc["artifacts"] = artifacts.ToArray();
             }
-        }
-
-        if (template == "dotnet")
-        {
-            doc["tests"] = new { enabled = true, configuration = "Release" };
         }
 
         return JsonSerializer.Serialize(doc, IndentedJsonOptions);

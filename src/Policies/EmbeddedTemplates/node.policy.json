@@ -1,0 +1,81 @@
+{
+  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json",
+  "schemaVersion": "1.0",
+  "name": "node-policy",
+  "description": "Node.js toolchain command contributions. Usable standalone or overlaid with embedded:standard.",
+  "commands": {
+    "restore": {
+      "description": "Install Node.js dependencies.",
+      "steps": [
+        {
+          "id": "node-install",
+          "run": "{{settings.node.packageManager | default('npm')}} ci"
+        }
+      ]
+    },
+    "build": {
+      "description": "Build Node.js project.",
+      "steps": [
+        {
+          "id": "node-build",
+          "run": "{{settings.node.packageManager | default('npm')}} run {{settings.node.buildScript | default('build')}} --if-present"
+        }
+      ]
+    },
+    "test": {
+      "description": "Run Node.js tests.",
+      "steps": [
+        {
+          "id": "node-test",
+          "run": "{{settings.node.packageManager | default('npm')}} run {{settings.node.testScript | default('test')}} --if-present {{settings.node.test.args | default('')}} {{settings.node.test.coverageArgs | default('')}}",
+          "outputs": {
+            "testResults": [
+              "{{outputs.tests.results}}/**/*.xml",
+              "{{outputs.tests.results}}/**/*.json"
+            ],
+            "coverage": [
+              "{{outputs.tests.coverage}}/**/*"
+            ]
+          }
+        }
+      ]
+    },
+    "analyze": {
+      "description": "Lint Node.js source files.",
+      "steps": [
+        {
+          "id": "node-lint",
+          "run": "{{settings.node.packageManager | default('npm')}} run {{settings.node.lintScript | default('lint')}} --if-present {{settings.node.analyze.args | default('')}}",
+          "outputs": {
+            "analysisReports": [
+              "{{outputs.analysis.reports}}/**/*"
+            ]
+          }
+        },
+        {
+          "id": "node-lint-sarif",
+          "run": "{{settings.node.packageManager | default('npm')}} run {{settings.node.analyze.sarifScript | default('lint:sarif')}} --if-present {{settings.node.analyze.sarifArgs | default('')}}",
+          "outputs": {
+            "sarifReports": [
+              "{{outputs.analysis.sarif}}"
+            ]
+          }
+        }
+      ]
+    },
+    "security": {
+      "description": "Audit Node.js dependencies for known vulnerabilities.",
+      "steps": [
+        {
+          "id": "node-audit",
+          "run": "{{settings.node.packageManager | default('npm')}} audit --json --audit-level={{settings.node.auditLevel | default('high')}} {{settings.node.auditArgs | default('')}}{{outputs.security.audit | prefix(' > ')}}",
+          "outputs": {
+            "securityReports": [
+              "{{outputs.security.audit}}"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

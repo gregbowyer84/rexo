@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json",
   "schemaVersion": "1.0",
   "name": "standard-policy",
-  "description": "Standard lifecycle policy template with user-facing commands.",
+  "description": "Standard artifact lifecycle policy with user-facing commands.",
   "commands": {
     "plan": {
       "description": "Validate and show what would be built/pushed.",
@@ -55,8 +55,9 @@
       "options": {},
       "steps": [
         {
-          "id": "test",
-          "uses": "builtin:test"
+          "id": "test-content",
+          "command": "test",
+          "whenExists": true
         }
       ]
     },
@@ -65,13 +66,14 @@
       "options": {},
       "steps": [
         {
-          "id": "analyze",
-          "uses": "builtin:analyze"
+          "id": "analyze-content",
+          "command": "analyze",
+          "whenExists": true
         }
       ]
     },
     "verify": {
-      "description": "Run validation, tests, and analysis.",
+      "description": "Validate, test, and analyze the repository.",
       "options": {},
       "steps": [
         {
@@ -79,12 +81,24 @@
           "uses": "builtin:validate"
         },
         {
+          "id": "verify-contributions",
+          "command": "verify",
+          "whenExists": true
+        },
+        {
           "id": "test",
-          "uses": "builtin:test"
+          "command": "test",
+          "whenExists": true
         },
         {
           "id": "analyze",
-          "uses": "builtin:analyze"
+          "command": "analyze",
+          "whenExists": true
+        },
+        {
+          "id": "security",
+          "command": "security",
+          "whenExists": true
         }
       ]
     },
@@ -101,11 +115,11 @@
           "uses": "builtin:resolve-version"
         },
         {
-          "id": "build",
+          "id": "build-artifacts",
           "uses": "builtin:build-artifacts"
         },
         {
-          "id": "tag",
+          "id": "tag-artifacts",
           "uses": "builtin:tag-artifacts"
         }
       ]
@@ -143,7 +157,7 @@
       ]
     },
     "release": {
-      "description": "Validate, verify, build, tag, and optionally push configured artifacts.",
+      "description": "Verify, build, and optionally push configured artifacts.",
       "options": {
         "push": {
           "type": "bool",
@@ -152,27 +166,16 @@
       },
       "steps": [
         {
-          "id": "validate",
-          "uses": "builtin:validate"
-        },
-        {
-          "id": "version",
-          "uses": "builtin:resolve-version"
-        },
-        {
           "id": "verify",
-          "uses": "builtin:verify"
+          "command": "verify",
+          "whenExists": true
         },
         {
           "id": "build",
-          "uses": "builtin:build-artifacts"
+          "command": "build"
         },
         {
-          "id": "tag",
-          "uses": "builtin:tag-artifacts"
-        },
-        {
-          "id": "push",
+          "id": "push-artifacts",
           "uses": "builtin:push-artifacts",
           "when": "{{options.push}}",
           "with": {
@@ -182,7 +185,7 @@
       ]
     },
     "clean": {
-      "description": "Remove generated Rexo output (artifacts/)",
+      "description": "Remove generated Rexo output.",
       "options": {},
       "steps": [
         {

@@ -43,39 +43,67 @@ public sealed class TemplateRenderer : ITemplateRenderer
 
     private static string ResolveOperand(string expr, Dictionary<string, object?> root, ExecutionContext context)
     {
-        var pipeIndex = expr.IndexOf('|', StringComparison.Ordinal);
-        string path;
-        string? filter = null;
-        string? filterArg = null;
+        var segments = SplitFilterChain(expr);
+        var path = segments[0].Trim();
 
-        if (pipeIndex >= 0)
+        if (segments.Count == 1)
         {
-            path = expr[..pipeIndex].Trim();
-            var filterPart = expr[(pipeIndex + 1)..].Trim();
-            var parenIndex = filterPart.IndexOf('(', StringComparison.Ordinal);
-            if (parenIndex >= 0)
-            {
-                filter = filterPart[..parenIndex].Trim();
-                var closeIndex = filterPart.LastIndexOf(')');
-                filterArg = closeIndex > parenIndex
-                    ? filterPart[(parenIndex + 1)..closeIndex].Trim().Trim('\'', '"')
-                    : string.Empty;
-            }
-            else
-            {
-                filter = filterPart;
-            }
-        }
-        else
-        {
-            path = expr;
-            return ResolveValue(path.Trim(), root, context);
+            return ResolveValue(path, root, context);
         }
 
         var value = ResolvePath(path, root, context);
         var result = value?.ToString() ?? string.Empty;
 
-        return filter?.Trim() switch
+        for (var i = 1; i < segments.Count; i++)
+        {
+            result = ApplyFilter(segments[i].Trim(), result);
+        }
+
+        return result;
+    }
+
+    /// <summary>Splits a filter-chain expression on <c>|</c> characters that are not inside parentheses.</summary>
+    private static List<string> SplitFilterChain(string expr)
+    {
+        var segments = new List<string>();
+        var depth = 0;
+        var start = 0;
+        for (var i = 0; i < expr.Length; i++)
+        {
+            if (expr[i] == '(') depth++;
+            else if (expr[i] == ')') depth--;
+            else if (expr[i] == '|' && depth == 0)
+            {
+                segments.Add(expr[start..i]);
+                start = i + 1;
+            }
+        }
+
+        segments.Add(expr[start..]);
+        return segments;
+    }
+
+    private static string ApplyFilter(string filterExpr, string result)
+    {
+        var parenIndex = filterExpr.IndexOf('(', StringComparison.Ordinal);
+        string filterName;
+        string? filterArg;
+
+        if (parenIndex >= 0)
+        {
+            filterName = filterExpr[..parenIndex].Trim();
+            var closeIndex = filterExpr.LastIndexOf(')');
+            filterArg = closeIndex > parenIndex
+                ? filterExpr[(parenIndex + 1)..closeIndex].Trim().Trim('\'', '"')
+                : string.Empty;
+        }
+        else
+        {
+            filterName = filterExpr.Trim();
+            filterArg = null;
+        }
+
+        return filterName switch
         {
             "default" => string.IsNullOrEmpty(result) ? (filterArg ?? string.Empty) : result,
             "slug" => Slug(result),
@@ -88,6 +116,8 @@ public sealed class TemplateRenderer : ITemplateRenderer
             "filestem" => Path.GetFileNameWithoutExtension(result),
             "urlencode" => Uri.EscapeDataString(result),
             "sha256" => ComputeSha256Hex(result),
+            "prefix" when filterArg is not null => string.IsNullOrEmpty(result) ? string.Empty : filterArg + result,
+            "suffix" when filterArg is not null => string.IsNullOrEmpty(result) ? string.Empty : result + filterArg,
             "replace" when filterArg is not null => ApplyReplace(result, filterArg),
             "truncate" when filterArg is not null && int.TryParse(filterArg, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var len)
                 => result.Length > len ? result[..len] : result,
@@ -203,6 +233,8 @@ public sealed class TemplateRenderer : ITemplateRenderer
             ["repo"] = repo,
             ["ci"] = ci,
             ["steps"] = steps,
+            ["outputs"] = context.ResolvedOutputs,
+            ["settings"] = context.ResolvedSettings,
         };
 
         if (context.Version is not null)

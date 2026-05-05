@@ -1,6 +1,8 @@
 namespace Rexo.Execution.Tests;
 
+using Rexo.Configuration.Models;
 using Rexo.Core.Models;
+using Rexo.Execution;
 using Rexo.Templating;
 
 public sealed class TemplateRendererTests
@@ -293,5 +295,104 @@ public sealed class TemplateRendererTests
                 Directory.Delete(dir, true);
             }
         }
+    }
+
+    // ----------------------------------------------------------------
+    // {{outputs.*}} template resolution
+    // ----------------------------------------------------------------
+
+    private static ExecutionContext MakeOutputsContext(RepoConfig? config = null)
+    {
+        var cfg = config ?? new RepoConfig(Name: "test", Commands: null, Aliases: null);
+        return ExecutionContext.Empty("C:\\repo") with
+        {
+            ResolvedOutputs = ConfigCommandLoader.BuildOutputsContext(cfg),
+        };
+    }
+
+    [Fact]
+    public void RenderResolvesOutputsTestsResultsDefaultPath()
+    {
+        var renderer = new TemplateRenderer();
+        var ctx = MakeOutputsContext();
+        Assert.Equal("artifacts/tests", renderer.Render("{{outputs.tests.results}}", ctx));
+    }
+
+    [Fact]
+    public void RenderResolvesOutputsTestsCoverageDefaultPath()
+    {
+        var renderer = new TemplateRenderer();
+        var ctx = MakeOutputsContext();
+        Assert.Equal("artifacts/coverage", renderer.Render("{{outputs.tests.coverage}}", ctx));
+    }
+
+    [Fact]
+    public void RenderResolvesOutputsAnalysisReportsDefaultPath()
+    {
+        var renderer = new TemplateRenderer();
+        var ctx = MakeOutputsContext();
+        Assert.Equal("artifacts/analysis", renderer.Render("{{outputs.analysis.reports}}", ctx));
+    }
+
+    [Fact]
+    public void RenderResolvesOutputsRootDefaultPath()
+    {
+        var renderer = new TemplateRenderer();
+        var ctx = MakeOutputsContext();
+        Assert.Equal("artifacts", renderer.Render("{{outputs.root}}", ctx));
+    }
+
+    [Fact]
+    public void RenderResolvesOutputsTestsResultsCustomPath()
+    {
+        var renderer = new TemplateRenderer();
+        var cfg = new RepoConfig(Name: "test", Commands: null, Aliases: null) with
+        {
+            Outputs = new RepoOutputsConfig
+            {
+                Tests = new RepoTestOutputPathsConfig { Results = "custom/test-out" },
+            },
+        };
+        var ctx = MakeOutputsContext(cfg);
+        Assert.Equal("custom/test-out", renderer.Render("{{outputs.tests.results}}", ctx));
+    }
+
+    // ----------------------------------------------------------------
+    // {{settings.*}} template resolution
+    // ----------------------------------------------------------------
+
+    private static ExecutionContext MakeSettingsContext(RepoConfig config)
+    {
+        return ExecutionContext.Empty("C:\\repo") with
+        {
+            ResolvedSettings = ConfigCommandLoader.BuildSettingsContext(config),
+        };
+    }
+
+    [Fact]
+    public void RenderResolvesSettingsNestedValue()
+    {
+        var json = System.Text.Json.JsonDocument.Parse("""{"configuration":"Debug"}""");
+        var cfg = new RepoConfig(Name: "test", Commands: null, Aliases: null) with
+        {
+            Settings = new Dictionary<string, System.Text.Json.JsonElement>
+            {
+                ["dotnet"] = json.RootElement,
+            },
+        };
+        var ctx = MakeSettingsContext(cfg);
+        var renderer = new TemplateRenderer();
+        Assert.Equal("Debug", renderer.Render("{{settings.dotnet.configuration}}", ctx));
+    }
+
+    [Fact]
+    public void RenderUsesDefaultFilterWhenSettingsMissing()
+    {
+        var ctx = ExecutionContext.Empty("C:\\repo") with
+        {
+            ResolvedSettings = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase),
+        };
+        var renderer = new TemplateRenderer();
+        Assert.Equal("npm", renderer.Render("{{settings.node.packageManager | default('npm')}}", ctx));
     }
 }

@@ -204,8 +204,7 @@ public sealed class PushGateTests
                     Aliases: new Dictionary<string, string>())
                 {
                     Artifacts = [new RepoArtifactConfig("docker", "a")],
-                    Runtime = new RepoRuntimeConfig(
-                        Output: new RepoOutputConfig(EmitRuntimeFiles: true, Root: "output")),
+                    Outputs = new RepoOutputsConfig { Emit = true, Root = "output" },
                 },
                 repoRoot);
 
@@ -250,8 +249,7 @@ public sealed class PushGateTests
                     Aliases: new Dictionary<string, string>())
                 {
                     Artifacts = [new RepoArtifactConfig("docker", "a")],
-                    Runtime = new RepoRuntimeConfig(
-                        Output: new RepoOutputConfig(EmitRuntimeFiles: false, Root: "output")),
+                    Outputs = new RepoOutputsConfig { Emit = false, Root = "output" },
                 },
                 repoRoot);
 

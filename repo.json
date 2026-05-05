@@ -32,15 +32,15 @@
       }
     }
   ],
-  "tests": {
-    "projects": ["tests/**/*.Tests.csproj"],
-    "configuration": "Release",
-    "collectCoverage": true,
-    "coverageThreshold": 80
-  },
-  "analysis": {
-    "tools": ["dotnet-format", "dotnet-build"],
-    "configuration": "Release"
+  "settings": {
+    "dotnet": {
+      "solution": "solution.slnx",
+      "configuration": "Release",
+      "test": {
+        "logger": "trx",
+        "coverageArgs": "--collect:\"XPlat Code Coverage\" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.OutputDirectory={{outputs.tests.coverage}}"
+      }
+    }
   },
   "commands": {
     "build": {
@@ -68,12 +68,14 @@
         },
         {
           "id": "test",
-          "uses": "builtin:test",
+          "command": "test",
+          "whenExists": true,
           "description": "Run all tests"
         },
         {
           "id": "analyze",
-          "uses": "builtin:analyze",
+          "command": "analyze",
+          "whenExists": true,
           "description": "Run static analysis and format checks"
         },
         {

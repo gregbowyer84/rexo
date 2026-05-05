@@ -285,6 +285,7 @@ public static class Program
             command.Steps ?? [])
         {
             Args = command.Args ?? [],
+            Merge = command.Merge,
             MaxParallel = command.MaxParallel,
         };
 
@@ -672,7 +673,17 @@ public static class Program
             CiTag = ciInfo.Tag,
             CiBuildUrl = ciInfo.BuildUrl,
             Steps = result.Steps
-                .Select(s => new StepManifestEntry(s.StepId, s.Success, s.ExitCode, s.Duration.TotalMilliseconds))
+                .Select(s =>
+                {
+                    var fileOutputs = s.Outputs.TryGetValue("__fileOutputs", out var fo)
+                        && fo is IReadOnlyDictionary<string, IReadOnlyList<string>> dict
+                        ? dict
+                        : new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+                    return new StepManifestEntry(s.StepId, s.Success, s.ExitCode, s.Duration.TotalMilliseconds)
+                    {
+                        FileOutputs = fileOutputs,
+                    };
+                })
                 .ToArray(),
             Artifacts = result.Artifacts,
             PushDecisions = result.PushDecisions,

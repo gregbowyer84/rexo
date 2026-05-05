@@ -215,6 +215,7 @@ internal static class ConfigBuilder
             command.Steps ?? [])
         {
             Args = command.Args ?? [],
+            Merge = command.Merge,
             MaxParallel = command.MaxParallel,
         };
 

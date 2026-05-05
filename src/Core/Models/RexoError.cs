@@ -38,6 +38,7 @@ public static class ErrorCodes
     public const string CommandNotFound = "CMD-001";
     public const string CommandArgMissing = "CMD-002";
     public const string CommandOptionInvalid = "CMD-003";
+    public const string CommandCycle = "CMD-004";
 
     // Step errors (STP-*)
     public const string StepFailed = "STP-001";

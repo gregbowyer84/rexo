@@ -105,12 +105,12 @@ public sealed class InitCommandTests
             Assert.True(File.Exists(policyPath));
             var content = await File.ReadAllTextAsync(policyPath);
             Assert.Contains("dotnet-policy", content, StringComparison.Ordinal);
-            Assert.Contains("\"ci\":", content, StringComparison.Ordinal);
-            Assert.Contains("\"release\":", content, StringComparison.Ordinal);
-            Assert.Contains("\"r\": \"restore\"", content, StringComparison.Ordinal);
-            Assert.Contains("\"f\": \"format\"", content, StringComparison.Ordinal);
-            Assert.DoesNotContain("\"build\": \"ci\"", content, StringComparison.Ordinal);
-            Assert.DoesNotContain("\"publish\": \"release\"", content, StringComparison.Ordinal);
+            Assert.Contains("\"restore\":", content, StringComparison.Ordinal);
+            Assert.Contains("\"build\":", content, StringComparison.Ordinal);
+            Assert.Contains("\"test\":", content, StringComparison.Ordinal);
+            Assert.Contains("\"analyze\":", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"ci\":", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"release\":", content, StringComparison.Ordinal);
 
             var configPath = Path.Combine(dir, ".rexo", "rexo.json");
             var configContent = await File.ReadAllTextAsync(configPath);
@@ -233,7 +233,7 @@ public sealed class InitCommandTests
     }
 
     [Fact]
-    public async Task InitAutoWithPolicyPrefersDotnetLibraryTemplateForLibraryProjects()
+    public async Task InitAutoWithPolicyPrefersDotnetTemplateForLibraryProjects()
     {
         var dir = Path.Combine(Path.GetTempPath(), $"rexo-init-dotnet-lib-{Guid.NewGuid():N}");
         Directory.CreateDirectory(dir);
@@ -270,7 +270,7 @@ public sealed class InitCommandTests
             Assert.True(result.Success);
             var policyPath = Path.Combine(dir, ".rexo", "policy.json");
             var content = await File.ReadAllTextAsync(policyPath);
-            Assert.Contains("dotnet-library-policy", content, StringComparison.Ordinal);
+            Assert.Contains("dotnet-policy", content, StringComparison.Ordinal);
         }
         finally
         {
@@ -279,7 +279,7 @@ public sealed class InitCommandTests
     }
 
     [Fact]
-    public async Task InitAutoWithPolicyPrefersDotnetApiTemplateWhenDockerfileDetected()
+    public async Task InitAutoWithPolicyPrefersDotnetTemplateWhenDockerfileDetected()
     {
         var dir = Path.Combine(Path.GetTempPath(), $"rexo-init-dotnet-api-{Guid.NewGuid():N}");
         Directory.CreateDirectory(dir);
@@ -318,7 +318,7 @@ public sealed class InitCommandTests
             Assert.True(result.Success);
             var policyPath = Path.Combine(dir, ".rexo", "policy.json");
             var content = await File.ReadAllTextAsync(policyPath);
-            Assert.Contains("dotnet-api-policy", content, StringComparison.Ordinal);
+            Assert.Contains("dotnet-policy", content, StringComparison.Ordinal);
             Assert.Contains("Dockerfile detected", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
         }
         finally
@@ -361,7 +361,7 @@ public sealed class InitCommandTests
             Assert.True(result.Success);
             Assert.Equal("init detect", result.Command);
             Assert.Contains("detectedTemplate: dotnet", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("recommendedPolicyTemplate: dotnet-api", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("recommendedPolicyTemplate: dotnet", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
 
             Assert.Equal("1.1", Assert.IsType<string>(result.Outputs["contractVersion"]));
 
@@ -377,7 +377,7 @@ public sealed class InitCommandTests
 
             var policyRecommendation = recommendations.First(r =>
                 string.Equals(r.GetProperty("Kind").GetString(), "policy-template", StringComparison.OrdinalIgnoreCase));
-            Assert.Equal("dotnet-api", policyRecommendation.GetProperty("Value").GetString());
+            Assert.Equal("dotnet", policyRecommendation.GetProperty("Value").GetString());
             Assert.True(policyRecommendation.GetProperty("Confidence").GetDouble() > 0.5);
             Assert.True(policyRecommendation.GetProperty("Reasons").GetArrayLength() > 0);
 
@@ -922,7 +922,7 @@ public sealed class InitCommandTests
                     ["yes"] = "true",
                     ["template"] = "dotnet",
                     ["with-policy"] = "true",
-                    ["policy-template"] = "dotnet-api",
+                    ["policy-template"] = "dotnet",
                 },
                 Json: false,
                 JsonFile: null,
@@ -936,7 +936,7 @@ public sealed class InitCommandTests
 
             // extends must contain both standard (lifecycle) and the selected policy template
             Assert.Contains("embedded:standard", content, StringComparison.Ordinal);
-            Assert.Contains("embedded:dotnet-api", content, StringComparison.Ordinal);
+            Assert.Contains("embedded:dotnet", content, StringComparison.Ordinal);
             // project-level command uses local prefix, not colliding with policy lifecycle names
             Assert.Contains("\"local build\":", content, StringComparison.Ordinal);
             Assert.DoesNotContain("\"compile\":", content, StringComparison.Ordinal);
