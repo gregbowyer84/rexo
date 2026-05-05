@@ -32,6 +32,7 @@ single config file and run identically locally and in CI.
   "schemaVersion": "1.0",
   "name": "my-repo",
   "extends": ["./base/rexo.json"],       // optional: inherit from other configs
+  "policySources": ["nuget:MyOrg.Policies@1.0.0#policies/base.json"], // optional: remote policy sources (opt-in)
   "commands": { ... },
   "aliases": { ... },
   "versioning": { ... },
@@ -114,7 +115,7 @@ Policy files have the same schema as `rexo.json`. They provide org-level default
 (e.g. `ci`, `release`) that are merged with the repository config. Create one with:
 
 ```bash
-rx init --with-policy --policy-template dotnet
+rx init --with-policy --policy dotnet
 ```
 
 ## Useful CLI commands

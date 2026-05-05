@@ -60,7 +60,7 @@ public static class Program
             "list" => await RunBuiltinAsync(executor, "list", EmptyInvocation(workingDir, json, jsonFile), verbose, quiet, cancellationToken),
             "explain" => await RunExplainAsync(executor, cleanArgs, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
             "config" => await RunConfigSubcommandAsync(cleanArgs, executor, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
-            "templates" => await RunTemplatesSubcommandAsync(cleanArgs, executor, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
+            "policies" => await RunPoliciesSubcommandAsync("policies", cleanArgs, executor, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
             "ui" => await RunUiAsync(executor, config, workingDir, cancellationToken),
             "run" => await RunConfiguredAsync(cleanArgs, executor, config, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
             _ => await RunDirectAsync(command, cleanArgs, executor, config, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
@@ -330,7 +330,8 @@ public static class Program
         return await WriteResultAsync(result, invocation, verbose, quiet, cancellationToken);
     }
 
-    private static async Task<int> RunTemplatesSubcommandAsync(
+    private static async Task<int> RunPoliciesSubcommandAsync(
+        string commandPrefix,
         IReadOnlyList<string> args,
         DefaultCommandExecutor executor,
         string workingDir,
@@ -340,16 +341,16 @@ public static class Program
         bool quiet,
         CancellationToken cancellationToken)
     {
-        // args[0] == "templates", args[1] == sub-command, args[2..] == positional args
+        // args[0] == commandPrefix, args[1] == sub-command, args[2..] == positional args
         if (args.Count < 2)
         {
-            Console.WriteLine("Usage: rx templates <list|show> [name]");
+            Console.WriteLine($"Usage: rx {commandPrefix} <list|show> [name]");
             return 1;
         }
 
-        var subCommand = $"templates {args[1].ToLowerInvariant()}";
+        var subCommand = $"{commandPrefix} {args[1].ToLowerInvariant()}";
 
-        // For "templates show <name>" pass the name as arg
+        // For "<prefix> show <name>" pass the name as arg
         var parsedArgs = new Dictionary<string, string>();
         if (args.Count >= 3)
         {
@@ -800,12 +801,12 @@ public static class Program
         Console.WriteLine("  init ci                     Scaffold thin CI wrappers for rx release");
         Console.WriteLine("      --provider              github|azdo|both (default: both)");
         Console.WriteLine("      --yes                   Non-interactive defaults");
-        Console.WriteLine("      --template              auto|dotnet|node|python|go|generic");
+        Console.WriteLine("      --stack                 auto|dotnet|node|python|go|generic");
         Console.WriteLine("      --detect                Preview detection only (no files written)");
         Console.WriteLine("      --dry-run               Alias for --detect");
         Console.WriteLine("      --schema-source         remote (default) or local");
-        Console.WriteLine("      --with-policy           Also create policy.json from a template");
-        Console.WriteLine("      --policy-template       standard|dotnet (or any embedded template)");
+        Console.WriteLine("      --with-policy           Also create policy.json from an embedded policy");
+        Console.WriteLine("      --policy                standard|dotnet (or any embedded policy name)");
         Console.WriteLine("      --with-docker-artifact  Add starter docker artifact to generated config");
         Console.WriteLine("      --without-docker-artifact  Skip docker artifact scaffolding (non-interactive)");
         Console.WriteLine("      --with-instructions     Download rexo.instructions.md into repo");
@@ -815,8 +816,8 @@ public static class Program
         Console.WriteLine("  config resolved             Show the fully-merged configuration");
         Console.WriteLine("  config sources              Show config file sources in merge order");
         Console.WriteLine("  config materialize          Write the merged config to a file");
-        Console.WriteLine("  templates list              List available embedded policy templates");
-        Console.WriteLine("  templates show <name>       Show an embedded policy template");
+        Console.WriteLine("  policies list               List available embedded policies");
+        Console.WriteLine("  policies show <name>        Show an embedded policy");
         Console.WriteLine("  ui                          Open the interactive UI");
         Console.WriteLine("  help                        Show this help");
         Console.WriteLine();

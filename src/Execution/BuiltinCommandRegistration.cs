@@ -40,7 +40,7 @@ public static class BuiltinCommandRegistration
             Task.FromResult(RunConfigResolved(config)));
 
         registry.Register("config sources", (invocation, _) =>
-            Task.FromResult(RunConfigSources(invocation, configPath)));
+            Task.FromResult(RunConfigSources(invocation, configPath, config)));
 
         registry.Register("config materialize", async (invocation, ct) =>
             await RunConfigMaterializeAsync(invocation, config, ct));
@@ -54,10 +54,10 @@ public static class BuiltinCommandRegistration
         registry.Register("explain version", (_, _) =>
             Task.FromResult(RunExplainVersion(config)));
 
-        registry.Register("templates list", (_, _) =>
+        registry.Register("policies list", (_, _) =>
             Task.FromResult(RunTemplatesList()));
 
-        registry.Register("templates show", (invocation, _) =>
+        registry.Register("policies show", (invocation, _) =>
             Task.FromResult(RunTemplatesShow(invocation)));
 
         return registry;
@@ -246,8 +246,8 @@ public static class BuiltinCommandRegistration
         lines.Add("  config resolved      Show the fully-merged configuration");
         lines.Add("  config sources       Show config file sources in merge order");
         lines.Add("  config materialize   Write the merged config to a file");
-        lines.Add("  templates list       List available embedded policy templates");
-        lines.Add("  templates show       Show an embedded policy template");
+        lines.Add("  policies list        List available embedded policies");
+        lines.Add("  policies show        Show an embedded policy's JSON");
         lines.Add("  help                 Show help");
         lines.Add("  ui                   Open the interactive UI");
 
@@ -286,7 +286,7 @@ public static class BuiltinCommandRegistration
         // Check built-ins (including sub-commands)
         var builtins = new[] { "version", "list", "explain", "doctor", "init", "new", "run", "help", "ui",
             "config", "config resolved", "config sources", "config materialize",
-            "templates", "templates list", "templates show", "explain version" };
+            "explain version", "policies", "policies list", "policies show" };
         if (builtins.Contains(commandName, StringComparer.OrdinalIgnoreCase))
         {
             return CommandResult.Ok("explain", $"Built-in command: {commandName}\n  This is a built-in command that is always available.");
@@ -362,6 +362,12 @@ public static class BuiltinCommandRegistration
             if (!string.IsNullOrEmpty(cmd.Description))
                 lines.Add($"  Description: {cmd.Description}");
 
+            // Show extends chain so user understands which layers contributed
+            if (config.Extends is { Count: > 0 })
+            {
+                lines.Add($"  Layers (extends): {string.Join(", ", config.Extends)}");
+            }
+
             if (!string.IsNullOrEmpty(cmd.Merge))
                 lines.Add($"  Layer merge: {cmd.Merge}");
 
@@ -424,8 +430,8 @@ public static class BuiltinCommandRegistration
                     {
                         var isSelfRef = string.Equals(step.Command, commandName, StringComparison.OrdinalIgnoreCase);
                         var whenExistsNote = isSelfRef
-                            ? "        whenExists: true  [layer composition marker — skips when no inner layer contributes steps]"
-                            : "        whenExists: true";
+                            ? "        whenExists: true  [layer continuation — skips when no inner layer contributes steps]"
+                            : $"        whenExists: true  [calls '{step.Command}' if it exists]";
                         lines.Add(whenExistsNote);
                     }
                     if (step.Parallel == true)
@@ -497,18 +503,35 @@ public static class BuiltinCommandRegistration
         return CommandResult.Ok("config resolved", json);
     }
 
-    private static CommandResult RunConfigSources(CommandInvocation invocation, string? configPath)
+    private static CommandResult RunConfigSources(CommandInvocation invocation, string? configPath, RepoConfig? config)
     {
         var lines = new List<string> { "Configuration sources (in merge order):" };
 
         var resolvedPath = configPath ?? ConfigFileLocator.GetDefaultConfigPath(invocation.WorkingDirectory);
         var exists = File.Exists(resolvedPath);
-        lines.Add($"  [{(exists ? "loaded" : "not found")}] {resolvedPath}");
+        lines.Add($"  [config]  [{(exists ? "loaded" : "not found")}] {resolvedPath}");
+
+        if (config?.PolicySources is { Count: > 0 } configPolicySources)
+        {
+            foreach (var src in configPolicySources)
+            {
+                lines.Add($"  [policy-source:config] {src}");
+            }
+        }
+
+        var envPolicySources = Environment.GetEnvironmentVariable("REXO_POLICY_SOURCES");
+        if (!string.IsNullOrWhiteSpace(envPolicySources))
+        {
+            foreach (var src in envPolicySources.Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                lines.Add($"  [policy-source:env]    {src}");
+            }
+        }
 
         var policyPath = ConfigFileLocator.FindPolicyPath(invocation.WorkingDirectory);
         if (policyPath is not null)
         {
-            lines.Add($"  [policy] {policyPath}");
+            lines.Add($"  [policy]  {policyPath}");
         }
 
         var overlayEnvPath = Environment.GetEnvironmentVariable("REXO_OVERLAY");
@@ -567,7 +590,7 @@ public static class BuiltinCommandRegistration
             lines.Add($"  {name}");
         }
 
-        return new CommandResult("templates list", true, 0, string.Join("\n", lines),
+        return new CommandResult("policies list", true, 0, string.Join("\n", lines),
             new Dictionary<string, object?> { ["templates"] = names });
     }
 
@@ -575,7 +598,7 @@ public static class BuiltinCommandRegistration
     {
         if (!invocation.Args.TryGetValue("name", out var templateName) || string.IsNullOrWhiteSpace(templateName))
         {
-            return CommandResult.Fail("templates show", 1, "Usage: rx templates show <name>");
+            return CommandResult.Fail("policies show", 1, "Usage: rx policies show <name>");
         }
 
         string json;
@@ -586,11 +609,11 @@ public static class BuiltinCommandRegistration
         catch (ArgumentException)
         {
             var available = string.Join(", ", Rexo.Policies.EmbeddedPolicyTemplates.TemplateNames);
-            return CommandResult.Fail("templates show", 1,
-                $"Template '{templateName}' not found. Available templates: {available}");
+            return CommandResult.Fail("policies show", 1,
+                $"Policy '{templateName}' not found. Available policies: {available}");
         }
 
-        return CommandResult.Ok("templates show", json);
+        return CommandResult.Ok("policies show", json);
     }
 
     private static CommandResult RunExplainVersion(RepoConfig? config)
@@ -689,12 +712,12 @@ public static class BuiltinCommandRegistration
         }
 
         var requestedLocation = ReadOption(options, "location");
-        var requestedTemplate = ReadOption(options, "template");
+        var requestedTemplate = ReadOption(options, "stack");
         var template = requestedTemplate ?? detectedTemplate;
         var autoTemplateRequested = string.IsNullOrWhiteSpace(requestedTemplate) || requestedTemplate.Equals("auto", StringComparison.OrdinalIgnoreCase);
         var schemaSource = ReadOption(options, "schema-source") ?? "remote";
         var withPolicy = IsTrue(options, "with-policy");
-        var policyTemplate = ReadOption(options, "policy-template");
+        var policyTemplate = ReadOption(options, "policy");
         var instructionsPathOption = ReadOption(options, "instructions-path");
         var withInstructions = IsTrue(options, "with-instructions") || !string.IsNullOrWhiteSpace(instructionsPathOption);
         var withDockerArtifact = IsTrue(options, "with-docker-artifact");
@@ -793,7 +816,7 @@ public static class BuiltinCommandRegistration
                 var defaultPolicyTemplate = SelectDefaultPolicyTemplate(template, detection, available, autoTemplateRequested)
                     ?? "standard";
 
-                Console.WriteLine("Tip: run 'rx templates list' and 'rx templates show <name>' to inspect policy templates.");
+                Console.WriteLine("Tip: run 'rx policies list' and 'rx policies show <name>' to inspect available policies.");
 
                 policyTemplate = PromptChoice(
                     "Choose policy template:",
@@ -826,7 +849,7 @@ public static class BuiltinCommandRegistration
         template = NormalizeTemplate(template);
         if (template is null)
         {
-            return CommandResult.Fail("init", 1, "Invalid --template value. Use auto|dotnet|node|python|go|java|ruby|generic|blank.");
+            return CommandResult.Fail("init", 1, "Invalid --stack value. Use auto|dotnet|node|python|go|java|ruby|generic|blank.");
         }
 
         schemaSource = NormalizeSchemaSource(schemaSource);
@@ -841,8 +864,8 @@ public static class BuiltinCommandRegistration
                 "init",
                 1,
                 template!.Equals("blank", StringComparison.OrdinalIgnoreCase)
-                    ? "The blank template has no default policy. Specify --policy-template explicitly, or omit --with-policy."
-                    : "No policy templates are available to initialize.");
+                    ? "The blank template has no default policy. Specify --policy explicitly, or omit --with-policy."
+                    : "No policies are available to initialize.");
         }
 
         if (withPolicy && !EmbeddedPolicyTemplates.TemplateNames.Contains(policyTemplate!, StringComparer.OrdinalIgnoreCase))
@@ -850,7 +873,7 @@ public static class BuiltinCommandRegistration
             return CommandResult.Fail(
                 "init",
                 1,
-                $"Invalid --policy-template value '{policyTemplate}'. Available: {string.Join(", ", EmbeddedPolicyTemplates.TemplateNames)}");
+                $"Invalid --policy value '{policyTemplate}'. Available: {string.Join(", ", EmbeddedPolicyTemplates.TemplateNames)}");
         }
 
         var configDir = Path.Combine(workingDir, ".rexo");
@@ -991,7 +1014,7 @@ public static class BuiltinCommandRegistration
             withInstructions ? $"Initialized instructions: {instructionsTargetPath}" : "Instructions file: not created",
             withDockerArtifact ? "Initialized docker artifact: yes" : "Initialized docker artifact: no",
             detection.HasDockerfile ? "Packaging hint: Dockerfile detected. Consider adding a docker artifact to .rexo/rexo.json." : "Packaging hint: none detected",
-            "Policy template tips: run 'rx templates list' and 'rx templates show <name>'",
+            "Policy template tips: run 'rx policies list' and 'rx policies show <name>'",
             "Next steps:",
             "  1. Review and edit rexo.json for your workflow.",
             "  2. Run 'rx list' and then 'rx build' (or your configured command).",
@@ -1004,7 +1027,7 @@ public static class BuiltinCommandRegistration
     private static CommandResult RunInitDetect(CommandInvocation invocation, InitDetection detection)
     {
         var options = invocation.Options;
-        var requestedTemplate = ReadOption(options, "template");
+        var requestedTemplate = ReadOption(options, "stack");
         var template = string.IsNullOrWhiteSpace(requestedTemplate) || requestedTemplate.Equals("auto", StringComparison.OrdinalIgnoreCase)
             ? detection.Template
             : requestedTemplate;
@@ -1012,7 +1035,7 @@ public static class BuiltinCommandRegistration
         var normalizedTemplate = NormalizeTemplate(template);
         if (normalizedTemplate is null)
         {
-            return CommandResult.Fail("init", 1, "Invalid --template value. Use auto|dotnet|node|python|go|generic|blank.");
+            return CommandResult.Fail("init", 1, "Invalid --stack value. Use auto|dotnet|node|python|go|generic|blank.");
         }
 
         var available = EmbeddedPolicyTemplates.TemplateNames;
@@ -1034,10 +1057,41 @@ public static class BuiltinCommandRegistration
             $"  detectedTemplate: {detection.Template}",
             $"  resolvedTemplate: {normalizedTemplate}",
             $"  dotnetProjectKind: {(detection.Template.Equals("dotnet", StringComparison.OrdinalIgnoreCase) ? (detection.DotnetLibrary ? "library" : "app/service") : "n/a")}",
-            $"  hasDockerfile: {(detection.HasDockerfile ? "yes" : "no")}",
-            $"  recommendedPolicyTemplate: {recommendedPolicyTemplate ?? "none"}",
-            "  tips: run 'rx templates list' and 'rx templates show <name>'",
+            $"  hasDockerfile: {(detection.HasDockerfile ? $"yes ({detection.PrimaryDockerfileRelativePath})" : "no")}",
         };
+
+        // Ecosystem signals found
+        var ecosystemSignals = new List<string>();
+        if (detection.HasDockerfile)
+            ecosystemSignals.Add($"Dockerfile ({detection.PrimaryDockerfileRelativePath})");
+        if (detection.HasPackageJson)
+            ecosystemSignals.Add("package.json (Node.js)");
+        if (detection.HasPomXml)
+            ecosystemSignals.Add("pom.xml (Maven/Java)");
+        if (detection.HasBuildGradle)
+            ecosystemSignals.Add("build.gradle (Gradle/Java)");
+        if (detection.HasGemfile)
+            ecosystemSignals.Add("Gemfile (Ruby)");
+        if (detection.HasTerraform)
+            ecosystemSignals.Add("*.tf (Terraform)");
+        if (detection.HasHelmChart)
+            ecosystemSignals.Add("Chart.yaml (Helm)");
+        if (detection.HasDockerCompose)
+            ecosystemSignals.Add("docker-compose.yml");
+
+        if (ecosystemSignals.Count > 0)
+        {
+            lines.Add("  detectedSignals:");
+            foreach (var signal in ecosystemSignals)
+                lines.Add($"    - {signal}");
+        }
+        else
+        {
+            lines.Add("  detectedSignals: (none)");
+        }
+
+        lines.Add($"  recommendedPolicyTemplate: {recommendedPolicyTemplate ?? "none"}");
+        lines.Add("  tips: run 'rx policies list' and 'rx policies show <name>'");
 
         return new CommandResult(
             "init detect",

@@ -8,13 +8,22 @@ internal sealed class UtilityBuiltinModule : IConfigBuiltinModule
     {
         registry.Register("builtin:validate", (step, ctx, ct) =>
         {
+            const string cacheKey = "builtin:validate";
+            if (context.Loader.RunCache.TryGetValue(cacheKey, out var cached))
+            {
+                Console.WriteLine("  Using cached validation result.");
+                return Task.FromResult(cached);
+            }
+
             Console.WriteLine("  Validating configuration...");
-            return Task.FromResult(new StepResult(
+            var result = new StepResult(
                 step.Id ?? "validate",
                 true,
                 0,
                 TimeSpan.Zero,
-                new Dictionary<string, object?> { ["message"] = "Configuration is valid." }));
+                new Dictionary<string, object?> { ["message"] = "Configuration is valid." });
+            context.Loader.RunCache[cacheKey] = result;
+            return Task.FromResult(result);
         });
 
         registry.Register("builtin:clean", (step, ctx, ct) =>

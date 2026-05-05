@@ -36,10 +36,12 @@ public sealed class OutputsAndSettingsContextTests
 
         var analysis = Assert.IsType<Dictionary<string, object?>>(ctx["analysis"]);
         Assert.Equal("artifacts/analysis", analysis["reports"]);
-        Assert.Equal("artifacts/analysis/build.sarif", analysis["sarif"]);
+        Assert.Equal("artifacts/analysis/sarif", analysis["sarif"]);
 
         var security = Assert.IsType<Dictionary<string, object?>>(ctx["security"]);
         Assert.Equal("artifacts/security/audit.json", security["audit"]);
+        Assert.Equal("artifacts/security", security["reports"]);
+        Assert.Equal("artifacts/security/sarif", security["sarif"]);
     }
 
     [Fact]
@@ -173,5 +175,76 @@ public sealed class OutputsAndSettingsContextTests
         var flags = Assert.IsType<Dictionary<string, object?>>(ctx["flags"]);
         Assert.Equal("true", flags["enabled"]);
         Assert.Equal("false", flags["disabled"]);
+    }
+
+    // ----------------------------------------------------------------
+    // BuildVarsContext
+    // ----------------------------------------------------------------
+
+    [Fact]
+    public void BuildVarsContextNullVarsReturnsEmptyDict()
+    {
+        var config = EmptyConfig();
+
+        var ctx = ConfigCommandLoader.BuildVarsContext(config);
+
+        Assert.Empty(ctx);
+    }
+
+    [Fact]
+    public void BuildVarsContextFlatStringValuesRoundTrips()
+    {
+        var json = JsonDocument.Parse("""{"solution":"my.slnx","configuration":"Debug"}""");
+        var config = EmptyConfig() with
+        {
+            Vars = new Dictionary<string, JsonElement>
+            {
+                ["dotnet"] = json.RootElement,
+            },
+        };
+
+        var ctx = ConfigCommandLoader.BuildVarsContext(config);
+
+        var dotnet = Assert.IsType<Dictionary<string, object?>>(ctx["dotnet"]);
+        Assert.Equal("my.slnx", dotnet["solution"]);
+        Assert.Equal("Debug", dotnet["configuration"]);
+    }
+
+    [Fact]
+    public void BuildVarsContextNestedObjectResolvesDeepKey()
+    {
+        var json = JsonDocument.Parse("""{"packageManager":"pnpm"}""");
+        var config = EmptyConfig() with
+        {
+            Vars = new Dictionary<string, JsonElement>
+            {
+                ["node"] = json.RootElement,
+            },
+        };
+
+        var ctx = ConfigCommandLoader.BuildVarsContext(config);
+
+        var node = Assert.IsType<Dictionary<string, object?>>(ctx["node"]);
+        Assert.Equal("pnpm", node["packageManager"]);
+    }
+
+    [Fact]
+    public void BuildVarsContextSupportsArbitraryNesting()
+    {
+        var json = JsonDocument.Parse("""{"level1":{"level2":{"level3":"deep-value"}}}""");
+        var config = EmptyConfig() with
+        {
+            Vars = new Dictionary<string, JsonElement>
+            {
+                ["nested"] = json.RootElement,
+            },
+        };
+
+        var ctx = ConfigCommandLoader.BuildVarsContext(config);
+
+        var nested = Assert.IsType<Dictionary<string, object?>>(ctx["nested"]);
+        var level1 = Assert.IsType<Dictionary<string, object?>>(nested["level1"]);
+        var level2 = Assert.IsType<Dictionary<string, object?>>(level1["level2"]);
+        Assert.Equal("deep-value", level2["level3"]);
     }
 }

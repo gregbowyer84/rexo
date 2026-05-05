@@ -23,6 +23,9 @@ public sealed class ConfigCommandLoader
     internal VersionProviderRegistry VersionProviders => _versionProviders;
     internal Artifacts.ArtifactProviderRegistry ArtifactProviders => _artifactProviders;
 
+    /// <summary>Per-invocation cache for idempotent builtins (builtin:validate, builtin:resolve-version).</summary>
+    internal Dictionary<string, StepResult> RunCache { get; } = new(StringComparer.Ordinal);
+
     public ConfigCommandLoader(
         BuiltinRegistry builtinRegistry,
         ITemplateRenderer templateRenderer,
@@ -133,6 +136,8 @@ public sealed class ConfigCommandLoader
         ICommandExecutor commandExecutor,
         CancellationToken cancellationToken)
     {
+        var emitRuntimeFiles = ShouldEmitRuntimeFiles(config);
+        var outputRoot = ResolveOutputRoot(config);
         var normalizedCommandConfig = NormalizeCommandConfig(commandConfig);
         var gitInfo = await Git.GitDetector.DetectAsync(repositoryRoot, cancellationToken);
         var ciInfo = CiDetector.Detect();
@@ -161,6 +166,7 @@ public sealed class ConfigCommandLoader
             CommandCallStack = [.. invocation.CallStack, commandName],
             ResolvedOutputs = BuildOutputsContext(config),
             ResolvedSettings = BuildSettingsContext(config),
+            ResolvedVars = BuildVarsContext(config),
         };
 
         var stepExecutor = new StepExecutor(commandExecutor, _templateRenderer, _builtinRegistry);
@@ -168,6 +174,7 @@ public sealed class ConfigCommandLoader
         var currentContext = context;
         var artifactEntries = new List<Core.Models.ArtifactManifestEntry>();
         var pushDecisionEntries = new List<Core.Models.PushDecision>();
+        CommandResult? failedResult = null;
 
         // Group consecutive parallel steps; sequential steps are singleton groups
         var stepGroups = GroupSteps(normalizedCommandConfig.Steps);
@@ -233,7 +240,7 @@ public sealed class ConfigCommandLoader
 
             if (failed.Result is not null)
             {
-                return new CommandResult(
+                failedResult = new CommandResult(
                     commandName,
                     false,
                     failed.Result.ExitCode,
@@ -245,10 +252,11 @@ public sealed class ConfigCommandLoader
                     Artifacts = artifactEntries,
                     PushDecisions = pushDecisionEntries,
                 };
+                break;
             }
         }
 
-        return new CommandResult(
+        var commandResult = failedResult ?? new CommandResult(
             commandName,
             true,
             0,
@@ -260,6 +268,13 @@ public sealed class ConfigCommandLoader
             Artifacts = artifactEntries,
             PushDecisions = pushDecisionEntries,
         };
+
+        if (emitRuntimeFiles)
+        {
+            await WriteCommandManifestAsync(repositoryRoot, outputRoot, commandName, commandResult, cancellationToken);
+        }
+
+        return commandResult;
     }
 
     internal async Task<StepResult> BuildArtifactsAsync(
@@ -1000,6 +1015,71 @@ public sealed class ConfigCommandLoader
         Console.WriteLine($"  Artifact manifest written to {manifestPath}");
     }
 
+    private static async Task WriteCommandManifestAsync(
+        string repositoryRoot,
+        string outputRoot,
+        string commandName,
+        CommandResult commandResult,
+        CancellationToken cancellationToken)
+    {
+        var manifestsDir = Path.Combine(repositoryRoot, outputRoot, "manifests");
+        Directory.CreateDirectory(manifestsDir);
+
+        // Sanitize command name for use as a file name
+        var safeName = string.Concat(commandName.Select(c => char.IsLetterOrDigit(c) || c == '-' || c == '_' ? c : '_'));
+        var manifestPath = Path.Combine(manifestsDir, $"{safeName}.json");
+
+        var stepSummaries = commandResult.Steps
+            .Select(s =>
+            {
+                var fileOutputs = s.Outputs.TryGetValue("__fileOutputs", out var fo)
+                    && fo is Dictionary<string, IReadOnlyList<string>> dict
+                    ? (object)dict
+                    : new Dictionary<string, IReadOnlyList<string>>();
+                return new
+                {
+                    id = s.StepId,
+                    success = s.Success,
+                    exitCode = s.ExitCode,
+                    fileOutputs,
+                };
+            })
+            .ToList();
+
+        var aggregatedFileOutputs = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var step in commandResult.Steps)
+        {
+            if (step.Outputs.TryGetValue("__fileOutputs", out var fo)
+                && fo is Dictionary<string, IReadOnlyList<string>> dict)
+            {
+                foreach (var (key, files) in dict)
+                {
+                    if (!aggregatedFileOutputs.TryGetValue(key, out var list))
+                    {
+                        list = [];
+                        aggregatedFileOutputs[key] = list;
+                    }
+
+                    list.AddRange(files);
+                }
+            }
+        }
+
+        var manifest = new
+        {
+            schemaVersion = "1.0",
+            generatedAt = DateTimeOffset.UtcNow,
+            command = commandName,
+            status = commandResult.Success ? "success" : "failure",
+            version = commandResult.Version is { } v ? v.SemVer : null,
+            fileOutputs = aggregatedFileOutputs,
+            steps = stepSummaries,
+        };
+
+        var json = System.Text.Json.JsonSerializer.Serialize(manifest, IndentedJsonOptions);
+        await File.WriteAllTextAsync(manifestPath, json, cancellationToken);
+    }
+
     internal static string ResolveOutputRoot(RepoConfig config) =>
         string.IsNullOrWhiteSpace(config.Outputs?.Root)
             ? DefaultOutputRoot
@@ -1417,6 +1497,8 @@ public sealed class ConfigCommandLoader
                 ["security"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["audit"] = string.Empty,
+                    ["reports"] = string.Empty,
+                    ["sarif"] = string.Empty,
                 },
                 ["packages"] = string.Empty,
                 ["manifests"] = string.Empty,
@@ -1429,8 +1511,10 @@ public sealed class ConfigCommandLoader
         var testsCoverage = config.Outputs?.Tests?.Coverage ?? $"{root}/coverage";
         var testsReports = config.Outputs?.Tests?.Reports ?? $"{root}/tests/reports";
         var analysisReports = config.Outputs?.Analysis?.Reports ?? $"{root}/analysis";
-        var analysisSarif = config.Outputs?.Analysis?.Sarif ?? $"{root}/analysis/build.sarif";
+        var analysisSarif = config.Outputs?.Analysis?.Sarif ?? $"{root}/analysis/sarif";
         var securityAudit = config.Outputs?.Security?.Audit ?? $"{root}/security/audit.json";
+        var securityReports = config.Outputs?.Security?.Reports ?? $"{root}/security";
+        var securitySarif = config.Outputs?.Security?.Sarif ?? $"{root}/security/sarif";
         var packages = config.Outputs?.Packages ?? $"{root}/packages";
         var manifests = config.Outputs?.Manifests ?? $"{root}/manifests";
         var logs = config.Outputs?.Logs ?? $"{root}/logs";
@@ -1454,6 +1538,8 @@ public sealed class ConfigCommandLoader
             ["security"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
             {
                 ["audit"] = securityAudit,
+                ["reports"] = securityReports,
+                ["sarif"] = securitySarif,
             },
             ["packages"] = packages,
             ["manifests"] = manifests,
@@ -1466,6 +1552,22 @@ public sealed class ConfigCommandLoader
     /// Converts the freeform <c>settings</c> JSON dictionary from the repo config into a
     /// nested <c>Dictionary&lt;string, object?&gt;</c> structure for template resolution.
     /// </summary>
+    public static IReadOnlyDictionary<string, object?> BuildVarsContext(RepoConfig config)
+    {
+        if (config.Vars is null || config.Vars.Count == 0)
+        {
+            return new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var result = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, element) in config.Vars)
+        {
+            result[key] = ConvertJsonElement(element);
+        }
+
+        return result;
+    }
+
     public static IReadOnlyDictionary<string, object?> BuildSettingsContext(RepoConfig config)
     {
         if (config.Settings is null || config.Settings.Count == 0)

@@ -9,7 +9,7 @@
       "steps": [
         {
           "id": "dotnet-restore",
-          "run": "dotnet restore {{settings.dotnet.solution | default('')}}"
+          "run": "dotnet restore{{vars.dotnet.solution | prefix(' ')}}"
         }
       ]
     },
@@ -18,7 +18,7 @@
       "steps": [
         {
           "id": "dotnet-build",
-          "run": "dotnet build {{settings.dotnet.solution | default('')}} -c {{settings.dotnet.configuration | default('Release')}} --no-restore"
+          "run": "dotnet build{{vars.dotnet.solution | prefix(' ')}} -c {{vars.dotnet.configuration | default('Release')}} --no-restore"
         }
       ]
     },
@@ -27,7 +27,7 @@
       "steps": [
         {
           "id": "dotnet-test",
-          "run": "dotnet test {{settings.dotnet.solution | default('')}} -c {{settings.dotnet.configuration | default('Release')}} --logger {{settings.dotnet.test.logger | default('trx')}} {{outputs.tests.results | prefix('--results-directory ')}} {{settings.dotnet.test.coverageArgs | default('')}} {{settings.dotnet.test.args | default('')}}",
+          "run": "dotnet test{{vars.dotnet.solution | prefix(' ')}} -c {{vars.dotnet.configuration | default('Release')}} --logger trx {{outputs.tests.results | prefix('--results-directory ')}}",
           "outputs": {
             "testResults": [
               "{{outputs.tests.results}}/**/*.trx",
@@ -46,7 +46,7 @@
       "steps": [
         {
           "id": "dotnet-format-check",
-          "run": "dotnet format {{settings.dotnet.solution | default('')}} --verify-no-changes {{outputs.analysis.reports | prefix('--report ')}} {{settings.dotnet.analyze.formatArgs | default('')}}",
+          "run": "dotnet format{{vars.dotnet.solution | prefix(' ')}} --verify-no-changes {{outputs.analysis.reports | prefix('--report ')}}",
           "outputs": {
             "analysisReports": [
               "{{outputs.analysis.reports}}/**/*.json"
@@ -55,10 +55,10 @@
         },
         {
           "id": "dotnet-build-warnings",
-          "run": "dotnet build {{settings.dotnet.solution | default('')}} -c {{settings.dotnet.configuration | default('Release')}} -warnaserror --no-restore {{outputs.analysis.sarif | prefix('/p:ErrorLog=')}} {{settings.dotnet.analyze.errorLogArgs | default('')}} {{settings.dotnet.analyze.buildArgs | default('')}}",
+          "run": "dotnet build{{vars.dotnet.solution | prefix(' ')}} -c {{vars.dotnet.configuration | default('Release')}} -warnaserror --no-restore {{outputs.analysis.sarif | suffix('/dotnet-build.sarif') | prefix('/p:ErrorLog=')}}",
           "outputs": {
             "sarifReports": [
-              "{{outputs.analysis.sarif}}"
+              "{{outputs.analysis.sarif}}/**/*.sarif"
             ]
           }
         }
@@ -69,7 +69,7 @@
       "steps": [
         {
           "id": "dotnet-format",
-          "run": "dotnet format {{settings.dotnet.solution | default('') }}"
+          "run": "dotnet format{{vars.dotnet.solution | prefix(' ')}}"
         }
       ]
     }

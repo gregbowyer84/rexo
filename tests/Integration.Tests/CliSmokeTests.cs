@@ -545,7 +545,7 @@ public sealed class CliSmokeTests
         {
             var outFile = Path.Combine(tempDir, "templates-list.json");
             var exitCode = await Program.ExecuteAsync(
-                ["--json", "--json-file", outFile, "templates", "list"],
+                ["--json", "--json-file", outFile, "policies", "list"],
                 CancellationToken.None);
             Assert.Equal(0, exitCode);
 
@@ -572,7 +572,7 @@ public sealed class CliSmokeTests
         {
             var outFile = Path.Combine(tempDir, "templates-show.json");
             var exitCode = await Program.ExecuteAsync(
-                ["--json", "--json-file", outFile, "templates", "show", "dotnet"],
+                ["--json", "--json-file", outFile, "policies", "show", "dotnet"],
                 CancellationToken.None);
             Assert.Equal(0, exitCode);
 
@@ -589,7 +589,7 @@ public sealed class CliSmokeTests
     [Fact]
     public async Task TemplatesShowReturnsNonZeroForUnknownTemplate()
     {
-        var exitCode = await Program.ExecuteAsync(["templates", "show", "no-such-template"], CancellationToken.None);
+        var exitCode = await Program.ExecuteAsync(["policies", "show", "no-such-template"], CancellationToken.None);
         Assert.NotEqual(0, exitCode);
     }
 
@@ -664,7 +664,7 @@ public sealed class CliSmokeTests
             await File.WriteAllTextAsync(Path.Combine(tempDir, "package.json"), "{\"name\":\"sample\"}");
             Environment.CurrentDirectory = tempDir;
 
-            using var document = await ExecuteJsonAsync(["init", "detect", "--template", "node"]);
+            using var document = await ExecuteJsonAsync(["init", "detect", "--stack", "node"]);
             var outputs = document.RootElement.GetProperty("Outputs");
             Assert.Equal("node", outputs.GetProperty("resolvedTemplate").GetString());
 

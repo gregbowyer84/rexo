@@ -20,7 +20,7 @@ If you prefer not to install globally, run Rexo directly from NuGet:
 
 ```bash
 dotnet dnx Rexo.Cli -- --help
-dotnet dnx Rexo.Cli -- init --yes --template auto
+dotnet dnx Rexo.Cli -- init --yes --stack auto
 ```
 
 Use `--` after `Rexo.Cli` so remaining arguments are passed to `rx`.
@@ -38,10 +38,10 @@ rx init
 rx list
 ```
 
-Non-interactive example with policy template:
+Non-interactive example with policy:
 
 ```bash
-rx init --yes --template auto --with-policy --policy-template dotnet
+rx init --yes --stack auto --with-policy --policy dotnet
 ```
 
 By default, `init` uses a local schema file to avoid editor trust prompts:

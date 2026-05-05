@@ -1,6 +1,6 @@
 # Embedded Items Reference
 
-This guide documents every embedded policy template currently shipped with Rexo,
+This guide documents every embedded lifecycle policy currently shipped with Rexo,
 what each command does, which options it accepts, and common use cases.
 
 Use this alongside `docs/CONFIGURATION.md`.
@@ -13,18 +13,18 @@ section in `docs/BUILTINS.md`.
 
 ## What "Embedded" Means
 
-Rexo ships policy templates as embedded resources in the CLI assembly
-(see `Rexo.Policies.EmbeddedTemplates`).
+Rexo ships lifecycle policies as embedded resources in the CLI assembly
+(see `Rexo.Policies.EmbeddedPolicyTemplates`).
 
-Current embedded templates:
+Current embedded policies:
 
 - `standard`
 - `dotnet`
 
-Embedded templates are never applied implicitly.
+Embedded policies are never applied implicitly.
 
 Artifact-only configs are minimal by default.
-Use `extends` to opt into an embedded lifecycle template explicitly:
+Use `extends` to opt into an embedded lifecycle policy explicitly:
 
 ```json
 {
@@ -52,7 +52,7 @@ Design intent:
 - Embedded policy says how this repo behaves (lifecycle command shape).
 - `embedded:standard` is the recommended lifecycle baseline when you want policy-provided commands.
 
-## Embedded Template: standard
+## Embedded Policy: standard
 
 Purpose:
 
@@ -221,7 +221,7 @@ Behavior notes:
 - `all` -> `release`
 - `ship` -> `push`
 
-## Embedded Template: dotnet
+## Embedded Policy: dotnet
 
 Purpose:
 

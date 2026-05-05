@@ -395,4 +395,74 @@ public sealed class TemplateRendererTests
         var renderer = new TemplateRenderer();
         Assert.Equal("npm", renderer.Render("{{settings.node.packageManager | default('npm')}}", ctx));
     }
+
+    // ----------------------------------------------------------------
+    // prefix / suffix filters
+    // ----------------------------------------------------------------
+
+    [Fact]
+    public void PrefixFilterReturnsEmptyWhenInputIsEmpty()
+    {
+        var renderer = new TemplateRenderer();
+        var ctx = MakeContext(args: new Dictionary<string, string> { ["val"] = "" });
+        Assert.Equal("", renderer.Render("{{args.val | prefix('--flag ')}}", ctx));
+    }
+
+    [Fact]
+    public void PrefixFilterReturnsEmptyWhenVariableIsMissing()
+    {
+        var renderer = new TemplateRenderer();
+        var ctx = MakeContext();
+        Assert.Equal("", renderer.Render("{{args.missing | prefix('--flag ')}}", ctx));
+    }
+
+    [Fact]
+    public void PrefixFilterPrependsPrefixToNonEmptyInput()
+    {
+        var renderer = new TemplateRenderer();
+        var ctx = MakeContext(args: new Dictionary<string, string> { ["dir"] = "artifacts/tests" });
+        Assert.Equal("--results-directory artifacts/tests", renderer.Render("{{args.dir | prefix('--results-directory ')}}", ctx));
+    }
+
+    [Fact]
+    public void SuffixFilterReturnsEmptyWhenInputIsEmpty()
+    {
+        var renderer = new TemplateRenderer();
+        var ctx = MakeContext(args: new Dictionary<string, string> { ["val"] = "" });
+        Assert.Equal("", renderer.Render("{{args.val | suffix('.sarif')}}", ctx));
+    }
+
+    [Fact]
+    public void SuffixFilterReturnsEmptyWhenVariableIsMissing()
+    {
+        var renderer = new TemplateRenderer();
+        var ctx = MakeContext();
+        Assert.Equal("", renderer.Render("{{args.missing | suffix('.sarif')}}", ctx));
+    }
+
+    [Fact]
+    public void SuffixFilterAppendsSuffixToNonEmptyInput()
+    {
+        var renderer = new TemplateRenderer();
+        var ctx = MakeContext(args: new Dictionary<string, string> { ["dir"] = "artifacts/analysis/sarif" });
+        Assert.Equal("artifacts/analysis/sarif/dotnet-build.sarif", renderer.Render("{{args.dir | suffix('/dotnet-build.sarif')}}", ctx));
+    }
+
+    [Fact]
+    public void MultiPipeChainProducesEmptyWhenInputIsMissing()
+    {
+        var renderer = new TemplateRenderer();
+        var ctx = MakeContext();
+        Assert.Equal("", renderer.Render("{{args.missing | suffix('/dotnet-build.sarif') | prefix('/p:ErrorLog=')}}", ctx));
+    }
+
+    [Fact]
+    public void MultiPipeChainProducesFullValueWhenInputIsPresent()
+    {
+        var renderer = new TemplateRenderer();
+        var ctx = MakeContext(args: new Dictionary<string, string> { ["dir"] = "artifacts/analysis/sarif" });
+        Assert.Equal(
+            "/p:ErrorLog=artifacts/analysis/sarif/dotnet-build.sarif",
+            renderer.Render("{{args.dir | suffix('/dotnet-build.sarif') | prefix('/p:ErrorLog=')}}", ctx));
+    }
 }

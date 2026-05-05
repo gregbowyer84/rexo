@@ -32,6 +32,9 @@ public sealed record ExecutionContext(
     /// <summary>Resolved toolchain settings available as <c>{{settings.*}}</c> in templates.</summary>
     public IReadOnlyDictionary<string, object?> ResolvedSettings { get; init; } = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Resolved template vars available as <c>{{vars.*}}</c> in templates.</summary>
+    public IReadOnlyDictionary<string, object?> ResolvedVars { get; init; } = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Tracks the command call stack for cross-command cycle detection.</summary>
     public IReadOnlyList<string> CommandCallStack { get; init; } = [];
 

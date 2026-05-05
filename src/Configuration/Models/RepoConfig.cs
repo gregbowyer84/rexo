@@ -14,6 +14,14 @@ public sealed record RepoConfig(
     public string? Description { get; init; }
     public string? Version { get; init; }
     public List<string>? Extends { get; init; }
+
+    /// <summary>
+    /// Policy sources to load and merge before the local policy file and env-var sources.
+    /// Supports the same source types as <c>REXO_POLICY_SOURCES</c>: HTTP/HTTPS, git+, nuget:, and local paths.
+    /// Env-var sources (<c>REXO_POLICY_SOURCES</c>) always win over config-declared sources.
+    /// </summary>
+    public List<string>? PolicySources { get; init; }
+
     public RepoVersioningConfig? Versioning { get; init; }
     public List<RepoArtifactConfig>? Artifacts { get; init; }
     public RepoRuntimeConfig? Runtime { get; init; }
@@ -23,6 +31,9 @@ public sealed record RepoConfig(
 
     /// <summary>Toolchain-specific settings available to policy commands via <c>{{settings.*}}</c>.</summary>
     public Dictionary<string, JsonElement>? Settings { get; init; }
+
+    /// <summary>Free-form template variable bag available as <c>{{vars.*}}</c> in step run strings. Supports arbitrary nesting.</summary>
+    public Dictionary<string, JsonElement>? Vars { get; init; }
 
     /// <summary>
     /// Controls how list fields are merged when combining configs via <c>extends</c>.
@@ -134,7 +145,7 @@ public sealed record RepoAnalysisOutputPathsConfig
     /// <summary>Analysis report output directory. Default: <c>artifacts/analysis</c>.</summary>
     public string? Reports { get; init; }
 
-    /// <summary>SARIF output file path. Default: <c>artifacts/analysis/build.sarif</c>.</summary>
+    /// <summary>SARIF output directory. Default: <c>artifacts/analysis/sarif</c>.</summary>
     public string? Sarif { get; init; }
 
 }
@@ -143,6 +154,12 @@ public sealed record RepoSecurityOutputPathsConfig
 {
     /// <summary>Full file path for the npm/security audit JSON output. Default: <c>artifacts/security/audit.json</c>.</summary>
     public string? Audit { get; init; }
+
+    /// <summary>Security report output directory. Default: <c>artifacts/security</c>.</summary>
+    public string? Reports { get; init; }
+
+    /// <summary>SARIF output directory for security findings. Default: <c>artifacts/security/sarif</c>.</summary>
+    public string? Sarif { get; init; }
 }
 
 public sealed record RepoRuntimeConfig(

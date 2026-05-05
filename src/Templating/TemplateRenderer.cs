@@ -235,6 +235,7 @@ public sealed class TemplateRenderer : ITemplateRenderer
             ["steps"] = steps,
             ["outputs"] = context.ResolvedOutputs,
             ["settings"] = context.ResolvedSettings,
+            ["vars"] = context.ResolvedVars,
         };
 
         if (context.Version is not null)
