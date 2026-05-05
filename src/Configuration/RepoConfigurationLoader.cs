@@ -7,19 +7,13 @@ using Rexo.Configuration.Models;
 using Rexo.Policies;
 using YamlDotNet.Serialization;
 
-public sealed class RepoConfigurationLoader
+public sealed partial class RepoConfigurationLoader
 {
     public const string RawGitHubBaseUrl = "https://raw.githubusercontent.com/agile-north/rexo/";
-    public const string SupportedSchemaVersion = "1.0";
-    public const string SupportedRexoSchemaUri = RawGitHubBaseUrl + "schema-v1.0/rexo.schema.json";
     public const string SupportedRexoSchemaPath = "rexo.schema.json";
     public const string SupportedRexoSchemaPathInRexoFolder = ".rexo/rexo.schema.json";
-    public const string SupportedPolicySchemaUri = RawGitHubBaseUrl + "schema-v1.0/policy.schema.json";
     public const string SupportedPolicySchemaPath = "policy.schema.json";
     public const string SupportedPolicySchemaPathInRexoFolder = ".rexo/policy.schema.json";
-
-    private const string EmbeddedRexoSchemaResourceName = "Rexo.Configuration.rexo.schema.1.0.json";
-    private const string EmbeddedPolicySchemaResourceName = "Rexo.Configuration.policy.schema.1.0.json";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

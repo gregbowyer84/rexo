@@ -4,6 +4,17 @@
     <CliToolCommandName>rx</CliToolCommandName>
   </PropertyGroup>
 
+  <!--
+    Single source of truth for the schema branch tag.
+    Extracted from the $id field in rexo.schema.json at MSBuild evaluation time.
+    To bump the schema version: update $id in rexo.schema.json — everything else derives from here.
+  -->
+  <PropertyGroup>
+    <_RexoSchemaJsonContent>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)rexo.schema.json'))</_RexoSchemaJsonContent>
+    <RexoSchemaTag>$([System.Text.RegularExpressions.Regex]::Match('$(_RexoSchemaJsonContent)', 'schema-v[0-9]+\.[0-9]+'))</RexoSchemaTag>
+    <RexoSchemaVersion>$([System.String]::Copy('$(RexoSchemaTag)').Replace('schema-v', ''))</RexoSchemaVersion>
+  </PropertyGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>latest</LangVersion>

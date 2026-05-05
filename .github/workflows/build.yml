@@ -3,6 +3,7 @@ name: ci-build-test
 on:
   pull_request:
     branches:
+      - main
       - release/**
   workflow_dispatch:
 
