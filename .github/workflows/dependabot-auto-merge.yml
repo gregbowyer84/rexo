@@ -14,6 +14,8 @@ jobs:
   auto-merge:
     runs-on: ubuntu-latest
     if: github.actor == 'dependabot[bot]'
+    env:
+      DEPENDABOT_AUTO_APPROVE_TOKEN: ${{ secrets.DEPENDABOT_AUTO_APPROVE_TOKEN }}
 
     permissions:
       contents: write
@@ -33,7 +35,7 @@ jobs:
         if: >-
           (steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
            steps.metadata.outputs.update-type == 'version-update:semver-minor') &&
-          secrets.DEPENDABOT_AUTO_APPROVE_TOKEN != ''
+          env.DEPENDABOT_AUTO_APPROVE_TOKEN != ''
         run: |
           gh pr review "$PR_URL" --approve \
             --body "Automatically approved: ${{ steps.metadata.outputs.update-type }} update."
