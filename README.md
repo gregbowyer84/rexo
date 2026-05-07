@@ -63,11 +63,24 @@ These two `rx init` concepts are distinct:
 
 ## Documentation
 
-- [Configuration Reference](docs/CONFIGURATION.md)
-- Command composition details: [Command merge and step operations](docs/CONFIGURATION.md#command-merge-and-step-operations)
+**Configuration & Behavior:**
+
+- [Configuration Reference](docs/configuration/README.md) — Schema, structure, defaults
+- [Commands & Steps](docs/configuration/commands.md) — Commands, options, merge semantics
+- [Versioning](docs/configuration/versioning.md) — Version providers, auto-detection
+- [Runtime Settings](docs/configuration/runtime.md) — Output, push policy, tests, analysis
+- [Template Variables](docs/configuration/templates.md) — Variables, filters, expressions
+
+**Lifecycle & Execution:**
+
+- [Builtins Reference](docs/builtins/README.md) — Overview and index of all builtins
+- [Embedded Policies](docs/embedded/README.md) — standard and dotnet lifecycle policies
+  - [standard policy](docs/embedded/standard.md)
+  - [dotnet policy](docs/embedded/dotnet.md)
+
+**Resources:**
+
 - [Artifact Providers](docs/artifacts/README.md)
-- [Builtins Reference](docs/BUILTINS.md)
-- [Embedded Items Reference](docs/EMBEDDED.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Development Guide](docs/DEVELOPMENT.md)
 

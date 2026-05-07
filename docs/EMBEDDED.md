@@ -1,15 +1,14 @@
-# Embedded Items Reference
+# Embedded Policies Reference
 
-This guide documents every embedded lifecycle policy currently shipped with Rexo,
-what each command does, which options it accepts, and common use cases.
+This content has been reorganized for clarity.
 
-Use this alongside `docs/CONFIGURATION.md`.
+**See the new structure:**
 
-For per-builtin runtime contract details (inputs, outputs, internal calls, exit behavior),
-see `docs/BUILTINS.md`.
+- [Embedded Policies](embedded/README.md) — Overview and index
+- [standard policy](embedded/standard.md) — General lifecycle commands
+- [dotnet policy](embedded/dotnet.md) — Dotnet-focused command surface
 
-For command-line mental models of each builtin, see the "Approximate Shell Equivalents"
-section in `docs/BUILTINS.md`.
+These pages contain the same information, organized by policy for easier navigation.
 
 ## What "Embedded" Means
 
@@ -390,6 +389,61 @@ rx format --fix
 rx release --push
 ```
 
+Recommended customization path for `embedded:dotnet` is the `vars.dotnet.*` bag rather than overriding commands.
+
+Example:
+
+```json
+{
+  "extends": ["embedded:dotnet"],
+  "vars": {
+    "dotnet": {
+      "solution": "solution.slnx",
+      "configuration": "Release",
+      "restore": {
+        "extraArgs": "--locked-mode"
+      },
+      "build": {
+        "extraArgs": "/p:ContinuousIntegrationBuild=true"
+      },
+      "test": {
+        "runsettings": "eng/test.runsettings",
+        "extraArgs": "--filter Category!=Slow",
+        "coverage": {
+          "mode": "xplat"
+        }
+      },
+      "format": {
+        "extraArgs": "--severity error"
+      },
+      "analyze": {
+        "formatExtraArgs": "--severity warn",
+        "buildExtraArgs": "/p:TreatWarningsAsErrors=true"
+      }
+    }
+  }
+}
+```
+
+Supported optional vars for `embedded:dotnet`:
+
+- `vars.dotnet.solution`: solution or project path passed to dotnet commands.
+- `vars.dotnet.configuration`: build/test configuration. Default: `Release`.
+- `vars.dotnet.restore.extraArgs`: appended to `dotnet restore`.
+- `vars.dotnet.build.extraArgs`: appended to `dotnet build`.
+- `vars.dotnet.test.runsettings`: passed as `--settings <path>`.
+- `vars.dotnet.test.extraArgs`: appended to `dotnet test`.
+- `vars.dotnet.test.coverage.mode`: `xplat` (default) or `none`.
+- `vars.dotnet.format.extraArgs`: appended to `dotnet format`.
+- `vars.dotnet.analyze.formatExtraArgs`: appended to `dotnet format --verify-no-changes`.
+- `vars.dotnet.analyze.buildExtraArgs`: appended to the analysis `dotnet build` step.
+
+Behavior notes:
+
+- Coverage is enabled by default for the dotnet overlay using `--collect:"XPlat Code Coverage"`.
+- Set `vars.dotnet.test.coverage.mode` to `none` to disable coverage without overriding the `test` command.
+- If you need a non-standard collector or a completely custom test invocation, overriding the `test` command is still the fallback.
+
 ## Option Mapping With Step with
 
 Embedded templates now use step-local option mapping so command intent is explicit
@@ -422,6 +476,7 @@ Choose `embedded:dotnet` when:
 
 - You want restore/format/ci convenience commands out of the box.
 - You want additive dotnet-specific commands on top of the standard lifecycle baseline.
+- You want the dotnet `test` command to emit TRX results and collect XPlat coverage into the configured `outputs.tests.*` locations.
 
 ## Practical Notes
 
@@ -429,3 +484,4 @@ Choose `embedded:dotnet` when:
 - Push eligibility is still governed by push rules and provider constraints.
 - `clean` is intentionally explicit and not part of default release pipelines.
 - Embedded templates can be overridden by repo commands/aliases as needed.
+- Coverage enablement for `embedded:dotnet` lives in the policy command overlay, not in core runtime defaults.

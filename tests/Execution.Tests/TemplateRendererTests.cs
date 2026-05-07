@@ -163,6 +163,24 @@ public sealed class TemplateRendererTests
     }
 
     [Fact]
+    public void EqualityExpressionReturnsFalseWhenVariableIsMissing()
+    {
+        var renderer = new TemplateRenderer();
+        var ctx = MakeContext();
+        var result = renderer.Render("{{vars.dotnet.test.coverage.mode == 'none'}}", ctx);
+        Assert.Equal("false", result);
+    }
+
+    [Fact]
+    public void InequalityExpressionReturnsTrueWhenVariableIsMissing()
+    {
+        var renderer = new TemplateRenderer();
+        var ctx = MakeContext();
+        var result = renderer.Render("{{vars.dotnet.test.coverage.mode != 'none'}}", ctx);
+        Assert.Equal("true", result);
+    }
+
+    [Fact]
     public void EqualityExpressionSupportsBooleanLiteral()
     {
         var renderer = new TemplateRenderer();

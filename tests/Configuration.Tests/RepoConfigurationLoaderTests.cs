@@ -1287,11 +1287,44 @@ public sealed class RepoConfigurationLoaderTests
     Assert.False(root.TryGetProperty("aliases", out _), "Should have no aliases — dotnet contributes commands, not shortcuts");
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Layered command composition via extends: append / prepend / wrap
-  // ─────────────────────────────────────────────────────────────────────────
+    [Fact]
+    public void EmbeddedDotnetTemplateTestCommandSupportsOptionalVarsContract()
+    {
+        using var document = JsonDocument.Parse(EmbeddedPolicyTemplates.ReadTemplate("dotnet"));
+        var commands = document.RootElement.GetProperty("commands");
+        var testCommand = commands.GetProperty("test");
+        var steps = testCommand.GetProperty("steps");
 
-  [Fact]
+        Assert.Equal(2, steps.GetArrayLength());
+
+        var noCoverageStep = steps[0];
+        Assert.Equal("dotnet-test-no-coverage", noCoverageStep.GetProperty("id").GetString());
+        Assert.Equal("{{vars.dotnet.test.coverage.mode == 'none'}}", noCoverageStep.GetProperty("when").GetString());
+        Assert.Contains("vars.dotnet.test.runsettings", noCoverageStep.GetProperty("run").GetString(), StringComparison.Ordinal);
+        Assert.Contains("vars.dotnet.test.extraArgs", noCoverageStep.GetProperty("run").GetString(), StringComparison.Ordinal);
+
+        var coverageStep = steps[1];
+        Assert.Equal("dotnet-test", coverageStep.GetProperty("id").GetString());
+        Assert.Equal("{{vars.dotnet.test.coverage.mode != 'none'}}", coverageStep.GetProperty("when").GetString());
+        Assert.Contains("--collect:\"XPlat Code Coverage\"", coverageStep.GetProperty("run").GetString(), StringComparison.Ordinal);
+        Assert.Contains("vars.dotnet.test.runsettings", coverageStep.GetProperty("run").GetString(), StringComparison.Ordinal);
+        Assert.Contains("vars.dotnet.test.extraArgs", coverageStep.GetProperty("run").GetString(), StringComparison.Ordinal);
+
+        var buildRun = commands.GetProperty("build").GetProperty("steps")[0].GetProperty("run").GetString();
+        Assert.Contains("vars.dotnet.build.extraArgs", buildRun, StringComparison.Ordinal);
+
+        var restoreRun = commands.GetProperty("restore").GetProperty("steps")[0].GetProperty("run").GetString();
+        Assert.Contains("vars.dotnet.restore.extraArgs", restoreRun, StringComparison.Ordinal);
+
+        var formatRun = commands.GetProperty("format").GetProperty("steps")[0].GetProperty("run").GetString();
+        Assert.Contains("vars.dotnet.format.extraArgs", formatRun, StringComparison.Ordinal);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Layered command composition via extends: append / prepend / wrap
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [Fact]
   public async Task ExtendsWithAppendMergeAppendsStepsAfterBase()
   {
     var dir = Path.Combine(Path.GetTempPath(), $"rexo-append-{Guid.NewGuid():N}");

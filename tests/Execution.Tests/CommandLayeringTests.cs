@@ -171,6 +171,45 @@ public sealed class CommandLayeringTests
     }
 
     [Fact]
+    public async Task DotnetAndStandardExtendsTestPreservesCoverageModeAndCustomizationVars()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"rexo-layer-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var json = MinimalJson("test-repo", """
+                "extends": ["embedded:dotnet", "embedded:standard"]
+                """);
+
+            var config = await LoadTempConfigAsync(dir, json);
+
+            Assert.NotNull(config.Commands);
+            var testSteps = config.Commands["test"].Steps;
+
+            Assert.Equal(2, testSteps.Count);
+
+            var noCoverageStep = Assert.Single(testSteps, step =>
+                string.Equals(step.Id, "dotnet-test-no-coverage", StringComparison.Ordinal));
+            Assert.Equal("{{vars.dotnet.test.coverage.mode == 'none'}}", noCoverageStep.When);
+            Assert.Contains("vars.dotnet.test.runsettings", noCoverageStep.Run ?? string.Empty, StringComparison.Ordinal);
+            Assert.Contains("vars.dotnet.test.extraArgs", noCoverageStep.Run ?? string.Empty, StringComparison.Ordinal);
+            Assert.DoesNotContain("XPlat Code Coverage", noCoverageStep.Run ?? string.Empty, StringComparison.Ordinal);
+
+            var coverageStep = Assert.Single(testSteps, step =>
+                string.Equals(step.Id, "dotnet-test", StringComparison.Ordinal));
+            Assert.Equal("{{vars.dotnet.test.coverage.mode != 'none'}}", coverageStep.When);
+            Assert.Contains("vars.dotnet.test.runsettings", coverageStep.Run ?? string.Empty, StringComparison.Ordinal);
+            Assert.Contains("vars.dotnet.test.extraArgs", coverageStep.Run ?? string.Empty, StringComparison.Ordinal);
+            Assert.Contains("XPlat Code Coverage", coverageStep.Run ?? string.Empty, StringComparison.Ordinal);
+            Assert.Contains("outputs.tests.coverage", coverageStep.Run ?? string.Empty, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
     public async Task DotnetAndStandardExtendsBuildIsWonByBaseDotnet()
     {
         var dir = Path.Combine(Path.GetTempPath(), $"rexo-layer-{Guid.NewGuid():N}");

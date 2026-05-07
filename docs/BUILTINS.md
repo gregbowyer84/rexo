@@ -1,13 +1,18 @@
 # Builtins Reference
 
-This document describes runtime builtins used by `uses: "builtin:<name>"` steps.
+This content has been reorganized for clarity.
 
-Scope:
+**See the new structure:**
 
-- Step-level builtins registered in `ConfigCommandLoader.RegisterBuiltins`
-- Their inputs, internal calls, outputs, side effects, and exit behavior
+- [Builtins Reference](builtins/README.md) — Overview and index
+- [Lifecycle Builtins](builtins/lifecycle.md) — resolve-version, validate, test, analyze, verify, clean
+- [Artifact Builtins](builtins/artifacts.md) — plan, build, tag, push
+- [Convenience Builtins](builtins/convenience.md) — ship, all (composite wrappers)
+- [Docker Builtins](builtins/docker.md) — docker-plan, docker-ship, docker-all, docker-stage
+- [Config Builtins](builtins/config.md) — config-resolved, config-materialize
+- [Patterns & Examples](builtins/patterns.md) — Usage patterns, shell equivalents, concrete examples
 
-For embedded policy command flows, see `docs/EMBEDDED.md`.
+These pages contain the same information, organized by category for easier navigation.
 
 ## Execution Model
 

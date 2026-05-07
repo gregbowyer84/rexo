@@ -9,7 +9,7 @@
       "steps": [
         {
           "id": "dotnet-restore",
-          "run": "dotnet restore{{vars.dotnet.solution | prefix(' ')}}"
+          "run": "dotnet restore{{vars.dotnet.solution | prefix(' ')}}{{vars.dotnet.restore.extraArgs | prefix(' ')}}"
         }
       ]
     },
@@ -18,7 +18,7 @@
       "steps": [
         {
           "id": "dotnet-build",
-          "run": "dotnet build{{vars.dotnet.solution | prefix(' ')}} -c {{vars.dotnet.configuration | default('Release')}} --no-restore"
+          "run": "dotnet build{{vars.dotnet.solution | prefix(' ')}} -c {{vars.dotnet.configuration | default('Release')}} --no-restore{{vars.dotnet.build.extraArgs | prefix(' ')}}"
         }
       ]
     },
@@ -26,8 +26,20 @@
       "description": "Run .NET tests.",
       "steps": [
         {
+          "id": "dotnet-test-no-coverage",
+          "when": "{{vars.dotnet.test.coverage.mode == 'none'}}",
+          "run": "dotnet test{{vars.dotnet.solution | prefix(' ')}} -c {{vars.dotnet.configuration | default('Release')}} --logger trx{{outputs.tests.results | prefix(' --results-directory ')}}{{vars.dotnet.test.runsettings | prefix(' --settings ')}}{{vars.dotnet.test.extraArgs | prefix(' ')}}",
+          "outputs": {
+            "testResults": [
+              "{{outputs.tests.results}}/**/*.trx",
+              "{{outputs.tests.results}}/**/*.xml"
+            ]
+          }
+        },
+        {
           "id": "dotnet-test",
-          "run": "dotnet test{{vars.dotnet.solution | prefix(' ')}} -c {{vars.dotnet.configuration | default('Release')}} --logger trx {{outputs.tests.results | prefix('--results-directory ')}}",
+          "when": "{{vars.dotnet.test.coverage.mode != 'none'}}",
+          "run": "dotnet test{{vars.dotnet.solution | prefix(' ')}} -c {{vars.dotnet.configuration | default('Release')}} --logger trx{{outputs.tests.results | prefix(' --results-directory ')}}{{vars.dotnet.test.runsettings | prefix(' --settings ')}}{{vars.dotnet.test.extraArgs | prefix(' ')}} --collect:\"XPlat Code Coverage\" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.OutputDirectory={{outputs.tests.coverage}}",
           "outputs": {
             "testResults": [
               "{{outputs.tests.results}}/**/*.trx",
@@ -46,7 +58,7 @@
       "steps": [
         {
           "id": "dotnet-format-check",
-          "run": "dotnet format{{vars.dotnet.solution | prefix(' ')}} --verify-no-changes {{outputs.analysis.reports | prefix('--report ')}}",
+          "run": "dotnet format{{vars.dotnet.solution | prefix(' ')}} --verify-no-changes{{outputs.analysis.reports | prefix(' --report ')}}{{vars.dotnet.analyze.formatExtraArgs | prefix(' ')}}",
           "outputs": {
             "analysisReports": [
               "{{outputs.analysis.reports}}/**/*.json"
@@ -55,7 +67,7 @@
         },
         {
           "id": "dotnet-build-warnings",
-          "run": "dotnet build{{vars.dotnet.solution | prefix(' ')}} -c {{vars.dotnet.configuration | default('Release')}} -warnaserror --no-restore {{outputs.analysis.sarif | suffix('/dotnet-build.sarif') | prefix('/p:ErrorLog=')}}",
+          "run": "dotnet build{{vars.dotnet.solution | prefix(' ')}} -c {{vars.dotnet.configuration | default('Release')}} -warnaserror --no-restore{{outputs.analysis.sarif | suffix('/dotnet-build.sarif') | prefix(' /p:ErrorLog=')}}{{vars.dotnet.analyze.buildExtraArgs | prefix(' ')}}",
           "outputs": {
             "sarifReports": [
               "{{outputs.analysis.sarif}}/**/*.sarif"
@@ -69,7 +81,7 @@
       "steps": [
         {
           "id": "dotnet-format",
-          "run": "dotnet format{{vars.dotnet.solution | prefix(' ')}}"
+          "run": "dotnet format{{vars.dotnet.solution | prefix(' ')}}{{vars.dotnet.format.extraArgs | prefix(' ')}}"
         }
       ]
     }
