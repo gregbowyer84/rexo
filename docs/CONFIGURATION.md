@@ -670,7 +670,9 @@ Supported keys:
 | --- | --- | --- |
 | `project` | `string` | Project path for `dotnet pack` |
 | `output` | `string` | Output directory |
-| `source` | `string` | NuGet feed URL |
+| `source` | `string` | NuGet source/feed URL or named source for push |
+| `target.source` | `string` | Structured target source/feed setting (Docker-style naming) |
+| `sourceEnv` | `string` | Legacy compatibility: env variable name containing source/feed |
 | `apiKeyEnv` | `string` | Environment variable containing API key (defaults to `NUGET_API_KEY`) |
 
 #### NuGet authentication
@@ -681,10 +683,13 @@ Scope note: NuGet environment variables are global for the process. Multiple `nu
 
 | Environment variable | Purpose |
 | --- | --- |
+| `NUGET_TARGET_SOURCE` | Docker-style env override for the NuGet target source/feed |
 | `NUGET_API_KEY` | API key for push (default; overridden by `settings.apiKeyEnv`) |
 | `NUGET_AUTH_TOKEN` | Alternative API key alias, used if `NUGET_API_KEY` is not set |
 | `GITHUB_TOKEN` | Auto-used for `nuget.pkg.github.com` when no explicit key is set |
 | `SYSTEM_ACCESSTOKEN` | Auto-used for Azure Artifacts feeds when no explicit key is set |
+
+NuGet source/feed resolution order: `NUGET_TARGET_SOURCE` → `settings.target.source` → `settings.source` → legacy `settings.sourceEnv` lookup → default `https://api.nuget.org/v3/index.json`.
 
 - **GHCR/GitHub Packages zero-config**: when `settings.source` contains `nuget.pkg.github.com` and no API key is configured, `GITHUB_TOKEN` is used automatically. Requires `permissions: packages: write` in the workflow.
 - **Azure Artifacts zero-config**: when the source is an Azure Artifacts feed and no key is configured, `SYSTEM_ACCESSTOKEN` is used automatically (must be enabled in the pipeline job).

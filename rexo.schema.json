@@ -1442,6 +1442,21 @@
           "type": "string",
           "description": "NuGet source/feed URL or name used for push."
         },
+        "target": {
+          "type": "object",
+          "description": "Structured target settings for NuGet push.",
+          "additionalProperties": false,
+          "properties": {
+            "source": {
+              "type": "string",
+              "description": "NuGet source/feed URL or name used for push."
+            }
+          }
+        },
+        "sourceEnv": {
+          "type": "string",
+          "description": "Legacy compatibility setting: environment variable name containing the NuGet push target source/feed. Prefer NUGET_TARGET_SOURCE and settings.target.source for Docker-style behavior."
+        },
         "apiKeyEnv": {
           "type": "string",
           "description": "Environment variable name containing the NuGet API key. Defaults to NUGET_API_KEY (fallback: NUGET_AUTH_TOKEN). CI-native: GITHUB_TOKEN is used automatically for nuget.pkg.github.com; SYSTEM_ACCESSTOKEN for Azure Artifacts."

@@ -12,6 +12,14 @@ public sealed class NuGetArtifactProvider : IArtifactProvider
     public static void Register(ArtifactProviderRegistry registry) =>
         registry.Register("nuget", new NuGetArtifactProvider());
 
+    private readonly Func<string, string, CancellationToken, Task<(int ExitCode, string Output)>> _runDotnetAsync;
+
+    public NuGetArtifactProvider(
+        Func<string, string, CancellationToken, Task<(int ExitCode, string Output)>>? runDotnetAsync = null)
+    {
+        _runDotnetAsync = runDotnetAsync ?? RunDotnetAsync;
+    }
+
     public string Type => "nuget";
 
     public async Task<ArtifactBuildResult> BuildAsync(
@@ -33,7 +41,7 @@ public sealed class NuGetArtifactProvider : IArtifactProvider
 
         Console.WriteLine($"  > dotnet {args}");
 
-        var result = await RunDotnetAsync(args, context.RepositoryRoot, cancellationToken);
+        var result = await _runDotnetAsync(args, context.RepositoryRoot, cancellationToken);
 
         return new ArtifactBuildResult(
             Name: artifact.Name,
@@ -59,10 +67,10 @@ public sealed class NuGetArtifactProvider : IArtifactProvider
         ExecutionContext context,
         CancellationToken cancellationToken)
     {
-        var source = GetSetting(artifact, "source") ?? "https://api.nuget.org/v3/index.json";
         var output = GetSetting(artifact, "output") ?? "artifacts/packages";
         var apiKeyEnvVar = GetSetting(artifact, "apiKeyEnv") ?? "NUGET_API_KEY";
         var fileEnv = RepositoryEnvironmentFiles.Load(context.RepositoryRoot);
+        var source = ResolveSource(artifact, fileEnv);
         var auth = ResolveAuth(source, apiKeyEnvVar, fileEnv);
         if (!auth.HasCredentials)
         {
@@ -78,7 +86,7 @@ public sealed class NuGetArtifactProvider : IArtifactProvider
 
         Console.WriteLine($"  > dotnet {args}");
 
-        var result = await RunDotnetAsync(args, context.RepositoryRoot, cancellationToken);
+        var result = await _runDotnetAsync(args, context.RepositoryRoot, cancellationToken);
         var published = result.ExitCode == 0
             ? new[] { $"{source}/{artifact.Name}" }
             : Array.Empty<string>();
@@ -116,8 +124,71 @@ public sealed class NuGetArtifactProvider : IArtifactProvider
         return (process.ExitCode, stdout + stderr);
     }
 
+    private static string ResolveSource(
+        ArtifactConfig artifact,
+        IReadOnlyDictionary<string, string> fileEnv)
+    {
+        var sourceFromDefaultEnv = FeedAuthResolver.GetEnv("NUGET_TARGET_SOURCE", fileEnv);
+        if (!string.IsNullOrWhiteSpace(sourceFromDefaultEnv))
+        {
+            return sourceFromDefaultEnv;
+        }
+
+        var sourceFromTarget = GetSetting(artifact.Settings, "target.source");
+        if (!string.IsNullOrWhiteSpace(sourceFromTarget))
+        {
+            return sourceFromTarget;
+        }
+
+        // Backward compatibility for earlier sourceEnv behavior.
+        var configuredSourceEnv = GetSetting(artifact.Settings, "sourceEnv");
+        if (!string.IsNullOrWhiteSpace(configuredSourceEnv))
+        {
+            var sourceFromConfiguredEnv = FeedAuthResolver.GetEnv(configuredSourceEnv, fileEnv);
+            if (!string.IsNullOrWhiteSpace(sourceFromConfiguredEnv))
+            {
+                return sourceFromConfiguredEnv;
+            }
+        }
+
+        return GetSetting(artifact.Settings, "source") ?? "https://api.nuget.org/v3/index.json";
+    }
+
     private static string? GetSetting(ArtifactConfig artifact, string key) =>
-        artifact.Settings.TryGetValue(key, out var value) ? GetString(value) : null;
+        GetSetting(artifact.Settings, key);
+
+    private static string? GetSetting(IReadOnlyDictionary<string, JsonElement> settings, string path)
+    {
+        if (!TryGetSettingValue(settings, out var value, path))
+        {
+            return null;
+        }
+
+        return GetString(value);
+    }
+
+    private static bool TryGetSettingValue(
+        IReadOnlyDictionary<string, JsonElement> settings,
+        out JsonElement value,
+        string path)
+    {
+        value = default;
+        var segments = path.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (segments.Length == 0 || !settings.TryGetValue(segments[0], out value))
+        {
+            return false;
+        }
+
+        for (var i = 1; i < segments.Length; i++)
+        {
+            if (value.ValueKind != JsonValueKind.Object || !value.TryGetProperty(segments[i], out value))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     private static string? GetString(JsonElement value) =>
         value.ValueKind switch
@@ -131,7 +202,7 @@ public sealed class NuGetArtifactProvider : IArtifactProvider
         };
 
     /// <summary>
-    /// Resolves NuGet push credentials.  Order: configured apiKeyEnv / NUGET_API_KEY /
+    /// Resolves NuGet push credentials. Order: configured apiKeyEnv / NUGET_API_KEY /
     /// NUGET_AUTH_TOKEN → GITHUB_TOKEN for nuget.pkg.github.com → SYSTEM_ACCESSTOKEN
     /// for Azure Artifacts.
     /// </summary>
