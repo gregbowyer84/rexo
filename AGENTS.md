@@ -124,7 +124,7 @@ Every `rexo.json` must start with:
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
   "schemaVersion": "1.0",
   ...
 }
@@ -133,7 +133,7 @@ Every `rexo.json` must start with:
 Alternative `$schema` values accepted:
 
 - Remote canonical URL (once the repository is published)
-- `https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json`
+- `https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json`
 - `rexo.schema.json`
 - `./rexo.schema.json`
 
@@ -280,3 +280,4 @@ No known gaps remain at this time.
 | Template rendering | `src/Templating/TemplateRenderer.cs` |
 | Version resolution | `src/Versioning/` |
 | Artifact build/push | `src/Artifacts.Docker/`, `src/Artifacts.NuGet/` |
+

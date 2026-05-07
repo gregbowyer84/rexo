@@ -80,7 +80,7 @@ public sealed class CliSmokeTests
                 Path.Combine(tempDir, "rexo.json"),
                 """
                 {
-                  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+                  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
                   "schemaVersion": "1.0",
                   "name": "sample",
                   "artifacts": [
@@ -143,7 +143,7 @@ public sealed class CliSmokeTests
                     Path.Combine(tempDir, "rexo.json"),
                     """
                                 {
-                                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+                                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
                                     "schemaVersion": "1.0",
                                     "name": "sample",
                                     "extends": ["embedded:none"],
@@ -194,7 +194,7 @@ public sealed class CliSmokeTests
                     Path.Combine(tempDir, "rexo.json"),
                     """
                                 {
-                                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+                                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
                                     "schemaVersion": "1.0",
                                     "name": "sample",
                                     "extends": ["embedded:standard"],
@@ -242,7 +242,7 @@ public sealed class CliSmokeTests
                     Path.Combine(tempDir, "rexo.json"),
                     """
                                 {
-                                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+                                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
                                     "schemaVersion": "1.0",
                                     "name": "sample",
                                     "commands": {
@@ -265,7 +265,7 @@ public sealed class CliSmokeTests
                     Path.Combine(tempDir, "policy.json"),
                     """
                                 {
-                                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json",
+                                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/policy.schema.json",
                                     "schemaVersion": "1.0",
                                     "name": "sample-policy",
                                     "commands": {
@@ -316,7 +316,7 @@ public sealed class CliSmokeTests
                     Path.Combine(tempDir, "rexo.json"),
                     """
                                 {
-                                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+                                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
                                     "schemaVersion": "1.0",
                                     "name": "sample",
                                     "extends": ["embedded:standard"],
@@ -360,7 +360,7 @@ public sealed class CliSmokeTests
                     Path.Combine(tempDir, "rexo.json"),
                     """
                                 {
-                                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+                                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
                                     "schemaVersion": "1.0",
                                     "name": "sample",
                                     "commands": {
@@ -420,7 +420,7 @@ public sealed class CliSmokeTests
                     Path.Combine(tempDir, "rexo.json"),
                     """
                                 {
-                                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+                                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
                                     "schemaVersion": "1.0",
                                     "name": "sample",
                                     "commands": {
@@ -481,7 +481,7 @@ public sealed class CliSmokeTests
                                 Path.Combine(tempDir, "rexo.json"),
                                 """
                                 {
-                                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+                                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
                                     "schemaVersion": "1.0",
                                     "name": "sample",
                                     "versioning": {
@@ -496,7 +496,7 @@ public sealed class CliSmokeTests
                                 externalPolicy,
                                 """
                                 {
-                                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json",
+                                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/policy.schema.json",
                                     "schemaVersion": "1.0",
                                     "name": "external-policy",
                                     "commands": {
@@ -730,7 +730,7 @@ public sealed class CliSmokeTests
                 Path.Combine(tempDir, "rexo.json"),
                 """
                 {
-                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
                     "schemaVersion": "1.0",
                     "name": "sample",
                     "extends": ["embedded:dotnet", "embedded:standard"],
@@ -773,7 +773,7 @@ public sealed class CliSmokeTests
                 Path.Combine(tempDir, "rexo.json"),
                 """
                 {
-                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
                     "schemaVersion": "1.0",
                     "name": "sample",
                     "extends": ["embedded:standard"],
@@ -821,7 +821,7 @@ public sealed class CliSmokeTests
                 Path.Combine(tempDir, "rexo.json"),
                 """
                 {
-                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
                     "schemaVersion": "1.0",
                     "name": "sample",
                     "extends": ["embedded:standard"],
@@ -862,7 +862,7 @@ public sealed class CliSmokeTests
                 Path.Combine(tempDir, "rexo.json"),
                 """
                 {
-                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+                    "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
                     "schemaVersion": "1.0",
                     "name": "sample",
                     "extends": ["embedded:standard", "embedded:dotnet"],
@@ -900,3 +900,4 @@ public sealed class CliSmokeTests
         }
     }
 }
+

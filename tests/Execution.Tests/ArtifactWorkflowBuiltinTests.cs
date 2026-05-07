@@ -76,6 +76,10 @@ public sealed class ArtifactWorkflowBuiltinTests
         Assert.Contains(payload.Push.SkipReasons, reason => reason.Contains("Credentials", StringComparison.OrdinalIgnoreCase)
             || reason.Contains("not resolved", StringComparison.OrdinalIgnoreCase));
         Assert.All(payload.Artifacts, artifact => Assert.True(artifact.Push.Requested));
+
+        var nugetItem = Assert.Single(payload.Artifacts, artifact => string.Equals(artifact.Type, "nuget", StringComparison.Ordinal));
+        Assert.Equal("https://nuget.nrth.com/nuget/nuget/", nugetItem.BuildSettings["source"]);
+        Assert.Contains("MY_FEED_API_KEY", nugetItem.RequiredCredentials);
     }
 
     [Fact]
@@ -244,7 +248,11 @@ public sealed class ArtifactWorkflowBuiltinTests
                     "nuget-lib",
                     JsonSerializer.Deserialize<Dictionary<string, JsonElement>>("""
                     {
-                      "project": "src/Core/Core.csproj"
+                                            "project": "src/Core/Core.csproj",
+                                            "target": {
+                                                "source": "https://nuget.nrth.com/nuget/nuget/",
+                                                "apiKeyEnv": "MY_FEED_API_KEY"
+                                            }
                     }
                     """)!),
             ],

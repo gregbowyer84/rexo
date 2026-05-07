@@ -696,7 +696,7 @@ public sealed class ConfigCommandLoader
                 break;
             case "nuget":
                 settings["project"] = TryGetArtifactSettingString(artifact.Settings, "project") ?? string.Empty;
-                settings["source"] = TryGetArtifactSettingString(artifact.Settings, "source") ?? "https://api.nuget.org/v3/index.json";
+                settings["source"] = TryGetArtifactSettingString(artifact.Settings, "target.source") ?? "https://api.nuget.org/v3/index.json";
                 settings["output"] = TryGetArtifactSettingString(artifact.Settings, "output") ?? Path.Combine("artifacts", "packages");
                 break;
             case "helm-oci":
@@ -728,7 +728,7 @@ public sealed class ConfigCommandLoader
         return artifact.Type.ToLowerInvariant() switch
         {
             "docker" => ["DOCKER_LOGIN_USERNAME", "DOCKER_LOGIN_PASSWORD", "DOCKER_LOGIN_REGISTRY", "GITHUB_ACTOR/GITHUB_TOKEN (for ghcr.io in GitHub Actions)"],
-            "nuget" => [$"{TryGetArtifactSettingString(artifact.Settings, "apiKeyEnv") ?? "NUGET_API_KEY"}", "NUGET_AUTH_TOKEN", "GITHUB_TOKEN or SYSTEM_ACCESSTOKEN (CI fallback)"],
+            "nuget" => [$"{TryGetArtifactSettingString(artifact.Settings, "target.apiKeyEnv") ?? "NUGET_API_KEY"}", "NUGET_AUTH_TOKEN", "GITHUB_TOKEN or SYSTEM_ACCESSTOKEN (CI fallback)"],
             "helm-oci" => ["HELM_REGISTRY_USERNAME", "HELM_REGISTRY_PASSWORD", "HELM_REGISTRY", "GITHUB_ACTOR/GITHUB_TOKEN (for ghcr.io in GitHub Actions)"],
             _ => Array.Empty<string>(),
         };
@@ -750,8 +750,8 @@ public sealed class ConfigCommandLoader
             "nuget" =>
             [
                 ToPlanCredentialCheck(ResolvePlanNuGetAuth(
-                    TryGetArtifactSettingString(artifact.Settings, "source") ?? "https://api.nuget.org/v3/index.json",
-                    TryGetArtifactSettingString(artifact.Settings, "apiKeyEnv"),
+                    TryGetArtifactSettingString(artifact.Settings, "target.source") ?? "https://api.nuget.org/v3/index.json",
+                    TryGetArtifactSettingString(artifact.Settings, "target.apiKeyEnv"),
                     fileEnv))
             ],
             "helm-oci" =>
@@ -921,9 +921,28 @@ public sealed class ConfigCommandLoader
 
     private static string? TryGetArtifactSettingString(Dictionary<string, JsonElement>? settings, string key)
     {
-        if (settings is null || !settings.TryGetValue(key, out var value))
+        if (settings is null)
         {
             return null;
+        }
+
+        var segments = key.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (segments.Length == 0)
+        {
+            return null;
+        }
+
+        if (!settings.TryGetValue(segments[0], out var value))
+        {
+            return null;
+        }
+
+        for (var i = 1; i < segments.Length; i++)
+        {
+            if (value.ValueKind != JsonValueKind.Object || !value.TryGetProperty(segments[i], out value))
+            {
+                return null;
+            }
         }
 
         return value.ValueKind switch

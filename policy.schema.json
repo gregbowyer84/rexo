@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json",
+  "$id": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/policy.schema.json",
   "title": "Rexo policy configuration schema",
   "description": "Schema for policy files that provide shared command and alias baselines.",
   "type": "object",
@@ -17,7 +17,7 @@
       "type": "string",
       "description": "Schema URI/path used by editors and validators for policy files.",
       "enum": [
-        "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json",
+        "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/policy.schema.json",
         "https://raw.githubusercontent.com/agile-north/rexo/release/next/policy.schema.json",
         "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/policy.schema.json",
         "policy.schema.json",
@@ -338,3 +338,4 @@
     }
   }
 }
+

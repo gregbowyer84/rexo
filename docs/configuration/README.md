@@ -22,13 +22,13 @@ Every config file (`rexo.json`/`rexo.yml`) must begin with:
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
   "schemaVersion": "1.0",
   ...
 }
 ```
 
-- `$schema`: the canonical URL `https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json` (recommended), or the relative `rexo.schema.json` / `../rexo.schema.json` for local-only use
+- `$schema`: the canonical URL `https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json` (recommended), or the relative `rexo.schema.json` / `../rexo.schema.json` for local-only use
 - `schemaVersion`: must be `"1.0"`
 
 The loader validates against the embedded schema (or a local `rexo.schema.json`) via NJsonSchema before
@@ -36,7 +36,7 @@ deserializing. Missing/unsupported metadata or schema violations cause a hard fa
 
 Policy files (`policy.json`/`policy.yml`) follow the same contract, using:
 
-- `$schema`: `https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json` (recommended), or `policy.schema.json` / `../policy.schema.json`
+- `$schema`: `https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/policy.schema.json` (recommended), or `policy.schema.json` / `../policy.schema.json`
 - `schemaVersion`: must be `"1.0"`
 
 When `rx init --schema-source local --with-policy` is used, both schema files are written to `.rexo/`:
@@ -50,7 +50,7 @@ When `rx init --schema-source local --with-policy` is used, both schema files ar
 
 ```jsonc
 {
-  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
   "schemaVersion": "1.0",
   "name": "my-repo",
   "description": "Optional description",
@@ -80,7 +80,7 @@ shows the effective values used by built-ins (not a requirement to persist every
 
 ```jsonc
 {
-  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
   "schemaVersion": "1.0",
   "name": "my-repo",
 
@@ -239,3 +239,4 @@ Detailed reference for each config section:
 - [Artifacts](../../artifacts/README.md) — Configure artifact build/tag/push workflows
 - [Runtime](runtime.md) — Configure output, push policy, tests, and analysis settings
 - [Template Variables](templates.md) — Use dynamic variables in step commands
+

@@ -33,7 +33,7 @@ public sealed class InitCommandTests
             var schemaPath = Path.Combine(dir, ".rexo", "rexo.schema.json");
             Assert.False(File.Exists(schemaPath));
             var content = await File.ReadAllTextAsync(configPath);
-            Assert.Contains("\"$schema\": \"https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json\"", content, StringComparison.Ordinal);
+            Assert.Contains("\"$schema\": \"https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json\"", content, StringComparison.Ordinal);
             Assert.Contains("\"schemaVersion\": \"1.0\"", content, StringComparison.Ordinal);
             Assert.Contains("\"commands\"", content, StringComparison.Ordinal);
         }
@@ -729,7 +729,7 @@ public sealed class InitCommandTests
             Assert.True(File.Exists(configPath));
             Assert.False(File.Exists(schemaPath));
             var content = await File.ReadAllTextAsync(configPath);
-            Assert.Contains("\"$schema\": \"https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json\"", content, StringComparison.Ordinal);
+            Assert.Contains("\"$schema\": \"https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json\"", content, StringComparison.Ordinal);
         }
         finally
         {
@@ -947,3 +947,4 @@ public sealed class InitCommandTests
         }
     }
 }
+

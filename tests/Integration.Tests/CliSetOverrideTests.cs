@@ -24,7 +24,7 @@ public sealed class CliSetOverrideTests
                 Path.Combine(tempDir, "rexo.json"),
                 """
                 {
-                  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+                  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
                   "schemaVersion": "1.0",
                   "name": "set-test",
                   "versioning": { "provider": "fixed", "fallback": "1.0.0" }
@@ -70,7 +70,7 @@ public sealed class CliSetOverrideTests
                 Path.Combine(tempDir, "rexo.json"),
                 """
                 {
-                  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+                  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
                   "schemaVersion": "1.0",
                   "name": "set-bool-test",
                   "runtime": { "push": { "enabled": true } }
@@ -116,7 +116,7 @@ public sealed class CliSetOverrideTests
                 Path.Combine(tempDir, "rexo.json"),
                 """
                 {
-                  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+                  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
                   "schemaVersion": "1.0",
                   "name": "priority-test",
                   "versioning": { "provider": "fixed", "fallback": "1.0.0" }
@@ -161,7 +161,7 @@ public sealed class CliSetOverrideTests
                 Path.Combine(tempDir, "rexo.json"),
                 """
                 {
-                  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+                  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
                   "schemaVersion": "1.0",
                   "name": "multi-set-test",
                   "versioning": { "provider": "fixed", "fallback": "1.0.0" }
@@ -192,3 +192,4 @@ public sealed class CliSetOverrideTests
         }
     }
 }
+

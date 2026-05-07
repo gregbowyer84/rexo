@@ -29,7 +29,7 @@ Use `extends` to opt into an embedded lifecycle policy explicitly:
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
   "schemaVersion": "1.0",
   "name": "orders-api",
   "extends": [
@@ -104,7 +104,7 @@ Use when you want immediate lifecycle commands with minimal config.
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
   "schemaVersion": "1.0",
   "name": "orders-api",
   "extends": ["embedded:standard"],
@@ -158,7 +158,7 @@ Use when you want dotnet-centric command aliases and formatting helpers.
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
   "schemaVersion": "1.0",
   "name": "billing-service",
   "extends": ["embedded:dotnet"],
@@ -212,3 +212,4 @@ This pattern is recommended for custom policies too.
 - `clean` is intentionally explicit and not part of default release pipelines.
 - Embedded templates can be overridden by repo commands/aliases as needed.
 - Coverage enablement for `embedded:dotnet` lives in the policy command overlay, not in core runtime defaults.
+

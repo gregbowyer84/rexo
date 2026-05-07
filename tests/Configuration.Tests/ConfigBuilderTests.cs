@@ -95,7 +95,7 @@ public sealed class ConfigBuilderTests
         await File.WriteAllTextAsync(policyFile,
             """
             {
-              "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json",
+              "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/policy.schema.json",
               "schemaVersion": "1.0",
               "name": "team-policy",
               "commands": {
@@ -138,7 +138,7 @@ public sealed class ConfigBuilderTests
         await File.WriteAllTextAsync(base1,
             """
             {
-              "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json",
+              "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/policy.schema.json",
               "schemaVersion": "1.0",
               "name": "base-policy",
               "commands": {
@@ -160,7 +160,7 @@ public sealed class ConfigBuilderTests
         await File.WriteAllTextAsync(override1,
             """
             {
-              "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/policy.schema.json",
+              "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/policy.schema.json",
               "schemaVersion": "1.0",
               "name": "override-policy",
               "commands": {
@@ -207,3 +207,4 @@ public sealed class ConfigBuilderTests
         Assert.Null(result.Aliases);
     }
 }
+

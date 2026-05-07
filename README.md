@@ -94,7 +94,7 @@ A config can be as small as a command and alias map:
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
   "schemaVersion": "1.0",
   "name": "my-repo",
   "commands": {
@@ -123,7 +123,7 @@ To opt into the standard lifecycle, extend embedded:standard:
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+  "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
   "schemaVersion": "1.0",
   "name": "my-api",
   "extends": [
@@ -201,3 +201,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 ## Security
 
 See [SECURITY.md](SECURITY.md).
+

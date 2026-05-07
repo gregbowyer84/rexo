@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+  "$id": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
   "title": "Rexo repository configuration schema",
   "description": "Schema for repo.json, the main Rexo repository runtime configuration file.",
   "type": "object",
@@ -15,7 +15,7 @@
       "type": "string",
       "description": "Schema URI/path used by editors and validation. Use the canonical remote URL for shared repositories.",
       "enum": [
-        "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+        "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
         "rexo.schema.json",
         "./rexo.schema.json",
         "../rexo.schema.json",
@@ -1977,3 +1977,4 @@
     }
   }
 }
+

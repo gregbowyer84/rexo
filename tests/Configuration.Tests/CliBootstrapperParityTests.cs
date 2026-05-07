@@ -14,7 +14,7 @@ public sealed class CliBootstrapperParityTests
         var configPath = Path.Combine(dir, "rexo.json");
         await File.WriteAllTextAsync(configPath, """
         {
-          "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+          "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
           "schemaVersion": "1.0",
           "name": "sample",
           "commands": {},
@@ -43,3 +43,4 @@ public sealed class CliBootstrapperParityTests
     }
 
 }
+

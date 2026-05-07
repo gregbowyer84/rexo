@@ -70,7 +70,7 @@ public sealed class RepoConfigurationLoaderTests
     var configPath = Path.Combine(dir, "rexo.json");
     await File.WriteAllTextAsync(configPath, """
         {
-          "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+          "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
           "schemaVersion": "1.0",
           "name": "sample",
           "commands": {
@@ -108,7 +108,7 @@ public sealed class RepoConfigurationLoaderTests
     var configPath = Path.Combine(dir, "rexo.json");
     await File.WriteAllTextAsync(configPath, """
           {
-            "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+            "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
             "schemaVersion": "1.0",
             "name": "sample",
             "commands": {
@@ -150,7 +150,7 @@ public sealed class RepoConfigurationLoaderTests
     var configPath = Path.Combine(dir, "rexo.json");
     await File.WriteAllTextAsync(configPath, """
           {
-            "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+            "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
             "schemaVersion": "1.0",
             "name": "sample",
             "commands": {
@@ -199,7 +199,7 @@ public sealed class RepoConfigurationLoaderTests
     var configPath = Path.Combine(dir, "rexo.json");
     await File.WriteAllTextAsync(configPath, """
           {
-            "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+            "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
             "schemaVersion": "1.0",
             "name": "sample",
             "commands": {
@@ -339,7 +339,7 @@ public sealed class RepoConfigurationLoaderTests
         var path = Path.Combine(Path.GetTempPath(), $"repo-{Guid.NewGuid():N}.json");
         await File.WriteAllTextAsync(path, """
         {
-          "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+          "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
           "schemaVersion": "1.0",
           "name": "sample",
           "commands": {
@@ -377,7 +377,7 @@ public sealed class RepoConfigurationLoaderTests
         var path = Path.Combine(Path.GetTempPath(), $"repo-{Guid.NewGuid():N}.json");
         await File.WriteAllTextAsync(path, """
         {
-          "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+          "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
           "schemaVersion": "1.0",
           "name": "sample",
           "commands": {
@@ -483,7 +483,7 @@ public sealed class RepoConfigurationLoaderTests
     var basePath = Path.Combine(dir, "base.json");
     await File.WriteAllTextAsync(basePath, """
       {
-        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
         "schemaVersion": "1.0",
         "name": "base",
         "commands": {},
@@ -509,7 +509,7 @@ public sealed class RepoConfigurationLoaderTests
     var childPath = Path.Combine(dir, "child.json");
     await File.WriteAllTextAsync(childPath, """
       {
-        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
         "schemaVersion": "1.0",
         "name": "child",
         "extends": ["./base.json"],
@@ -565,7 +565,7 @@ public sealed class RepoConfigurationLoaderTests
     var basePath = Path.Combine(dir, "base.json");
     await File.WriteAllTextAsync(basePath, """
       {
-        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
         "schemaVersion": "1.0",
         "name": "base",
         "commands": {},
@@ -577,7 +577,7 @@ public sealed class RepoConfigurationLoaderTests
     var childPath = Path.Combine(dir, "child.json");
     await File.WriteAllTextAsync(childPath, """
       {
-        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
         "schemaVersion": "1.0",
         "name": "child",
         "extends": ["./base.json"],
@@ -1145,7 +1145,7 @@ public sealed class RepoConfigurationLoaderTests
     var configPath = Path.Combine(dir, "rexo.json");
     await File.WriteAllTextAsync(configPath, """
       {
-        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
         "schemaVersion": "1.0",
         "name": "sample",
         "commands": {
@@ -1185,7 +1185,7 @@ public sealed class RepoConfigurationLoaderTests
     var configPath = Path.Combine(dir, "rexo.json");
     await File.WriteAllTextAsync(configPath, """
       {
-        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
         "schemaVersion": "1.0",
         "name": "sample",
         "commands": {
@@ -1641,7 +1641,7 @@ public sealed class RepoConfigurationLoaderTests
     var basePath = Path.Combine(dir, "base.json");
     await File.WriteAllTextAsync(basePath, """
       {
-        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
         "schemaVersion": "1.0",
         "name": "base",
         "commands": {
@@ -1660,7 +1660,7 @@ public sealed class RepoConfigurationLoaderTests
     var childPath = Path.Combine(dir, "child.json");
     await File.WriteAllTextAsync(childPath, """
       {
-        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
         "schemaVersion": "1.0",
         "name": "child",
         "extends": ["./base.json"],
@@ -1715,7 +1715,7 @@ public sealed class RepoConfigurationLoaderTests
     var basePath = Path.Combine(dir, "base.json");
     await File.WriteAllTextAsync(basePath, """
       {
-        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
         "schemaVersion": "1.0",
         "name": "base",
         "commands": {
@@ -1732,7 +1732,7 @@ public sealed class RepoConfigurationLoaderTests
     var childPath = Path.Combine(dir, "child.json");
     await File.WriteAllTextAsync(childPath, """
       {
-        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
         "schemaVersion": "1.0",
         "name": "child",
         "extends": ["./base.json"],
@@ -1774,7 +1774,7 @@ public sealed class RepoConfigurationLoaderTests
     var basePath = Path.Combine(dir, "base.json");
     await File.WriteAllTextAsync(basePath, """
       {
-        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
         "schemaVersion": "1.0",
         "name": "base",
         "commands": {
@@ -1793,7 +1793,7 @@ public sealed class RepoConfigurationLoaderTests
     var childPath = Path.Combine(dir, "child.json");
     await File.WriteAllTextAsync(childPath, """
       {
-        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
         "schemaVersion": "1.0",
         "name": "child",
         "extends": ["./base.json"],
@@ -1851,7 +1851,7 @@ public sealed class RepoConfigurationLoaderTests
     var basePath = Path.Combine(dir, "base.json");
     await File.WriteAllTextAsync(basePath, """
       {
-        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
         "schemaVersion": "1.0",
         "name": "base",
         "commands": {
@@ -1868,7 +1868,7 @@ public sealed class RepoConfigurationLoaderTests
     var childPath = Path.Combine(dir, "child.json");
     await File.WriteAllTextAsync(childPath, """
       {
-        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema/v1.0/rexo.schema.json",
         "schemaVersion": "1.0",
         "name": "child",
         "extends": ["./base.json"],
@@ -1922,4 +1922,5 @@ public sealed class RepoConfigurationLoaderTests
     }
     """;
 }
+
 
