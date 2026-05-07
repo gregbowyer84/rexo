@@ -19,7 +19,6 @@ permissions:
 
 jobs:
   pack-and-publish:
-    if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/alpha' || startsWith(github.ref, 'refs/heads/alpha-') || github.ref == 'refs/heads/edge' || startsWith(github.ref, 'refs/heads/edge-') }}
     runs-on: ubuntu-latest
 
     steps:
@@ -144,11 +143,11 @@ jobs:
         env:
           NUGET_ORG_USER: ${{ secrets.NUGET_ORG_USER }}
         id: nuget-login
-        if: ${{ github.ref == 'refs/heads/main' && env.NUGET_ORG_USER != '' && steps.gitversion.outputs.isPreRelease != 'true' && steps.gitversion.outputs.isPreRelease != 'True' }}
+        if: ${{ env.NUGET_ORG_USER != '' }}
         uses: NuGet/login@v1
         with:
           user: ${{ secrets.NUGET_ORG_USER }}
 
       - name: Push to NuGet.org (trusted publishing)
-        if: ${{ github.ref == 'refs/heads/main' && steps.gitversion.outputs.isPreRelease != 'true' && steps.gitversion.outputs.isPreRelease != 'True' }}
+        if: ${{ env.NUGET_ORG_USER != '' }}
         run: dotnet nuget push "artifacts/packages/*.nupkg" --source "https://api.nuget.org/v3/index.json" --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}" --skip-duplicate
