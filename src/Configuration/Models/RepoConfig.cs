@@ -35,6 +35,9 @@ public sealed record RepoConfig(
     /// <summary>Free-form template variable bag available as <c>{{vars.*}}</c> in step run strings. Supports arbitrary nesting.</summary>
     public Dictionary<string, JsonElement>? Vars { get; init; }
 
+    /// <summary>Declares runtime capability requirements and contract compatibility expectations.</summary>
+    public RepoCapabilityConfig? Capabilities { get; init; }
+
     /// <summary>
     /// Controls how list fields are merged when combining configs via <c>extends</c>.
     /// <list type="bullet">
@@ -54,10 +57,22 @@ public sealed record RepoCommandConfig(
     public Dictionary<string, RepoArgConfig>? Args { get; init; }
 
     /// <summary>
-    /// Controls layered command composition behavior for this command definition.
-    /// Allowed values: <c>layer</c>, <c>replace</c>, <c>append</c>, <c>prepend</c>, <c>wrap</c>.
+    /// Unified command merge envelope.
+    /// When present, this takes precedence over legacy <c>Merge</c> and <c>StepOps</c> fields.
+    /// </summary>
+    public RepoCommandMergeConfig? MergeConfig { get; init; }
+
+    /// <summary>
+    /// Legacy scalar merge mode.
+    /// Prefer <c>MergeConfig.Mode</c>.
     /// </summary>
     public string? Merge { get; init; }
+
+    /// <summary>
+    /// Legacy step operation container.
+    /// Prefer <c>MergeConfig.Steps</c>.
+    /// </summary>
+    public RepoCommandStepOpsConfig? StepOps { get; init; }
 
     /// <summary>Maximum number of steps to run concurrently within a parallel group.</summary>
     public int? MaxParallel { get; init; }
@@ -87,6 +102,20 @@ public sealed record RepoStepConfig(
     string? OutputPattern = null,
     string? OutputFile = null,
     Dictionary<string, string[]>? Outputs = null);
+
+public sealed record RepoCommandMergeConfig(
+    string? Mode = null,
+    RepoCommandStepOpsConfig? Steps = null);
+
+public sealed record RepoCommandStepOpsConfig(
+    string[]? Remove = null,
+    List<RepoStepReplaceConfig>? Replace = null,
+    List<RepoStepConfig>? Prepend = null,
+    List<RepoStepConfig>? Append = null);
+
+public sealed record RepoStepReplaceConfig(
+    string Id,
+    RepoStepConfig Step);
 
 public sealed record RepoVersioningConfig(
     string Provider,
@@ -171,10 +200,18 @@ public sealed record RepoPushConfig(
     bool? RequireCleanWorkingTree = null,
     string[]? Branches = null);
 
+public sealed record RepoCapabilityConfig(
+    string? ContractVersion = null,
+    string[]? Required = null);
+
 /// <summary>
 /// A partial config document used to inject commands and aliases from a policy file
 /// (e.g. <c>policy.json</c>) after policy schema validation.
 /// </summary>
 public sealed record PolicyConfig(
     Dictionary<string, RepoCommandConfig>? Commands = null,
-    Dictionary<string, string>? Aliases = null);
+    Dictionary<string, string>? Aliases = null)
+{
+    /// <summary>Declares runtime capability requirements for this policy.</summary>
+    public RepoCapabilityConfig? Capabilities { get; init; }
+}

@@ -50,16 +50,22 @@ public static class ErrorCodes
     public const string VersionProviderNotFound = "VER-001";
     public const string VersionResolutionFailed = "VER-002";
     public const string VersionInvalidFormat = "VER-003";
+    public const string VersionProviderUnsupported = "VER-004";
 
     // Artifact errors (ART-*)
     public const string ArtifactProviderNotFound = "ART-001";
     public const string ArtifactBuildFailed = "ART-002";
     public const string ArtifactPushFailed = "ART-003";
     public const string ArtifactPushPolicyViolation = "ART-004";
+    public const string ArtifactProviderUnsupported = "ART-005";
 
     // Policy errors (POL-*)
     public const string PolicyLoadFailed = "POL-001";
     public const string PolicyViolation = "POL-002";
+
+    // Capability errors (CAP-*)
+    public const string CapabilityRequirementNotSupported = "CAP-001";
+    public const string CapabilityContractMismatch = "CAP-002";
 
     // Git errors (GIT-*)
     public const string GitNotFound = "GIT-001";

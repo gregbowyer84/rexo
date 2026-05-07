@@ -234,6 +234,75 @@ The last example remains minimal until you explicitly add an `extends` entry.
 
 Each key is a command name (spaces allowed for multi-word commands).
 
+### Command merge and step operations
+
+When commands are merged through `extends` (or policy overlays), you can control
+how a child command composes with a base command.
+
+Recommended syntax (unified merge envelope):
+
+```jsonc
+"commands": {
+  "build": {
+    "merge": {
+      "mode": "append", // layer | replace | append | prepend | wrap
+      "steps": {
+        "remove": ["test"],
+        "replace": [
+          { "id": "compile", "step": { "run": "dotnet build --no-restore" } }
+        ],
+        "prepend": [
+          { "id": "setup", "run": "echo setup" }
+        ],
+        "append": [
+          { "id": "notify", "run": "echo notify" }
+        ]
+      }
+    },
+    "steps": []
+  }
+}
+```
+
+`merge.mode` values:
+
+- `layer`: base command wins, child layer does not auto-continue.
+- `replace`: child command replaces base command.
+- `append`: child steps are appended after base steps.
+- `prepend`: child steps are placed before base steps.
+- `wrap`: child steps wrap base steps at continuation marker (self-reference step).
+
+`merge.steps` operation order is deterministic:
+
+1. `remove`
+2. `replace`
+3. `prepend`
+4. `append`
+
+Legacy compatibility:
+
+- Legacy scalar `merge` remains supported:
+
+```json
+{ "merge": "append" }
+```
+
+- Legacy `stepOps` remains supported:
+
+```json
+{ "stepOps": { "remove": ["old-step"] } }
+```
+
+Precedence rules (highest to lowest):
+
+1. `merge.steps`
+2. `stepOps` (legacy)
+3. `merge.mode`
+4. default behavior (no explicit merge): child replaces base
+
+If both `merge.steps` and legacy `stepOps` are provided, `merge.steps` is used.
+
+
 ```jsonc
 "commands": {
   "build": {

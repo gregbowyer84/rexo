@@ -102,6 +102,8 @@ internal static class CliBootstrapper
         RubyGemsArtifactProvider.Register(artifactProviders);
         TerraformArtifactProvider.Register(artifactProviders);
 
+        RuntimeParityValidator.ValidateOrThrow(config, versionProviders, artifactProviders);
+
         var builtinRegistry = new BuiltinRegistry();
         var configLoader = new ConfigCommandLoader(
             builtinRegistry,

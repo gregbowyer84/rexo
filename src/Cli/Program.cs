@@ -55,6 +55,7 @@ public static class Program
         {
             "version" => await RunBuiltinAsync(executor, "version", EmptyInvocation(workingDir, json, jsonFile), verbose, quiet, cancellationToken),
             "doctor" => await RunBuiltinAsync(executor, "doctor", EmptyInvocation(workingDir, json, jsonFile), verbose, quiet, cancellationToken),
+            "capabilities" => await RunBuiltinAsync(executor, "capabilities", EmptyInvocation(workingDir, json, jsonFile), verbose, quiet, cancellationToken),
             "init" => await RunInitBuiltinAsync(executor, cleanArgs, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
             "new" => await RunInitBuiltinAsync(executor, cleanArgs, workingDir, json, jsonFile, verbose, quiet, cancellationToken),
             "list" => await RunBuiltinAsync(executor, "list", EmptyInvocation(workingDir, json, jsonFile), verbose, quiet, cancellationToken),
@@ -795,6 +796,7 @@ public static class Program
         Console.WriteLine("  explain <command>           Explain a command (or alias)");
         Console.WriteLine("  explain version             Show version provider configuration");
         Console.WriteLine("  doctor                      Check environment and configuration");
+        Console.WriteLine("  capabilities                Show runtime capability contract and supported features");
         Console.WriteLine("  init                        Create a starter rexo config");
         Console.WriteLine("  new                         Alias for init");
         Console.WriteLine("  init detect                 Preview auto detection and recommendations");

@@ -10,6 +10,11 @@ public sealed class VersionProviderRegistry
     public void Register(string name, IVersionProvider provider) =>
         _providers[name] = provider;
 
+    public bool IsRegistered(string name) =>
+        _providers.ContainsKey(name);
+
+    public IReadOnlyCollection<string> RegisteredProviders => _providers.Keys.ToArray();
+
     public IVersionProvider Resolve(string name) =>
         _providers.TryGetValue(name, out var p) ? p : new FixedVersionProvider();
 

@@ -54,9 +54,32 @@
       "additionalProperties": {
         "type": "string"
       }
+    },
+    "capabilities": {
+      "description": "Runtime capability requirements and compatibility contract expectations for this policy.",
+      "$ref": "#/$defs/capabilityContract"
     }
   },
   "$defs": {
+    "capabilityContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Declares compatibility against runtime capability contract and required features.",
+      "properties": {
+        "contractVersion": {
+          "type": "string",
+          "description": "Capability contract version expected by this policy. Current runtime contract is 1.0."
+        },
+        "required": {
+          "type": "array",
+          "description": "Capabilities that must be supported by the active runtime.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
     "repoCommand": {
       "type": "object",
       "description": "Command definition contributed by a policy.",
@@ -91,15 +114,97 @@
           }
         },
         "merge": {
+          "description": "Layered command composition behavior. Accepts legacy string mode or merge envelope object.",
+          "$ref": "#/$defs/commandMerge"
+        },
+        "stepOps": {
+          "description": "Legacy explicit step-level extension operations. Prefer merge.steps envelope.",
+          "$ref": "#/$defs/commandStepOps"
+        }
+      }
+    },
+    "commandMerge": {
+      "description": "Command merge configuration. Can be a legacy scalar mode or envelope object.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/commandMergeMode"
+        },
+        {
+          "$ref": "#/$defs/commandMergeEnvelope"
+        }
+      ]
+    },
+    "commandMergeMode": {
+      "type": "string",
+      "description": "Layered command composition mode for this command.",
+      "enum": [
+        "layer",
+        "replace",
+        "append",
+        "prepend",
+        "wrap"
+      ]
+    },
+    "commandMergeEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Unified merge envelope containing mode and optional step operations.",
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/commandMergeMode"
+        },
+        "steps": {
+          "$ref": "#/$defs/commandStepOps"
+        }
+      }
+    },
+    "commandStepOps": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "remove": {
+          "type": "array",
+          "description": "Step ids to remove from the inherited command pipeline.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "replace": {
+          "type": "array",
+          "description": "Step replacements by id.",
+          "items": {
+            "$ref": "#/$defs/stepReplace"
+          }
+        },
+        "prepend": {
+          "type": "array",
+          "description": "Steps inserted before the inherited pipeline.",
+          "items": {
+            "$ref": "#/$defs/step"
+          }
+        },
+        "append": {
+          "type": "array",
+          "description": "Steps added after the inherited pipeline.",
+          "items": {
+            "$ref": "#/$defs/step"
+          }
+        }
+      }
+    },
+    "stepReplace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "step"],
+      "properties": {
+        "id": {
           "type": "string",
-          "description": "Layered command composition mode for this command.",
-          "enum": [
-            "layer",
-            "replace",
-            "append",
-            "prepend",
-            "wrap"
-          ]
+          "minLength": 1,
+          "description": "Target step id to replace."
+        },
+        "step": {
+          "$ref": "#/$defs/step"
         }
       }
     },

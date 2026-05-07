@@ -4,6 +4,7 @@ using System.Collections;
 using System.Text.Json;
 using NJsonSchema;
 using Rexo.Configuration.Models;
+using Rexo.Core.Models;
 using Rexo.Policies;
 using YamlDotNet.Serialization;
 
@@ -19,6 +20,7 @@ public sealed partial class RepoConfigurationLoader
     {
         PropertyNameCaseInsensitive = true,
         ReadCommentHandling = JsonCommentHandling.Skip,
+        Converters = { new RepoCommandConfigJsonConverter() },
     };
 
     private static readonly IDeserializer YamlDeserializer =
@@ -67,6 +69,8 @@ public sealed partial class RepoConfigurationLoader
                 }
             }
         }
+
+        ValidateCapabilities(config.Capabilities, "configuration", configPath);
 
         return config;
     }
@@ -144,7 +148,13 @@ public sealed partial class RepoConfigurationLoader
         var policyJson = await ReadAsJsonAsync(policyPath, cancellationToken);
         ValidatePolicyMetadata(policyPath, policyJson);
         await ValidatePolicySchemaAsync(policyPath, policyJson, cancellationToken);
-        return JsonSerializer.Deserialize<PolicyConfig>(policyJson, JsonOptions);
+        var policyConfig = JsonSerializer.Deserialize<PolicyConfig>(policyJson, JsonOptions);
+        if (policyConfig is not null)
+        {
+            ValidateCapabilities(policyConfig.Capabilities, "policy", policyPath);
+        }
+
+        return policyConfig;
     }
 
     public static async Task<string> ReadEmbeddedRexoSchemaJsonAsync(CancellationToken cancellationToken)
@@ -182,11 +192,92 @@ public sealed partial class RepoConfigurationLoader
             Description = child.Description ?? @base.Description,
             Version = child.Version ?? @base.Version,
             Extends = null, // consumed — do not propagate
+            PolicySources = MergeLists(@base.PolicySources, child.PolicySources, child.MergeStrategy),
             Versioning = child.Versioning ?? @base.Versioning,
             Artifacts = MergeLists(@base.Artifacts, child.Artifacts, child.MergeStrategy),
             Runtime = child.Runtime ?? @base.Runtime,
+            Outputs = MergeOutputsConfig(@base.Outputs, child.Outputs),
+            Settings = MergeDictionaries(@base.Settings, child.Settings),
+            Vars = MergeDictionaries(@base.Vars, child.Vars),
+            Capabilities = MergeCapabilities(@base.Capabilities, child.Capabilities, child.MergeStrategy),
             MergeStrategy = child.MergeStrategy ?? @base.MergeStrategy,
         };
+
+    private static RepoCapabilityConfig? MergeCapabilities(
+        RepoCapabilityConfig? @base,
+        RepoCapabilityConfig? child,
+        string? strategy)
+    {
+        if (@base is null) return child;
+        if (child is null) return @base;
+
+        return new RepoCapabilityConfig(
+            ContractVersion: child.ContractVersion ?? @base.ContractVersion,
+            Required: MergeLists(@base.Required?.ToList(), child.Required?.ToList(), strategy)?.ToArray());
+    }
+
+    private static RepoOutputsConfig? MergeOutputsConfig(RepoOutputsConfig? @base, RepoOutputsConfig? child)
+    {
+        if (@base is null) return child;
+        if (child is null) return @base;
+
+        return new RepoOutputsConfig
+        {
+            Emit = child.Emit ?? @base.Emit,
+            Root = child.Root ?? @base.Root,
+            Tests = MergeTestOutputsConfig(@base.Tests, child.Tests),
+            Analysis = MergeAnalysisOutputsConfig(@base.Analysis, child.Analysis),
+            Security = MergeSecurityOutputsConfig(@base.Security, child.Security),
+            Packages = child.Packages ?? @base.Packages,
+            Manifests = child.Manifests ?? @base.Manifests,
+            Logs = child.Logs ?? @base.Logs,
+            Temp = child.Temp ?? @base.Temp,
+        };
+    }
+
+    private static RepoTestOutputPathsConfig? MergeTestOutputsConfig(
+        RepoTestOutputPathsConfig? @base,
+        RepoTestOutputPathsConfig? child)
+    {
+        if (@base is null) return child;
+        if (child is null) return @base;
+
+        return new RepoTestOutputPathsConfig
+        {
+            Results = child.Results ?? @base.Results,
+            Coverage = child.Coverage ?? @base.Coverage,
+            Reports = child.Reports ?? @base.Reports,
+        };
+    }
+
+    private static RepoAnalysisOutputPathsConfig? MergeAnalysisOutputsConfig(
+        RepoAnalysisOutputPathsConfig? @base,
+        RepoAnalysisOutputPathsConfig? child)
+    {
+        if (@base is null) return child;
+        if (child is null) return @base;
+
+        return new RepoAnalysisOutputPathsConfig
+        {
+            Reports = child.Reports ?? @base.Reports,
+            Sarif = child.Sarif ?? @base.Sarif,
+        };
+    }
+
+    private static RepoSecurityOutputPathsConfig? MergeSecurityOutputsConfig(
+        RepoSecurityOutputPathsConfig? @base,
+        RepoSecurityOutputPathsConfig? child)
+    {
+        if (@base is null) return child;
+        if (child is null) return @base;
+
+        return new RepoSecurityOutputPathsConfig
+        {
+            Audit = child.Audit ?? @base.Audit,
+            Reports = child.Reports ?? @base.Reports,
+            Sarif = child.Sarif ?? @base.Sarif,
+        };
+    }
 
     private static Dictionary<string, RepoCommandConfig>? MergeCommandDictionaries(
         Dictionary<string, RepoCommandConfig>? @base,
@@ -218,7 +309,16 @@ public sealed partial class RepoConfigurationLoader
         RepoCommandConfig childCmd,
         bool policyMerge = false)
     {
-        var explicitMerge = childCmd.Merge;
+        var effectiveMode = childCmd.MergeConfig?.Mode ?? childCmd.Merge;
+        var effectiveStepOps = childCmd.MergeConfig?.Steps ?? childCmd.StepOps;
+
+        if (effectiveStepOps is not null)
+        {
+            var baseForOperations = BuildBaseCommandForStepOperations(baseCmd, childCmd, effectiveMode, effectiveStepOps);
+            return ApplyStepOperations(baseForOperations, effectiveStepOps);
+        }
+
+        var explicitMerge = effectiveMode;
 
         if (explicitMerge is not null)
         {
@@ -258,6 +358,73 @@ public sealed partial class RepoConfigurationLoader
 
         // Default (non-policy, no explicit merge): child replaces base.
         return childCmd;
+    }
+
+    private static RepoCommandConfig BuildBaseCommandForStepOperations(
+        RepoCommandConfig baseCmd,
+        RepoCommandConfig childCmd,
+        string? effectiveMode,
+        RepoCommandStepOpsConfig effectiveStepOps)
+    {
+        return new RepoCommandConfig(
+            Description: childCmd.Description ?? baseCmd.Description,
+            Options: MergeDictionaries(baseCmd.Options, childCmd.Options) ?? [],
+            Steps: baseCmd.Steps ?? [])
+        {
+            Args = MergeDictionaries(baseCmd.Args, childCmd.Args),
+            MergeConfig = childCmd.MergeConfig,
+            Merge = effectiveMode,
+            MaxParallel = childCmd.MaxParallel ?? baseCmd.MaxParallel,
+            StepOps = effectiveStepOps,
+        };
+    }
+
+    private static RepoCommandConfig ApplyStepOperations(
+        RepoCommandConfig command,
+        RepoCommandStepOpsConfig operations)
+    {
+        var steps = new List<RepoStepConfig>(command.Steps ?? []);
+
+        // Deterministic order: remove -> replace -> prepend -> append
+        if (operations.Remove is { Length: > 0 })
+        {
+            var ids = new HashSet<string>(operations.Remove, StringComparer.OrdinalIgnoreCase);
+            _ = steps.RemoveAll(step => step.Id is not null && ids.Contains(step.Id));
+        }
+
+        if (operations.Replace is { Count: > 0 })
+        {
+            foreach (var replacement in operations.Replace)
+            {
+                var replacementIndex = steps.FindIndex(step =>
+                    string.Equals(step.Id, replacement.Id, StringComparison.OrdinalIgnoreCase));
+
+                if (replacementIndex < 0)
+                {
+                    continue;
+                }
+
+                var replacementStep = replacement.Step.Id is null
+                    ? replacement.Step with { Id = replacement.Id }
+                    : replacement.Step;
+
+                steps[replacementIndex] = replacementStep;
+            }
+        }
+
+        if (operations.Prepend is { Count: > 0 })
+        {
+            var prepended = new List<RepoStepConfig>(operations.Prepend);
+            prepended.AddRange(steps);
+            steps = prepended;
+        }
+
+        if (operations.Append is { Count: > 0 })
+        {
+            steps.AddRange(operations.Append);
+        }
+
+        return command with { Steps = steps };
     }
 
     private static RepoCommandConfig MergeCommandAppend(RepoCommandConfig baseCmd, RepoCommandConfig childCmd)
@@ -619,6 +786,43 @@ public sealed partial class RepoConfigurationLoader
     private static bool IsYamlPath(string path) =>
         path.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase) ||
         path.EndsWith(".yml", StringComparison.OrdinalIgnoreCase);
+
+    private static void ValidateCapabilities(RepoCapabilityConfig? capabilities, string sourceKind, string sourcePath)
+    {
+        if (capabilities is null)
+        {
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(capabilities.ContractVersion) &&
+            !string.Equals(capabilities.ContractVersion, RuntimeCapabilityCatalog.ContractVersion, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"[{ErrorCodes.CapabilityContractMismatch}] {sourceKind} '{sourcePath}' declares capabilities.contractVersion '{capabilities.ContractVersion}', " +
+                $"but runtime supports '{RuntimeCapabilityCatalog.ContractVersion}'.");
+        }
+
+        if (capabilities.Required is null || capabilities.Required.Length == 0)
+        {
+            return;
+        }
+
+        var unsupported = capabilities.Required
+            .Where(capability => !RuntimeCapabilityCatalog.IsSupported(capability))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(capability => capability, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (unsupported.Count == 0)
+        {
+            return;
+        }
+
+        var supportedList = string.Join(", ", RuntimeCapabilityCatalog.SupportedCapabilities.OrderBy(c => c, StringComparer.OrdinalIgnoreCase));
+        throw new InvalidOperationException(
+            $"[{ErrorCodes.CapabilityRequirementNotSupported}] {sourceKind} '{sourcePath}' requires unsupported capabilities: {string.Join(", ", unsupported)}. " +
+            $"Supported capabilities: {supportedList}");
+    }
 
     private static object? NormalizeYamlObject(object? value)
     {

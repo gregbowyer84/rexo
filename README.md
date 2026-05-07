@@ -64,6 +64,7 @@ These two `rx init` concepts are distinct:
 ## Documentation
 
 - [Configuration Reference](docs/CONFIGURATION.md)
+- Command composition details: [Command merge and step operations](docs/CONFIGURATION.md#command-merge-and-step-operations)
 - [Artifact Providers](docs/artifacts/README.md)
 - [Builtins Reference](docs/BUILTINS.md)
 - [Embedded Items Reference](docs/EMBEDDED.md)

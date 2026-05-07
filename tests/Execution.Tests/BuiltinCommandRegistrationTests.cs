@@ -36,6 +36,21 @@ public sealed class BuiltinCommandRegistrationTests
 
         Assert.True(result.Success);
         Assert.Equal(0, result.ExitCode);
+        Assert.Contains("capabilities", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task CapabilitiesCommandReturnsSupportedContract()
+    {
+        var registry = BuiltinCommandRegistration.CreateDefault();
+        var executor = new DefaultCommandExecutor(registry);
+
+        var result = await executor.ExecuteAsync("capabilities", EmptyInvocation(), CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains("contractVersion", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("outputs.contract.v1", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

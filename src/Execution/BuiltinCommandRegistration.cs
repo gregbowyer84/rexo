@@ -30,6 +30,9 @@ public static class BuiltinCommandRegistration
         registry.Register("doctor", async (invocation, ct) =>
             await RunDoctorAsync(invocation, config, ct));
 
+        registry.Register("capabilities", (_, _) =>
+            Task.FromResult(RunCapabilities()));
+
         registry.Register("list", (invocation, _) =>
             Task.FromResult(RunList(invocation, registry, config)));
 
@@ -239,6 +242,7 @@ public static class BuiltinCommandRegistration
         lines.Add("  explain <command>    Explain a command (or alias)");
         lines.Add("  explain version      Show version provider configuration");
         lines.Add("  doctor               Check environment and configuration");
+        lines.Add("  capabilities         Show runtime capability contract and supported features");
         lines.Add("  init                 Create a starter rexo config");
         lines.Add("  init detect          Preview auto detection and recommendations");
         lines.Add("  new                  Alias for init");
@@ -275,6 +279,33 @@ public static class BuiltinCommandRegistration
         return CommandResult.Ok("list", string.Join("\n", lines));
     }
 
+    private static CommandResult RunCapabilities()
+    {
+        var capabilities = RuntimeCapabilityCatalog.SupportedCapabilities
+            .OrderBy(capability => capability, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var lines = new List<string>
+        {
+            "Runtime capabilities:",
+            $"  contractVersion: {RuntimeCapabilityCatalog.ContractVersion}",
+            "  supported:",
+        };
+
+        lines.AddRange(capabilities.Select(capability => $"    - {capability}"));
+
+        return new CommandResult(
+            "capabilities",
+            true,
+            0,
+            string.Join(Environment.NewLine, lines),
+            new Dictionary<string, object?>
+            {
+                ["contractVersion"] = RuntimeCapabilityCatalog.ContractVersion,
+                ["supported"] = capabilities,
+            });
+    }
+
     private static CommandResult RunExplain(CommandInvocation invocation, RepoConfig? config)
     {
         // The command name is passed as the first arg
@@ -284,7 +315,7 @@ public static class BuiltinCommandRegistration
         }
 
         // Check built-ins (including sub-commands)
-        var builtins = new[] { "version", "list", "explain", "doctor", "init", "new", "run", "help", "ui",
+        var builtins = new[] { "version", "list", "explain", "doctor", "capabilities", "init", "new", "run", "help", "ui",
             "config", "config resolved", "config sources", "config materialize",
             "explain version", "policies", "policies list", "policies show" };
         if (builtins.Contains(commandName, StringComparer.OrdinalIgnoreCase))

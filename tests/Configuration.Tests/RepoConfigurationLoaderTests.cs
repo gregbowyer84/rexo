@@ -333,6 +333,82 @@ public sealed class RepoConfigurationLoaderTests
         }
     }
 
+    [Fact]
+    public async Task LoadAsyncThrowsWhenRequiredCapabilityIsUnsupported()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"repo-{Guid.NewGuid():N}.json");
+        await File.WriteAllTextAsync(path, """
+        {
+          "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+          "schemaVersion": "1.0",
+          "name": "sample",
+          "commands": {
+            "release": {
+              "options": {},
+              "steps": [
+                { "run": "echo hi" }
+              ]
+            }
+          },
+          "aliases": {},
+          "capabilities": {
+            "required": ["capability.not.supported"]
+          }
+        }
+        """);
+
+        try
+        {
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                RepoConfigurationLoader.LoadAsync(path, CancellationToken.None));
+
+            Assert.Contains("CAP-001", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("capability.not.supported", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task LoadAsyncAcceptsKnownRequiredCapability()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"repo-{Guid.NewGuid():N}.json");
+        await File.WriteAllTextAsync(path, """
+        {
+          "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+          "schemaVersion": "1.0",
+          "name": "sample",
+          "commands": {
+            "release": {
+              "options": {},
+              "steps": [
+                { "run": "echo hi" }
+              ]
+            }
+          },
+          "aliases": {},
+          "capabilities": {
+            "contractVersion": "1.0",
+            "required": ["outputs.contract.v1"]
+          }
+        }
+        """);
+
+        try
+        {
+            var config = await RepoConfigurationLoader.LoadAsync(path, CancellationToken.None);
+
+            Assert.NotNull(config.Capabilities);
+            Assert.Contains("outputs.contract.v1", config.Capabilities!.Required!);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
   [Fact]
   public async Task LoadAsyncMergesExtendsConfig()
   {
@@ -391,6 +467,133 @@ public sealed class RepoConfigurationLoaderTests
       Assert.Equal("child", config.Name);
       Assert.True(config.Commands!.ContainsKey("shared"), "Should inherit base command 'shared'");
       Assert.True(config.Commands!.ContainsKey("child-cmd"), "Should have own command 'child-cmd'");
+    }
+    finally
+    {
+      Directory.Delete(dir, true);
+    }
+  }
+
+  [Fact]
+  public async Task LoadAsyncMergesOutputsSettingsAndVarsAcrossExtends()
+  {
+    var dir = Path.Combine(Path.GetTempPath(), $"rexo-extends-outputs-settings-vars-{Guid.NewGuid():N}");
+    Directory.CreateDirectory(dir);
+
+    var basePath = Path.Combine(dir, "base.json");
+    await File.WriteAllTextAsync(basePath, """
+      {
+        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+        "schemaVersion": "1.0",
+        "name": "base",
+        "commands": {},
+        "aliases": {},
+        "outputs": {
+          "root": "artifacts/base",
+          "tests": {
+            "results": "artifacts/base-tests"
+          },
+          "packages": "artifacts/base-packages"
+        },
+        "settings": {
+          "quality": "strict",
+          "source": "base-source"
+        },
+        "vars": {
+          "target": "base",
+          "region": "eus"
+        }
+      }
+      """);
+
+    var childPath = Path.Combine(dir, "child.json");
+    await File.WriteAllTextAsync(childPath, """
+      {
+        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+        "schemaVersion": "1.0",
+        "name": "child",
+        "extends": ["./base.json"],
+        "commands": {},
+        "aliases": {},
+        "outputs": {
+          "analysis": {
+            "sarif": "artifacts/analysis/sarif"
+          }
+        },
+        "settings": {
+          "quality": "relaxed",
+          "signing": true
+        },
+        "vars": {
+          "target": "child",
+          "channel": "preview"
+        }
+      }
+      """);
+
+    try
+    {
+      var config = await RepoConfigurationLoader.LoadAsync(childPath, CancellationToken.None);
+
+      Assert.Equal("artifacts/base", config.Outputs?.Root);
+      Assert.Equal("artifacts/base-tests", config.Outputs?.Tests?.Results);
+      Assert.Equal("artifacts/analysis/sarif", config.Outputs?.Analysis?.Sarif);
+      Assert.Equal("artifacts/base-packages", config.Outputs?.Packages);
+
+      Assert.NotNull(config.Settings);
+      Assert.Equal("relaxed", config.Settings!["quality"].GetString());
+      Assert.Equal("base-source", config.Settings["source"].GetString());
+      Assert.True(config.Settings["signing"].GetBoolean());
+
+      Assert.NotNull(config.Vars);
+      Assert.Equal("child", config.Vars!["target"].GetString());
+      Assert.Equal("eus", config.Vars["region"].GetString());
+      Assert.Equal("preview", config.Vars["channel"].GetString());
+    }
+    finally
+    {
+      Directory.Delete(dir, true);
+    }
+  }
+
+  [Fact]
+  public async Task LoadAsyncMergesPolicySourcesAcrossExtends()
+  {
+    var dir = Path.Combine(Path.GetTempPath(), $"rexo-extends-policy-sources-{Guid.NewGuid():N}");
+    Directory.CreateDirectory(dir);
+
+    var basePath = Path.Combine(dir, "base.json");
+    await File.WriteAllTextAsync(basePath, """
+      {
+        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+        "schemaVersion": "1.0",
+        "name": "base",
+        "commands": {},
+        "aliases": {},
+        "policySources": ["embedded:standard"]
+      }
+      """);
+
+    var childPath = Path.Combine(dir, "child.json");
+    await File.WriteAllTextAsync(childPath, """
+      {
+        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+        "schemaVersion": "1.0",
+        "name": "child",
+        "extends": ["./base.json"],
+        "commands": {},
+        "aliases": {},
+        "policySources": ["embedded:dotnet"]
+      }
+      """);
+
+    try
+    {
+      var config = await RepoConfigurationLoader.LoadAsync(childPath, CancellationToken.None);
+
+      Assert.Equal(2, config.PolicySources?.Count);
+      Assert.Equal("embedded:standard", config.PolicySources?[0]);
+      Assert.Equal("embedded:dotnet", config.PolicySources?[1]);
     }
     finally
     {
@@ -1389,6 +1592,280 @@ public sealed class RepoConfigurationLoaderTests
       // No merge field → replace (default): child wins entirely
       Assert.Single(steps);
       Assert.Equal("child-step", steps[0].Id);
+    }
+    finally
+    {
+      Directory.Delete(dir, true);
+    }
+  }
+
+  [Fact]
+  public async Task ExtendsWithStepOpsCanCombineRemoveReplacePrependAppendInDeterministicOrder()
+  {
+    var dir = Path.Combine(Path.GetTempPath(), $"rexo-stepops-combined-{Guid.NewGuid():N}");
+    Directory.CreateDirectory(dir);
+
+    var basePath = Path.Combine(dir, "base.json");
+    await File.WriteAllTextAsync(basePath, """
+      {
+        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+        "schemaVersion": "1.0",
+        "name": "base",
+        "commands": {
+          "build": {
+            "steps": [
+              { "id": "restore", "run": "echo restore" },
+              { "id": "build", "run": "echo build" },
+              { "id": "test", "run": "echo test" }
+            ]
+          }
+        },
+        "aliases": {}
+      }
+      """);
+
+    var childPath = Path.Combine(dir, "child.json");
+    await File.WriteAllTextAsync(childPath, """
+      {
+        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+        "schemaVersion": "1.0",
+        "name": "child",
+        "extends": ["./base.json"],
+        "commands": {
+          "build": {
+            "steps": [],
+            "stepOps": {
+              "remove": ["test"],
+              "replace": [
+                {
+                  "id": "build",
+                  "step": { "run": "echo build --no-restore" }
+                }
+              ],
+              "prepend": [
+                { "id": "setup", "run": "echo setup" }
+              ],
+              "append": [
+                { "id": "notify", "run": "echo notify" }
+              ]
+            }
+          }
+        },
+        "aliases": {}
+      }
+      """);
+
+    try
+    {
+      var config = await RepoConfigurationLoader.LoadAsync(childPath, CancellationToken.None);
+      var steps = config.Commands!["build"].Steps;
+
+      Assert.Equal(4, steps.Count);
+      Assert.Equal("setup", steps[0].Id);
+      Assert.Equal("restore", steps[1].Id);
+      Assert.Equal("build", steps[2].Id);
+      Assert.Equal("echo build --no-restore", steps[2].Run);
+      Assert.Equal("notify", steps[3].Id);
+    }
+    finally
+    {
+      Directory.Delete(dir, true);
+    }
+  }
+
+  [Fact]
+  public async Task ExtendsWithStepOpsAndNoMatchDoesNotFail()
+  {
+    var dir = Path.Combine(Path.GetTempPath(), $"rexo-stepops-no-match-{Guid.NewGuid():N}");
+    Directory.CreateDirectory(dir);
+
+    var basePath = Path.Combine(dir, "base.json");
+    await File.WriteAllTextAsync(basePath, """
+      {
+        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+        "schemaVersion": "1.0",
+        "name": "base",
+        "commands": {
+          "build": {
+            "steps": [
+              { "id": "restore", "run": "echo restore" }
+            ]
+          }
+        },
+        "aliases": {}
+      }
+      """);
+
+    var childPath = Path.Combine(dir, "child.json");
+    await File.WriteAllTextAsync(childPath, """
+      {
+        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+        "schemaVersion": "1.0",
+        "name": "child",
+        "extends": ["./base.json"],
+        "commands": {
+          "build": {
+            "steps": [],
+            "stepOps": {
+              "remove": ["missing"],
+              "replace": [
+                { "id": "missing", "step": { "id": "x", "run": "echo x" } }
+              ]
+            }
+          }
+        },
+        "aliases": {}
+      }
+      """);
+
+    try
+    {
+      var config = await RepoConfigurationLoader.LoadAsync(childPath, CancellationToken.None);
+      var steps = config.Commands!["build"].Steps;
+
+      Assert.Single(steps);
+      Assert.Equal("restore", steps[0].Id);
+    }
+    finally
+    {
+      Directory.Delete(dir, true);
+    }
+  }
+
+  [Fact]
+  public async Task ExtendsWithMergeEnvelopeStepsCanCombineOperationsInDeterministicOrder()
+  {
+    var dir = Path.Combine(Path.GetTempPath(), $"rexo-merge-envelope-ops-{Guid.NewGuid():N}");
+    Directory.CreateDirectory(dir);
+
+    var basePath = Path.Combine(dir, "base.json");
+    await File.WriteAllTextAsync(basePath, """
+      {
+        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+        "schemaVersion": "1.0",
+        "name": "base",
+        "commands": {
+          "build": {
+            "steps": [
+              { "id": "restore", "run": "echo restore" },
+              { "id": "build", "run": "echo build" },
+              { "id": "test", "run": "echo test" }
+            ]
+          }
+        },
+        "aliases": {}
+      }
+      """);
+
+    var childPath = Path.Combine(dir, "child.json");
+    await File.WriteAllTextAsync(childPath, """
+      {
+        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+        "schemaVersion": "1.0",
+        "name": "child",
+        "extends": ["./base.json"],
+        "commands": {
+          "build": {
+            "steps": [],
+            "merge": {
+              "mode": "append",
+              "steps": {
+                "remove": ["test"],
+                "replace": [
+                  {
+                    "id": "build",
+                    "step": { "run": "echo build --no-restore" }
+                  }
+                ],
+                "prepend": [
+                  { "id": "setup", "run": "echo setup" }
+                ],
+                "append": [
+                  { "id": "notify", "run": "echo notify" }
+                ]
+              }
+            }
+          }
+        },
+        "aliases": {}
+      }
+      """);
+
+    try
+    {
+      var config = await RepoConfigurationLoader.LoadAsync(childPath, CancellationToken.None);
+      var steps = config.Commands!["build"].Steps;
+
+      Assert.Equal(4, steps.Count);
+      Assert.Equal("setup", steps[0].Id);
+      Assert.Equal("restore", steps[1].Id);
+      Assert.Equal("build", steps[2].Id);
+      Assert.Equal("echo build --no-restore", steps[2].Run);
+      Assert.Equal("notify", steps[3].Id);
+    }
+    finally
+    {
+      Directory.Delete(dir, true);
+    }
+  }
+
+  [Fact]
+  public async Task MergeEnvelopeStepsTakePrecedenceOverLegacyStepOps()
+  {
+    var dir = Path.Combine(Path.GetTempPath(), $"rexo-merge-envelope-precedence-{Guid.NewGuid():N}");
+    Directory.CreateDirectory(dir);
+
+    var basePath = Path.Combine(dir, "base.json");
+    await File.WriteAllTextAsync(basePath, """
+      {
+        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+        "schemaVersion": "1.0",
+        "name": "base",
+        "commands": {
+          "build": {
+            "steps": [
+              { "id": "restore", "run": "echo restore" }
+            ]
+          }
+        },
+        "aliases": {}
+      }
+      """);
+
+    var childPath = Path.Combine(dir, "child.json");
+    await File.WriteAllTextAsync(childPath, """
+      {
+        "$schema": "https://raw.githubusercontent.com/agile-north/rexo/schema-v1.0/rexo.schema.json",
+        "schemaVersion": "1.0",
+        "name": "child",
+        "extends": ["./base.json"],
+        "commands": {
+          "build": {
+            "steps": [],
+            "merge": {
+              "steps": {
+                "append": [
+                  { "id": "notify", "run": "echo notify" }
+                ]
+              }
+            },
+            "stepOps": {
+              "remove": ["restore"]
+            }
+          }
+        },
+        "aliases": {}
+      }
+      """);
+
+    try
+    {
+      var config = await RepoConfigurationLoader.LoadAsync(childPath, CancellationToken.None);
+      var steps = config.Commands!["build"].Steps;
+
+      Assert.Equal(2, steps.Count);
+      Assert.Equal("restore", steps[0].Id);
+      Assert.Equal("notify", steps[1].Id);
     }
     finally
     {

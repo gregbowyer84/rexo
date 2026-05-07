@@ -98,4 +98,71 @@ public sealed class RepoConfigurationLoaderYamlTests
             if (Directory.Exists(dir)) Directory.Delete(dir, true);
         }
     }
+
+      [Fact]
+      public async Task LoadPolicyAsyncThrowsWhenRequiredCapabilityIsUnsupported()
+      {
+        var dir = Path.Combine(Path.GetTempPath(), $"rexo-policy-capability-yaml-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+          var schemaPath = Path.Combine(dir, "policy.schema.json");
+        var policyPath = Path.Combine(dir, "policy.yml");
+
+          await File.WriteAllTextAsync(
+              schemaPath,
+              """
+              {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "required": ["$schema", "schemaVersion", "name", "commands", "aliases"],
+                "additionalProperties": false,
+                "properties": {
+                  "$schema": { "type": "string" },
+                  "schemaVersion": { "type": "string" },
+                  "name": { "type": "string" },
+                  "commands": { "type": "object" },
+                  "aliases": { "type": "object" },
+                  "capabilities": {
+                    "type": "object",
+                    "properties": {
+                      "required": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+              """);
+
+        await File.WriteAllTextAsync(
+          policyPath,
+          """
+          $schema: policy.schema.json
+          schemaVersion: "1.0"
+          name: yaml-policy
+          capabilities:
+            required:
+              - capability.not.supported
+          commands:
+            secure-check:
+              description: Run secure check
+              options: {}
+              steps:
+                - run: echo secure
+          aliases:
+            sc: secure-check
+          """);
+
+        try
+        {
+          var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            RepoConfigurationLoader.LoadPolicyAsync(policyPath, CancellationToken.None));
+
+          Assert.Contains("CAP-001", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+          if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+      }
 }
