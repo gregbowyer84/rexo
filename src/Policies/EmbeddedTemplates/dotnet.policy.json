@@ -39,7 +39,7 @@
         {
           "id": "dotnet-test",
           "when": "{{vars.dotnet.test.coverage.mode != 'none'}}",
-          "run": "dotnet test{{vars.dotnet.solution | prefix(' ')}} -c {{vars.dotnet.configuration | default('Release')}} --logger trx{{outputs.tests.results | prefix(' --results-directory ')}}{{vars.dotnet.test.runsettings | prefix(' --settings ')}}{{vars.dotnet.test.extraArgs | prefix(' ')}} --collect:\"XPlat Code Coverage\" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.OutputDirectory={{outputs.tests.coverage}}",
+          "run": "dotnet test{{vars.dotnet.solution | prefix(' ')}} -c {{vars.dotnet.configuration | default('Release')}} --logger trx{{outputs.tests.results | prefix(' --results-directory ')}}{{vars.dotnet.test.runsettings | prefix(' --settings ')}}{{vars.dotnet.test.extraArgs | prefix(' ')}} --collect \"XPlat Code Coverage\" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.OutputDirectory={{outputs.tests.coverage}}",
           "outputs": {
             "testResults": [
               "{{outputs.tests.results}}/**/*.trx",

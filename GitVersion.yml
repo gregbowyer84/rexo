@@ -15,7 +15,7 @@ branches:
     increment: Patch
     is-main-branch: true
   main-lane:
-    regex: ^main-[A-Za-z0-9._-]+$
+    regex: ^main-(?<BranchName>[A-Za-z0-9._-]+)$
     label: '{BranchName}'
     increment: Patch
   edge:
@@ -23,23 +23,23 @@ branches:
     label: edge
     increment: Patch
   edge-lane:
-    regex: ^edge-[A-Za-z0-9._-]+$
-    label: edge.{BranchName}
+    regex: ^edge-(?<BranchName>[A-Za-z0-9._-]+)$
+    label: edge-{BranchName}
     increment: Patch
   alpha:
     regex: ^alpha$
     label: alpha
     increment: Patch
   alpha-lane:
-    regex: ^alpha-[A-Za-z0-9._-]+$
-    label: alpha.{BranchName}
+    regex: ^alpha-(?<BranchName>[A-Za-z0-9._-]+)$
+    label: alpha-{BranchName}
     increment: Patch
   support:
     regex: ^support[/-].+$
     increment: Patch
     is-release-branch: true
   support-lane:
-    regex: ^support[/-].+-[A-Za-z0-9._-]+$
+    regex: ^support[/-].+-(?<BranchName>[A-Za-z0-9._-]+)$
     label: '{BranchName}'
     increment: Patch
     is-release-branch: true
@@ -48,12 +48,12 @@ branches:
     increment: Patch
     is-release-branch: true
   customer-support-lane:
-    regex: ^customer-support[/-].+-[A-Za-z0-9._-]+$
+    regex: ^customer-support[/-].+-(?<BranchName>[A-Za-z0-9._-]+)$
     label: '{BranchName}'
     increment: Patch
     is-release-branch: true
   feature:
-    regex: ^features?[/-].+$
+    regex: ^features?[/-](?<BranchName>.+)$
     label: '{BranchName}'
     increment: Inherit
   hotfix:
@@ -65,6 +65,6 @@ branches:
     label: PullRequest{Number}
     increment: Inherit
   unknown:
-    regex: .+
+    regex: ^(?:.+[/-])?(?<BranchName>[A-Za-z0-9._-]+)$
     label: '{BranchName}'
     increment: Inherit

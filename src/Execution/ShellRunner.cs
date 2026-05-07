@@ -15,18 +15,18 @@ public static class ShellRunner
         CancellationToken cancellationToken = default)
     {
         var isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
-        var (fileName, arguments) = isWindows
-            ? ("cmd.exe", $"/c \"{command.Replace("\"", "\\\"")}\"")
-            : ("/bin/sh", $"-c \"{command.Replace("\"", "\\\"").Replace("'", "\\'")}\"");
+        var psi = isWindows
+            ? new ProcessStartInfo("cmd.exe", $"/d /c \"{command}\"")
+            : new ProcessStartInfo("/bin/sh")
+            {
+                ArgumentList = { "-c", command },
+            };
 
-        var psi = new ProcessStartInfo(fileName, arguments)
-        {
-            WorkingDirectory = workingDirectory,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
+        psi.WorkingDirectory = workingDirectory;
+        psi.RedirectStandardOutput = true;
+        psi.RedirectStandardError = true;
+        psi.UseShellExecute = false;
+        psi.CreateNoWindow = true;
 
         if (environment is not null)
         {

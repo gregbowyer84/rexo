@@ -1306,7 +1306,7 @@ public sealed class RepoConfigurationLoaderTests
         var coverageStep = steps[1];
         Assert.Equal("dotnet-test", coverageStep.GetProperty("id").GetString());
         Assert.Equal("{{vars.dotnet.test.coverage.mode != 'none'}}", coverageStep.GetProperty("when").GetString());
-        Assert.Contains("--collect:\"XPlat Code Coverage\"", coverageStep.GetProperty("run").GetString(), StringComparison.Ordinal);
+        Assert.Contains("--collect \"XPlat Code Coverage\"", coverageStep.GetProperty("run").GetString(), StringComparison.Ordinal);
         Assert.Contains("vars.dotnet.test.runsettings", coverageStep.GetProperty("run").GetString(), StringComparison.Ordinal);
         Assert.Contains("vars.dotnet.test.extraArgs", coverageStep.GetProperty("run").GetString(), StringComparison.Ordinal);
 
