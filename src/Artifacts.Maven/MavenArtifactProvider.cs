@@ -60,7 +60,7 @@ public sealed class MavenArtifactProvider : IArtifactProvider
         var dockerImage = ResolveDockerImage(artifact);
 
         var fileEnv = RepositoryEnvironmentFiles.Load(context.RepositoryRoot);
-        var auth = ResolveAuth(fileEnv);
+        var auth = ResolveAuth(artifact, fileEnv);
         IReadOnlyDictionary<string, string?>? envOverrides = auth.HasCredentials
             ? new Dictionary<string, string?>
             {
@@ -122,15 +122,24 @@ public sealed class MavenArtifactProvider : IArtifactProvider
         ToolRunner.GetSetting(artifact, key);
 
     /// <summary>
-    /// Resolves Maven repository credentials.  Order: MAVEN_REPO_USERNAME + MAVEN_REPO_PASSWORD
-    /// → SYSTEM_ACCESSTOKEN (Azure Artifacts CI-native).
+    /// Resolves Maven repository credentials.  Order: target.usernameEnv + target.passwordEnv
+    /// (defaults MAVEN_REPO_USERNAME/MAVEN_REPO_PASSWORD) → SYSTEM_ACCESSTOKEN
+    /// (Azure Artifacts CI-native).
     /// Credentials are injected as env vars; reference them in settings.xml via
     /// <c>${env.MAVEN_REPO_USERNAME}</c> and <c>${env.MAVEN_REPO_PASSWORD}</c>.
     /// </summary>
-    private static FeedAuthResolution ResolveAuth(IReadOnlyDictionary<string, string> fileEnv)
+    private static FeedAuthResolution ResolveAuth(
+        ArtifactConfig artifact,
+        IReadOnlyDictionary<string, string> fileEnv)
     {
-        var username = FeedAuthResolver.GetEnv("MAVEN_REPO_USERNAME", fileEnv);
-        var password = FeedAuthResolver.GetEnv("MAVEN_REPO_PASSWORD", fileEnv);
+        var username = FeedAuthResolver.ResolveSecret(
+            defaultEnvName: "MAVEN_REPO_USERNAME",
+            configuredEnvName: GetSetting(artifact, "target.usernameEnv"),
+            fileEnv: fileEnv);
+        var password = FeedAuthResolver.ResolveSecret(
+            defaultEnvName: "MAVEN_REPO_PASSWORD",
+            configuredEnvName: GetSetting(artifact, "target.passwordEnv"),
+            fileEnv: fileEnv);
 
         if (!string.IsNullOrWhiteSpace(username) && !string.IsNullOrWhiteSpace(password))
         {

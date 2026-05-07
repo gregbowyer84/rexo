@@ -52,12 +52,11 @@ public sealed class RubyGemsArtifactProvider : IArtifactProvider
     {
         var workDir = GetWorkDir(artifact, context);
         var dockerImage = ResolveDockerImage(artifact);
-        var source = GetSetting(artifact, "source");
         var gemPattern = GetSetting(artifact, "gem-pattern") ?? "*.gem";
 
         var fileEnv = RepositoryEnvironmentFiles.Load(context.RepositoryRoot);
-        var apiKeyEnv = GetSetting(artifact, "apiKeyEnv");
-        var auth = ResolveAuth(apiKeyEnv, fileEnv);
+        var source = ResolveSource(artifact, fileEnv);
+        var auth = ResolveAuth(artifact, fileEnv);
         IReadOnlyDictionary<string, string?>? envOverrides = auth.HasCredentials
             ? new Dictionary<string, string?> { ["GEM_HOST_API_KEY"] = auth.Secret }
             : null;
@@ -97,21 +96,30 @@ public sealed class RubyGemsArtifactProvider : IArtifactProvider
             ?? ToolRunner.GetSetting(artifact, "dockerImage")
             ?? DefaultContainerImage;
 
+    private static string? ResolveSource(ArtifactConfig artifact, IReadOnlyDictionary<string, string> fileEnv) =>
+        FeedAuthResolver.ResolveTargetValue(
+            defaultEnvName: "RUBYGEMS_TARGET_SOURCE",
+            configuredEnvName: GetSetting(artifact, "target.sourceEnv"),
+            configuredValue: GetSetting(artifact, "target.source"),
+            fileEnv: fileEnv);
+
     private static string? GetSetting(ArtifactConfig artifact, string key) =>
         ToolRunner.GetSetting(artifact, key);
 
     /// <summary>
-    /// Resolves RubyGems push credentials.  Order: configured apiKeyEnv var →
+    /// Resolves RubyGems push credentials.  Order: target.apiKeyEnv (or GEM_HOST_API_KEY) →
     /// GEM_HOST_API_KEY → RUBYGEMS_API_KEY.
     /// The resolved key is injected as GEM_HOST_API_KEY for the gem push invocation.
     /// </summary>
     private static FeedAuthResolution ResolveAuth(
-        string? configuredApiKeyEnv,
+        ArtifactConfig artifact,
         IReadOnlyDictionary<string, string> fileEnv)
     {
-        var envName = string.IsNullOrWhiteSpace(configuredApiKeyEnv) ? "GEM_HOST_API_KEY" : configuredApiKeyEnv;
-        var apiKey = FeedAuthResolver.GetEnv(envName, fileEnv)
-                     ?? FeedAuthResolver.GetEnv("RUBYGEMS_API_KEY", fileEnv);
+        var apiKey = FeedAuthResolver.ResolveSecret(
+            defaultEnvName: "GEM_HOST_API_KEY",
+            configuredEnvName: GetSetting(artifact, "target.apiKeyEnv"),
+            fileEnv: fileEnv,
+            "RUBYGEMS_API_KEY");
 
         return string.IsNullOrWhiteSpace(apiKey)
             ? new FeedAuthResolution(false, null, null, null, null, "none")

@@ -4,6 +4,7 @@ using System.IO.Compression;
 using System.Text.Json;
 using Rexo.Artifacts;
 using Rexo.Core.Abstractions;
+using Rexo.Core.Environment;
 using Rexo.Core.Models;
 
 /// <summary>Preview: Generic file artifact provider — zip / tar.gz packaging using built-in .NET compression.</summary>
@@ -19,9 +20,20 @@ public sealed class GenericArtifactProvider : IArtifactProvider
         ExecutionContext context,
         CancellationToken cancellationToken)
     {
-        var source = GetSetting(artifact, "source") ?? context.RepositoryRoot;
+        var fileEnv = RepositoryEnvironmentFiles.Load(context.RepositoryRoot);
+        var source = FeedAuthResolver.ResolveTargetValue(
+            defaultEnvName: "GENERIC_TARGET_SOURCE",
+            configuredEnvName: GetSetting(artifact, "target.sourceEnv"),
+            configuredValue: GetSetting(artifact, "target.source"),
+            fileEnv: fileEnv)
+            ?? context.RepositoryRoot;
         var format = GetSetting(artifact, "format") ?? "zip";
-        var outputDir = GetSetting(artifact, "output") ?? "artifacts/generic";
+        var outputDir = FeedAuthResolver.ResolveTargetValue(
+            defaultEnvName: "GENERIC_TARGET_OUTPUT",
+            configuredEnvName: GetSetting(artifact, "target.outputEnv"),
+            configuredValue: GetSetting(artifact, "target.output"),
+            fileEnv: fileEnv)
+            ?? "artifacts/generic";
 
         var absoluteSource = System.IO.Path.IsPathRooted(source)
             ? source
@@ -79,7 +91,12 @@ public sealed class GenericArtifactProvider : IArtifactProvider
         ExecutionContext context,
         CancellationToken cancellationToken)
     {
-        var destination = GetSetting(artifact, "destination");
+        var fileEnv = RepositoryEnvironmentFiles.Load(context.RepositoryRoot);
+        var destination = FeedAuthResolver.ResolveTargetValue(
+            defaultEnvName: "GENERIC_TARGET_DESTINATION",
+            configuredEnvName: GetSetting(artifact, "target.destinationEnv"),
+            configuredValue: GetSetting(artifact, "target.destination"),
+            fileEnv: fileEnv);
 
         if (string.IsNullOrWhiteSpace(destination))
         {
@@ -87,7 +104,12 @@ public sealed class GenericArtifactProvider : IArtifactProvider
             return Task.FromResult(new ArtifactPushResult(artifact.Name, false, []));
         }
 
-        var outputDir = GetSetting(artifact, "output") ?? "artifacts/generic";
+        var outputDir = FeedAuthResolver.ResolveTargetValue(
+            defaultEnvName: "GENERIC_TARGET_OUTPUT",
+            configuredEnvName: GetSetting(artifact, "target.outputEnv"),
+            configuredValue: GetSetting(artifact, "target.output"),
+            fileEnv: fileEnv)
+            ?? "artifacts/generic";
         var absoluteOutput = System.IO.Path.IsPathRooted(outputDir)
             ? outputDir
             : System.IO.Path.Combine(context.RepositoryRoot, outputDir);
@@ -117,6 +139,44 @@ public sealed class GenericArtifactProvider : IArtifactProvider
         }
     }
 
-    private static string? GetSetting(ArtifactConfig artifact, string key) =>
-        artifact.Settings.TryGetValue(key, out var val) ? val.GetString() : null;
+    private static string? GetSetting(ArtifactConfig artifact, string key)
+    {
+        if (!TryGetSettingValue(artifact.Settings, out var value, key))
+        {
+            return null;
+        }
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.Null or JsonValueKind.Undefined => null,
+            JsonValueKind.String => value.GetString(),
+            JsonValueKind.True => bool.TrueString.ToLowerInvariant(),
+            JsonValueKind.False => bool.FalseString.ToLowerInvariant(),
+            JsonValueKind.Number => value.GetRawText(),
+            _ => value.ToString(),
+        };
+    }
+
+    private static bool TryGetSettingValue(
+        IReadOnlyDictionary<string, JsonElement> settings,
+        out JsonElement value,
+        string path)
+    {
+        value = default;
+        var segments = path.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (segments.Length == 0 || !settings.TryGetValue(segments[0], out value))
+        {
+            return false;
+        }
+
+        for (var i = 1; i < segments.Length; i++)
+        {
+            if (value.ValueKind != JsonValueKind.Object || !value.TryGetProperty(segments[i], out value))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }

@@ -47,13 +47,13 @@ public sealed class NpmArtifactProvider : IArtifactProvider
         CancellationToken cancellationToken)
     {
         var workDir = GetSetting(artifact, "directory") ?? context.RepositoryRoot;
-        var registry = GetSetting(artifact, "registry");
+        var fileEnv = RepositoryEnvironmentFiles.Load(context.RepositoryRoot);
+        var registry = ResolveRegistry(artifact, fileEnv);
         var access = GetSetting(artifact, "access") ?? "public";
         var tag = GetSetting(artifact, "tag") ?? context.Version?.SemVer;
         var dockerImage = ResolveDockerImage(artifact, "NPM_CONTAINER_IMAGE");
 
-        var fileEnv = RepositoryEnvironmentFiles.Load(context.RepositoryRoot);
-        var auth = ResolveAuth(registry, GetSetting(artifact, "tokenEnv"), fileEnv);
+        var auth = ResolveAuth(registry, GetSetting(artifact, "target.tokenEnv"), fileEnv);
         IReadOnlyDictionary<string, string?>? envOverrides = auth.HasCredentials
             ? new Dictionary<string, string?> { ["NPM_TOKEN"] = auth.Secret }
             : null;
@@ -87,11 +87,18 @@ public sealed class NpmArtifactProvider : IArtifactProvider
             ?? ToolRunner.GetSetting(artifact, "dockerImage")
             ?? DefaultContainerImage;
 
+    private static string? ResolveRegistry(ArtifactConfig artifact, IReadOnlyDictionary<string, string> fileEnv) =>
+        FeedAuthResolver.ResolveTargetValue(
+            defaultEnvName: "NPM_TARGET_REGISTRY",
+            configuredEnvName: GetSetting(artifact, "target.registryEnv"),
+            configuredValue: GetSetting(artifact, "target.registry"),
+            fileEnv: fileEnv);
+
     private static string? GetSetting(ArtifactConfig artifact, string key) =>
         ToolRunner.GetSetting(artifact, key);
 
     /// <summary>
-    /// Resolves npm publish credentials.  Order: configured tokenEnv → NPM_TOKEN →
+    /// Resolves npm publish credentials.  Order: target.tokenEnv (or NPM_TOKEN) →
     /// NODE_AUTH_TOKEN → GITHUB_TOKEN for npm.pkg.github.com.
     /// The resolved token is injected as <c>NPM_TOKEN</c> for the publish invocation.
     /// </summary>
@@ -100,9 +107,11 @@ public sealed class NpmArtifactProvider : IArtifactProvider
         string? tokenEnvOverride,
         IReadOnlyDictionary<string, string> fileEnv)
     {
-        var envName = string.IsNullOrWhiteSpace(tokenEnvOverride) ? "NPM_TOKEN" : tokenEnvOverride;
-        var token = FeedAuthResolver.GetEnv(envName, fileEnv)
-                    ?? FeedAuthResolver.GetEnv("NODE_AUTH_TOKEN", fileEnv);
+        var token = FeedAuthResolver.ResolveSecret(
+            defaultEnvName: "NPM_TOKEN",
+            configuredEnvName: tokenEnvOverride,
+            fileEnv: fileEnv,
+            "NODE_AUTH_TOKEN");
 
         if (string.IsNullOrWhiteSpace(token))
         {

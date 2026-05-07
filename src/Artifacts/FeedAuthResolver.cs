@@ -19,14 +19,80 @@ public sealed record FeedAuthResolution(
 /// </summary>
 public static class FeedAuthResolver
 {
+    /// <summary>
+    /// Resolves a target value using environment and settings indirection.
+    /// Order: configured env-name (or default env-name) -> configured value.
+    /// </summary>
+    public static string? ResolveTargetValue(
+        string defaultEnvName,
+        string? configuredEnvName,
+        string? configuredValue,
+        IReadOnlyDictionary<string, string> fileEnv)
+    {
+        var envName = string.IsNullOrWhiteSpace(configuredEnvName)
+            ? defaultEnvName
+            : configuredEnvName;
+
+        return GetEnv(envName, fileEnv) ?? configuredValue;
+    }
+
+    /// <summary>
+    /// Resolves a secret/token value using environment and optional fallback aliases.
+    /// Order: configured env-name (or default env-name) -> fallback env names.
+    /// </summary>
+    public static string? ResolveSecret(
+        string defaultEnvName,
+        string? configuredEnvName,
+        IReadOnlyDictionary<string, string> fileEnv,
+        params string[] fallbackEnvNames)
+    {
+        var envName = string.IsNullOrWhiteSpace(configuredEnvName)
+            ? defaultEnvName
+            : configuredEnvName;
+
+        var resolved = GetEnv(envName, fileEnv);
+        if (!string.IsNullOrWhiteSpace(resolved))
+        {
+            return resolved;
+        }
+
+        foreach (var fallbackEnvName in fallbackEnvNames)
+        {
+            resolved = GetEnv(fallbackEnvName, fileEnv);
+            if (!string.IsNullOrWhiteSpace(resolved))
+            {
+                return resolved;
+            }
+        }
+
+        return null;
+    }
+
     public static FeedAuthResolution ResolveDocker(
         string? configuredRegistry,
         string? inferredRegistry,
-        IReadOnlyDictionary<string, string> fileEnv)
+        IReadOnlyDictionary<string, string> fileEnv,
+        string? configuredUsernameEnv = null,
+        string? configuredPasswordEnv = null,
+        string? configuredRegistryEnv = null)
     {
-        var username = GetEnv("DOCKER_LOGIN_USERNAME", fileEnv) ?? GetEnv("DOCKER_AUTH_USERNAME", fileEnv);
-        var secret = GetEnv("DOCKER_LOGIN_PASSWORD", fileEnv) ?? GetEnv("DOCKER_AUTH_PASSWORD", fileEnv);
-        var endpoint = GetEnv("DOCKER_LOGIN_REGISTRY", fileEnv) ?? GetEnv("DOCKER_AUTH_REGISTRY", fileEnv) ?? configuredRegistry ?? inferredRegistry;
+        var username = ResolveSecret(
+            defaultEnvName: "DOCKER_LOGIN_USERNAME",
+            configuredEnvName: configuredUsernameEnv,
+            fileEnv: fileEnv,
+            "DOCKER_AUTH_USERNAME");
+        var secret = ResolveSecret(
+            defaultEnvName: "DOCKER_LOGIN_PASSWORD",
+            configuredEnvName: configuredPasswordEnv,
+            fileEnv: fileEnv,
+            "DOCKER_AUTH_PASSWORD");
+        var endpoint = ResolveTargetValue(
+                           defaultEnvName: "DOCKER_LOGIN_REGISTRY",
+                           configuredEnvName: configuredRegistryEnv,
+                           configuredValue: configuredRegistry,
+                           fileEnv: fileEnv)
+                       ?? GetEnv("DOCKER_AUTH_REGISTRY", fileEnv)
+                       ?? inferredRegistry;
 
         if (string.IsNullOrWhiteSpace(username) && string.IsNullOrWhiteSpace(secret))
         {

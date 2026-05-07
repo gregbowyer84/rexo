@@ -2,6 +2,7 @@ namespace Rexo.Artifacts.Terraform;
 
 using Rexo.Artifacts;
 using Rexo.Core.Abstractions;
+using Rexo.Core.Environment;
 using Rexo.Core.Models;
 
 /// <summary>
@@ -28,7 +29,12 @@ public sealed class TerraformArtifactProvider : IArtifactProvider
     {
         var workDir = GetWorkDir(artifact, context);
         var dockerImage = ResolveDockerImage(artifact);
-        var varFile = GetSetting(artifact, "var-file");
+        var fileEnv = RepositoryEnvironmentFiles.Load(context.RepositoryRoot);
+        var varFile = FeedAuthResolver.ResolveTargetValue(
+            defaultEnvName: "TERRAFORM_TARGET_VAR_FILE",
+            configuredEnvName: GetSetting(artifact, "target.varFileEnv"),
+            configuredValue: GetSetting(artifact, "target.varFile"),
+            fileEnv: fileEnv);
 
         // terraform init
         var initArgs = new List<string> { "init" };
@@ -72,7 +78,12 @@ public sealed class TerraformArtifactProvider : IArtifactProvider
     {
         var workDir = GetWorkDir(artifact, context);
         var dockerImage = ResolveDockerImage(artifact);
-        var workspace = GetSetting(artifact, "workspace");
+        var fileEnv = RepositoryEnvironmentFiles.Load(context.RepositoryRoot);
+        var workspace = FeedAuthResolver.ResolveTargetValue(
+            defaultEnvName: "TERRAFORM_TARGET_WORKSPACE",
+            configuredEnvName: GetSetting(artifact, "target.workspaceEnv"),
+            configuredValue: GetSetting(artifact, "target.workspace"),
+            fileEnv: fileEnv);
 
         // Optionally select workspace
         if (!string.IsNullOrWhiteSpace(workspace))

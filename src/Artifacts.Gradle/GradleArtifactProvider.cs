@@ -74,7 +74,7 @@ public sealed class GradleArtifactProvider : IArtifactProvider
         var dockerImage = ResolveDockerImage(artifact);
 
         var fileEnv = RepositoryEnvironmentFiles.Load(context.RepositoryRoot);
-        var auth = ResolveAuth(fileEnv);
+        var auth = ResolveAuth(artifact, fileEnv);
         IReadOnlyDictionary<string, string?>? envOverrides = auth.HasCredentials
             ? new Dictionary<string, string?>
             {
@@ -153,23 +153,39 @@ public sealed class GradleArtifactProvider : IArtifactProvider
 
     /// <summary>
     /// Resolves Gradle publishing credentials.  Order:
-    /// ORG_GRADLE_PROJECT_mavenUsername + ORG_GRADLE_PROJECT_mavenPassword (standard Maven
+    /// target.usernameEnv + target.passwordEnv (defaults
+    /// ORG_GRADLE_PROJECT_mavenUsername/ORG_GRADLE_PROJECT_mavenPassword; standard Maven
     /// publishing via Gradle, automatically surfaced as project properties) →
-    /// GRADLE_PUBLISH_KEY + GRADLE_PUBLISH_SECRET (Gradle Plugin Portal).
+    /// target.publishKeyEnv + target.publishSecretEnv (defaults
+    /// GRADLE_PUBLISH_KEY/GRADLE_PUBLISH_SECRET for Gradle Plugin Portal).
     /// Credentials are forwarded as env vars so Gradle picks them up as project properties.
     /// </summary>
-    private static FeedAuthResolution ResolveAuth(IReadOnlyDictionary<string, string> fileEnv)
+    private static FeedAuthResolution ResolveAuth(
+        ArtifactConfig artifact,
+        IReadOnlyDictionary<string, string> fileEnv)
     {
-        var username = FeedAuthResolver.GetEnv("ORG_GRADLE_PROJECT_mavenUsername", fileEnv);
-        var password = FeedAuthResolver.GetEnv("ORG_GRADLE_PROJECT_mavenPassword", fileEnv);
+        var username = FeedAuthResolver.ResolveSecret(
+            defaultEnvName: "ORG_GRADLE_PROJECT_mavenUsername",
+            configuredEnvName: GetSetting(artifact, "target.usernameEnv"),
+            fileEnv: fileEnv);
+        var password = FeedAuthResolver.ResolveSecret(
+            defaultEnvName: "ORG_GRADLE_PROJECT_mavenPassword",
+            configuredEnvName: GetSetting(artifact, "target.passwordEnv"),
+            fileEnv: fileEnv);
 
         if (!string.IsNullOrWhiteSpace(username) && !string.IsNullOrWhiteSpace(password))
         {
             return new FeedAuthResolution(true, username, password, null, null, "env");
         }
 
-        var pluginKey = FeedAuthResolver.GetEnv("GRADLE_PUBLISH_KEY", fileEnv);
-        var pluginSecret = FeedAuthResolver.GetEnv("GRADLE_PUBLISH_SECRET", fileEnv);
+        var pluginKey = FeedAuthResolver.ResolveSecret(
+            defaultEnvName: "GRADLE_PUBLISH_KEY",
+            configuredEnvName: GetSetting(artifact, "target.publishKeyEnv"),
+            fileEnv: fileEnv);
+        var pluginSecret = FeedAuthResolver.ResolveSecret(
+            defaultEnvName: "GRADLE_PUBLISH_SECRET",
+            configuredEnvName: GetSetting(artifact, "target.publishSecretEnv"),
+            fileEnv: fileEnv);
         if (!string.IsNullOrWhiteSpace(pluginKey) && !string.IsNullOrWhiteSpace(pluginSecret))
         {
             return new FeedAuthResolution(true, pluginKey, pluginSecret, null, null, "env");

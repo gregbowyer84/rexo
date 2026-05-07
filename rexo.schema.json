@@ -515,9 +515,24 @@
               "type": "string",
               "description": "Working directory containing package.json. Defaults to repo root."
             },
-            "registry": {
-              "type": "string",
-              "description": "npm registry URL. Defaults to https://registry.npmjs.org."
+            "target": {
+              "type": "object",
+              "description": "Target settings for npm publish endpoint and credential env-name overrides.",
+              "additionalProperties": false,
+              "properties": {
+                "registry": {
+                  "type": "string",
+                  "description": "npm registry URL for publish."
+                },
+                "registryEnv": {
+                  "type": "string",
+                  "description": "Environment variable name containing target npm registry URL. Defaults to NPM_TARGET_REGISTRY."
+                },
+                "tokenEnv": {
+                  "type": "string",
+                  "description": "Environment variable name containing npm auth token. Defaults to NPM_TOKEN."
+                }
+              }
             },
             "access": {
               "type": "string",
@@ -530,10 +545,6 @@
             "tag": {
               "type": "string",
               "description": "Distribution tag to publish under. Defaults to version."
-            },
-            "tokenEnv": {
-              "type": "string",
-              "description": "Name of the environment variable containing the npm auth token. Defaults to NPM_TOKEN."
             },
             "useDocker": {
               "type": "boolean",
@@ -580,9 +591,32 @@
               "type": "string",
               "description": "Working directory. Defaults to repo root."
             },
-            "repository-url": {
-              "type": "string",
-              "description": "PyPI repository URL for twine upload."
+            "target": {
+              "type": "object",
+              "description": "Target settings for twine endpoint and credential env-name overrides.",
+              "additionalProperties": false,
+              "properties": {
+                "repositoryUrl": {
+                  "type": "string",
+                  "description": "PyPI repository URL for twine upload."
+                },
+                "repositoryUrlEnv": {
+                  "type": "string",
+                  "description": "Environment variable name containing repository URL. Defaults to PYPI_TARGET_REPOSITORY_URL."
+                },
+                "apiTokenEnv": {
+                  "type": "string",
+                  "description": "Environment variable name containing API token. Defaults to TWINE_API_TOKEN."
+                },
+                "usernameEnv": {
+                  "type": "string",
+                  "description": "Environment variable name containing username. Defaults to TWINE_USERNAME."
+                },
+                "passwordEnv": {
+                  "type": "string",
+                  "description": "Environment variable name containing password. Defaults to TWINE_PASSWORD."
+                }
+              }
             },
             "dist-dir": {
               "type": "string",
@@ -637,6 +671,21 @@
               "type": "string",
               "description": "Comma-separated Maven profiles to activate."
             },
+            "target": {
+              "type": "object",
+              "description": "Target credential env-name overrides for Maven publishing.",
+              "additionalProperties": false,
+              "properties": {
+                "usernameEnv": {
+                  "type": "string",
+                  "description": "Environment variable name containing Maven username. Defaults to MAVEN_REPO_USERNAME."
+                },
+                "passwordEnv": {
+                  "type": "string",
+                  "description": "Environment variable name containing Maven password/token. Defaults to MAVEN_REPO_PASSWORD."
+                }
+              }
+            },
             "useDocker": {
               "type": "boolean",
               "description": "Use a Docker container as a fallback runtime when mvn is not installed on the host. Defaults to true."
@@ -690,6 +739,29 @@
               "type": "string",
               "description": "Working directory containing build.gradle. Defaults to repo root."
             },
+            "target": {
+              "type": "object",
+              "description": "Target credential env-name overrides for Gradle publish flows.",
+              "additionalProperties": false,
+              "properties": {
+                "usernameEnv": {
+                  "type": "string",
+                  "description": "Environment variable name containing Maven publish username. Defaults to ORG_GRADLE_PROJECT_mavenUsername."
+                },
+                "passwordEnv": {
+                  "type": "string",
+                  "description": "Environment variable name containing Maven publish password. Defaults to ORG_GRADLE_PROJECT_mavenPassword."
+                },
+                "publishKeyEnv": {
+                  "type": "string",
+                  "description": "Environment variable name containing Gradle Plugin Portal publish key. Defaults to GRADLE_PUBLISH_KEY."
+                },
+                "publishSecretEnv": {
+                  "type": "string",
+                  "description": "Environment variable name containing Gradle Plugin Portal publish secret. Defaults to GRADLE_PUBLISH_SECRET."
+                }
+              }
+            },
             "useDocker": {
               "type": "boolean",
               "description": "Use a Docker container as a fallback runtime when gradle is not installed on the host. Defaults to true."
@@ -735,9 +807,24 @@
               "type": "string",
               "description": "Path or glob to the .gemspec file. Defaults to '*.gemspec'."
             },
-            "source": {
-              "type": "string",
-              "description": "Gem server source URL for gem push."
+            "target": {
+              "type": "object",
+              "description": "Target settings for RubyGems source and credential env-name overrides.",
+              "additionalProperties": false,
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "description": "Gem server source URL for gem push."
+                },
+                "sourceEnv": {
+                  "type": "string",
+                  "description": "Environment variable name containing target source URL. Defaults to RUBYGEMS_TARGET_SOURCE."
+                },
+                "apiKeyEnv": {
+                  "type": "string",
+                  "description": "Environment variable name containing API key/token. Defaults to GEM_HOST_API_KEY."
+                }
+              }
             },
             "gem-pattern": {
               "type": "string",
@@ -746,10 +833,6 @@
             "directory": {
               "type": "string",
               "description": "Working directory. Defaults to repo root."
-            },
-            "apiKeyEnv": {
-              "type": "string",
-              "description": "Name of the environment variable containing the RubyGems API key. Defaults to GEM_HOST_API_KEY."
             },
             "useDocker": {
               "type": "boolean",
@@ -796,17 +879,28 @@
               "type": "string",
               "description": "Directory containing Terraform configuration. Defaults to '.'."
             },
-            "workspace": {
-              "type": "string",
-              "description": "Terraform workspace to select before apply."
-            },
-            "vars-file": {
-              "type": "string",
-              "description": "Path to a .tfvars file to pass to terraform plan."
-            },
-            "var-file": {
-              "type": "string",
-              "description": "Path to a .tfvars file to pass to terraform plan (alias for vars-file)."
+            "target": {
+              "type": "object",
+              "description": "Target settings for Terraform workspace and var-file env overrides.",
+              "additionalProperties": false,
+              "properties": {
+                "workspace": {
+                  "type": "string",
+                  "description": "Terraform workspace to select before apply."
+                },
+                "workspaceEnv": {
+                  "type": "string",
+                  "description": "Environment variable name containing Terraform workspace. Defaults to TERRAFORM_TARGET_WORKSPACE."
+                },
+                "varFile": {
+                  "type": "string",
+                  "description": "Path to a .tfvars file to pass to terraform plan."
+                },
+                "varFileEnv": {
+                  "type": "string",
+                  "description": "Environment variable name containing tfvars file path. Defaults to TERRAFORM_TARGET_VAR_FILE."
+                }
+              }
             },
             "useDocker": {
               "type": "boolean",
@@ -861,9 +955,28 @@
               "type": "string",
               "description": "Directory where packaged .tgz files are written. Defaults to repo root."
             },
-            "repository": {
-              "type": "string",
-              "description": "Chart Museum repo URL (https://…) for helm cm-push, or a local filesystem path for file copy."
+            "target": {
+              "type": "object",
+              "description": "Target settings for helm repository endpoint and credential env-name overrides.",
+              "additionalProperties": false,
+              "properties": {
+                "repository": {
+                  "type": "string",
+                  "description": "Chart Museum repo URL (https://…) for helm cm-push, or a local filesystem path for file copy."
+                },
+                "repositoryEnv": {
+                  "type": "string",
+                  "description": "Environment variable name containing target repository. Defaults to HELM_TARGET_REPOSITORY."
+                },
+                "usernameEnv": {
+                  "type": "string",
+                  "description": "Environment variable name containing repository username. Defaults to HELM_REPO_USERNAME."
+                },
+                "passwordEnv": {
+                  "type": "string",
+                  "description": "Environment variable name containing repository password/token. Defaults to HELM_REPO_PASSWORD."
+                }
+              }
             },
             "useDocker": {
               "type": "boolean",
@@ -918,9 +1031,32 @@
               "type": "string",
               "description": "Space-separated list of services to build/push. Defaults to all."
             },
-            "registry": {
-              "type": "string",
-              "description": "Container registry URL. When set, docker login is performed before push using resolved credentials."
+            "target": {
+              "type": "object",
+              "description": "Target settings for compose registry and login env-name overrides.",
+              "additionalProperties": false,
+              "properties": {
+                "registry": {
+                  "type": "string",
+                  "description": "Container registry URL. When set, docker login is performed before push using resolved credentials."
+                },
+                "registryEnv": {
+                  "type": "string",
+                  "description": "Environment variable name containing target registry URL/host. Defaults to DOCKER_COMPOSE_TARGET_REGISTRY."
+                },
+                "usernameEnv": {
+                  "type": "string",
+                  "description": "Environment variable name containing docker login username. Defaults to DOCKER_LOGIN_USERNAME."
+                },
+                "passwordEnv": {
+                  "type": "string",
+                  "description": "Environment variable name containing docker login password/token. Defaults to DOCKER_LOGIN_PASSWORD."
+                },
+                "loginRegistryEnv": {
+                  "type": "string",
+                  "description": "Environment variable name containing docker login registry override. Defaults to DOCKER_LOGIN_REGISTRY."
+                }
+              }
             },
             "extra-build-args": {
               "type": "string",
@@ -1438,10 +1574,6 @@
           "type": "string",
           "description": "Package output directory for generated .nupkg files."
         },
-        "source": {
-          "type": "string",
-          "description": "NuGet source/feed URL or name used for push."
-        },
         "target": {
           "type": "object",
           "description": "Structured target settings for NuGet push.",
@@ -1450,16 +1582,16 @@
             "source": {
               "type": "string",
               "description": "NuGet source/feed URL or name used for push."
+            },
+            "sourceEnv": {
+              "type": "string",
+              "description": "Environment variable name containing target source/feed. Defaults to NUGET_TARGET_SOURCE."
+            },
+            "apiKeyEnv": {
+              "type": "string",
+              "description": "Environment variable name containing API key/token. Defaults to NUGET_API_KEY (fallback alias: NUGET_AUTH_TOKEN)."
             }
           }
-        },
-        "sourceEnv": {
-          "type": "string",
-          "description": "Legacy compatibility setting: environment variable name containing the NuGet push target source/feed. Prefer NUGET_TARGET_SOURCE and settings.target.source for Docker-style behavior."
-        },
-        "apiKeyEnv": {
-          "type": "string",
-          "description": "Environment variable name containing the NuGet API key. Defaults to NUGET_API_KEY (fallback: NUGET_AUTH_TOKEN). CI-native: GITHUB_TOKEN is used automatically for nuget.pkg.github.com; SYSTEM_ACCESSTOKEN for Azure Artifacts."
         }
       }
     },
@@ -1482,21 +1614,52 @@
           "description": "Output directory for generated .tgz chart packages.",
           "default": "artifacts/charts"
         },
-        "oci": {
-          "type": "string",
-          "description": "Full OCI destination (for example oci://ghcr.io/org/charts)."
-        },
-        "registry": {
-          "type": "string",
-          "description": "OCI registry host used when composing destination from registry + repository."
-        },
-        "repository": {
-          "type": "string",
-          "description": "OCI repository path used when composing destination from registry + repository."
-        },
-        "loginRegistry": {
-          "type": "string",
-          "description": "Optional registry host to use for helm registry login."
+        "target": {
+          "type": "object",
+          "description": "Target settings for Helm OCI destination and login env-name overrides.",
+          "additionalProperties": false,
+          "properties": {
+            "oci": {
+              "type": "string",
+              "description": "Full OCI destination (for example oci://ghcr.io/org/charts)."
+            },
+            "ociEnv": {
+              "type": "string",
+              "description": "Environment variable name containing full OCI destination. Defaults to HELM_OCI_TARGET."
+            },
+            "registry": {
+              "type": "string",
+              "description": "OCI registry host used when composing destination from registry + repository."
+            },
+            "registryEnv": {
+              "type": "string",
+              "description": "Environment variable name containing OCI target registry. Defaults to HELM_OCI_TARGET_REGISTRY."
+            },
+            "repository": {
+              "type": "string",
+              "description": "OCI repository path used when composing destination from registry + repository."
+            },
+            "repositoryEnv": {
+              "type": "string",
+              "description": "Environment variable name containing OCI target repository. Defaults to HELM_OCI_TARGET_REPOSITORY."
+            },
+            "loginRegistry": {
+              "type": "string",
+              "description": "Optional registry host to use for helm registry login."
+            },
+            "loginRegistryEnv": {
+              "type": "string",
+              "description": "Environment variable name containing login registry override. Defaults to HELM_OCI_LOGIN_REGISTRY."
+            },
+            "usernameEnv": {
+              "type": "string",
+              "description": "Environment variable name containing registry username. Defaults to HELM_REGISTRY_USERNAME."
+            },
+            "passwordEnv": {
+              "type": "string",
+              "description": "Environment variable name containing registry password/token. Defaults to HELM_REGISTRY_PASSWORD."
+            }
+          }
         },
         "useDocker": {
           "type": "boolean",

@@ -50,13 +50,23 @@ public sealed class DockerComposeArtifactProvider : IArtifactProvider
         CancellationToken cancellationToken)
     {
         var workDir = context.RepositoryRoot;
-        var registry = GetSetting(artifact, "registry");
+        var fileEnv = RepositoryEnvironmentFiles.Load(context.RepositoryRoot);
+        var registry = FeedAuthResolver.ResolveTargetValue(
+            defaultEnvName: "DOCKER_COMPOSE_TARGET_REGISTRY",
+            configuredEnvName: GetSetting(artifact, "target.registryEnv"),
+            configuredValue: GetSetting(artifact, "target.registry"),
+            fileEnv: fileEnv);
 
         // docker login before push
         if (!string.IsNullOrWhiteSpace(registry))
         {
-            var fileEnv = RepositoryEnvironmentFiles.Load(context.RepositoryRoot);
-            var auth = FeedAuthResolver.ResolveDocker(registry, null, fileEnv);
+            var auth = FeedAuthResolver.ResolveDocker(
+                configuredRegistry: registry,
+                inferredRegistry: null,
+                fileEnv: fileEnv,
+                configuredUsernameEnv: GetSetting(artifact, "target.usernameEnv"),
+                configuredPasswordEnv: GetSetting(artifact, "target.passwordEnv"),
+                configuredRegistryEnv: GetSetting(artifact, "target.loginRegistryEnv"));
             if (auth.HasCredentials)
             {
                 var loginArgs = new List<string> { "login", registry, "-u", auth.Username ?? string.Empty, "--password-stdin" };

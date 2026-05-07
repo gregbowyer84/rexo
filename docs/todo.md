@@ -103,12 +103,12 @@ Legend:
 - [x] NuGet provider: pack/push
 - [x] Helm OCI provider: package/push (Docker fallback supported)
 - [x] Helm (non-OCI) provider: package/push to HTTP chart repo
-- [x] npm provider: pack/publish (Docker fallback; `tokenEnv`)
+- [x] npm provider: pack/publish (Docker fallback; `target.tokenEnv`)
 - [x] PyPI provider: build/publish (Docker fallback; twine auth)
 - [x] Maven provider: package/deploy (Docker fallback; username/password auth)
 - [x] Gradle provider: build/publish (Docker fallback; wrapper-aware; env auth)
-- [x] RubyGems provider: build/push (Docker fallback; `apiKeyEnv`)
-- [x] Terraform provider: init/validate/apply (Docker fallback; `var-file`)
+- [x] RubyGems provider: build/push (Docker fallback; `target.apiKeyEnv`)
+- [x] Terraform provider: init/validate/apply (Docker fallback; `target.varFile`)
 - [x] Generic provider: zip/copy artifact packaging
 - [x] Tag strategy support (semver/branch/sha/latest-on-main variants)
 - [x] Docker fallback (`useDocker`/`dockerImage`) for all tool-based providers

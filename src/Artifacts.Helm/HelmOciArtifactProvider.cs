@@ -94,7 +94,8 @@ public sealed class HelmOciArtifactProvider : IArtifactProvider
         var output = GetSetting(artifact, "output") ?? Path.Combine("artifacts", "charts");
         var version = context.Version?.SemVer;
 
-        await TryHelmRegistryLoginAsync(artifact, context, cancellationToken);
+        var fileEnv = RepositoryEnvironmentFiles.Load(context.RepositoryRoot);
+        await TryHelmRegistryLoginAsync(artifact, context, fileEnv, cancellationToken);
 
         var packagePath = TryFindPackagePath(context.RepositoryRoot, output, chartName, version);
         if (string.IsNullOrWhiteSpace(packagePath) || !File.Exists(packagePath))
@@ -108,7 +109,7 @@ public sealed class HelmOciArtifactProvider : IArtifactProvider
             packagePath = buildResult.Location;
         }
 
-        var destination = ResolveOciDestination(artifact);
+        var destination = ResolveOciDestination(artifact, fileEnv);
         if (string.IsNullOrWhiteSpace(destination))
         {
             Console.Error.WriteLine("Helm OCI destination is required. Set settings.oci or settings.registry + settings.repository.");
@@ -134,11 +135,21 @@ public sealed class HelmOciArtifactProvider : IArtifactProvider
     private async Task TryHelmRegistryLoginAsync(
         ArtifactConfig artifact,
         ExecutionContext context,
+        IReadOnlyDictionary<string, string> fileEnv,
         CancellationToken cancellationToken)
     {
-        var fileEnv = RepositoryEnvironmentFiles.Load(context.RepositoryRoot);
         var auth = ResolveRegistryAuth(
-            configuredRegistry: GetSetting(artifact, "loginRegistry") ?? GetSetting(artifact, "registry"),
+            artifact: artifact,
+            configuredRegistry: FeedAuthResolver.ResolveTargetValue(
+                defaultEnvName: "HELM_OCI_LOGIN_REGISTRY",
+                configuredEnvName: GetSetting(artifact, "target.loginRegistryEnv"),
+                configuredValue: GetSetting(artifact, "target.loginRegistry")
+                                 ?? FeedAuthResolver.ResolveTargetValue(
+                                     defaultEnvName: "HELM_OCI_TARGET_REGISTRY",
+                                     configuredEnvName: GetSetting(artifact, "target.registryEnv"),
+                                     configuredValue: GetSetting(artifact, "target.registry"),
+                                     fileEnv: fileEnv),
+                fileEnv: fileEnv),
             fileEnv: fileEnv);
 
         if (!string.IsNullOrWhiteSpace(auth.Error))
@@ -155,7 +166,7 @@ public sealed class HelmOciArtifactProvider : IArtifactProvider
         var registry = auth.Endpoint;
         if (string.IsNullOrWhiteSpace(registry))
         {
-            Console.Error.WriteLine("Helm login registry could not be determined. Set settings.registry or HELM_REGISTRY.");
+            Console.Error.WriteLine("Helm login registry could not be determined. Set settings.target.loginRegistry or HELM_OCI_LOGIN_REGISTRY.");
             return;
         }
 
@@ -164,9 +175,15 @@ public sealed class HelmOciArtifactProvider : IArtifactProvider
         await _runHelmAsync(artifact, args, context.RepositoryRoot, null, auth.Secret! + Environment.NewLine, cancellationToken);
     }
 
-    private static string? ResolveOciDestination(ArtifactConfig artifact)
+    private static string? ResolveOciDestination(
+        ArtifactConfig artifact,
+        IReadOnlyDictionary<string, string> fileEnv)
     {
-        var oci = GetSetting(artifact, "oci");
+        var oci = FeedAuthResolver.ResolveTargetValue(
+            defaultEnvName: "HELM_OCI_TARGET",
+            configuredEnvName: GetSetting(artifact, "target.ociEnv"),
+            configuredValue: GetSetting(artifact, "target.oci"),
+            fileEnv: fileEnv);
         if (!string.IsNullOrWhiteSpace(oci))
         {
             return oci.StartsWith("oci://", StringComparison.OrdinalIgnoreCase)
@@ -174,8 +191,16 @@ public sealed class HelmOciArtifactProvider : IArtifactProvider
                 : "oci://" + oci;
         }
 
-        var registry = GetSetting(artifact, "registry") ?? Environment.GetEnvironmentVariable("HELM_REGISTRY");
-        var repository = GetSetting(artifact, "repository") ?? Environment.GetEnvironmentVariable("HELM_REPOSITORY");
+        var registry = FeedAuthResolver.ResolveTargetValue(
+            defaultEnvName: "HELM_OCI_TARGET_REGISTRY",
+            configuredEnvName: GetSetting(artifact, "target.registryEnv"),
+            configuredValue: GetSetting(artifact, "target.registry"),
+            fileEnv: fileEnv);
+        var repository = FeedAuthResolver.ResolveTargetValue(
+            defaultEnvName: "HELM_OCI_TARGET_REPOSITORY",
+            configuredEnvName: GetSetting(artifact, "target.repositoryEnv"),
+            configuredValue: GetSetting(artifact, "target.repository"),
+            fileEnv: fileEnv);
         if (string.IsNullOrWhiteSpace(registry) || string.IsNullOrWhiteSpace(repository))
         {
             return null;
@@ -207,8 +232,38 @@ public sealed class HelmOciArtifactProvider : IArtifactProvider
             .FirstOrDefault();
     }
 
-    private static string? GetSetting(ArtifactConfig artifact, string key) =>
-        artifact.Settings.TryGetValue(key, out var value) ? GetString(value) : null;
+    private static string? GetSetting(ArtifactConfig artifact, string key)
+    {
+        if (!TryGetSettingValue(artifact.Settings, out var value, key))
+        {
+            return null;
+        }
+
+        return GetString(value);
+    }
+
+    private static bool TryGetSettingValue(
+        IReadOnlyDictionary<string, JsonElement> settings,
+        out JsonElement value,
+        string path)
+    {
+        value = default;
+        var segments = path.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (segments.Length == 0 || !settings.TryGetValue(segments[0], out value))
+        {
+            return false;
+        }
+
+        for (var i = 1; i < segments.Length; i++)
+        {
+            if (value.ValueKind != JsonValueKind.Object || !value.TryGetProperty(segments[i], out value))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     private static string? GetString(JsonElement value) =>
         value.ValueKind switch
@@ -388,17 +443,30 @@ public sealed class HelmOciArtifactProvider : IArtifactProvider
         exception.NativeErrorCode is 2 or 3;
 
     /// <summary>
-    /// Resolves Helm OCI registry credentials.  Order: HELM_REGISTRY_USERNAME +
-    /// HELM_REGISTRY_PASSWORD → GITHUB_ACTOR + GITHUB_TOKEN for ghcr.io registries.
+    /// Resolves Helm OCI registry credentials.  Order: target.usernameEnv +
+    /// target.passwordEnv (defaults HELM_REGISTRY_USERNAME/HELM_REGISTRY_PASSWORD)
+    /// → GITHUB_ACTOR + GITHUB_TOKEN for ghcr.io registries.
     /// Credentials are used for <c>helm registry login</c> before push.
     /// </summary>
     private static FeedAuthResolution ResolveRegistryAuth(
+        ArtifactConfig artifact,
         string? configuredRegistry,
         IReadOnlyDictionary<string, string> fileEnv)
     {
-        var username = FeedAuthResolver.GetEnv("HELM_REGISTRY_USERNAME", fileEnv);
-        var secret = FeedAuthResolver.GetEnv("HELM_REGISTRY_PASSWORD", fileEnv);
-        var endpoint = FeedAuthResolver.GetEnv("HELM_REGISTRY", fileEnv) ?? configuredRegistry;
+        var username = FeedAuthResolver.ResolveSecret(
+            defaultEnvName: "HELM_REGISTRY_USERNAME",
+            configuredEnvName: GetSetting(artifact, "target.usernameEnv"),
+            fileEnv: fileEnv);
+        var secret = FeedAuthResolver.ResolveSecret(
+            defaultEnvName: "HELM_REGISTRY_PASSWORD",
+            configuredEnvName: GetSetting(artifact, "target.passwordEnv"),
+            fileEnv: fileEnv);
+        var endpoint = configuredRegistry
+                       ?? FeedAuthResolver.ResolveTargetValue(
+                           defaultEnvName: "HELM_REGISTRY",
+                           configuredEnvName: GetSetting(artifact, "target.loginRegistryEnv"),
+                           configuredValue: GetSetting(artifact, "target.loginRegistry"),
+                           fileEnv: fileEnv);
 
         if (string.IsNullOrWhiteSpace(username) && string.IsNullOrWhiteSpace(secret))
         {

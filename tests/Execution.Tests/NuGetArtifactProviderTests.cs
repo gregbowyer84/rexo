@@ -81,8 +81,7 @@ public sealed class NuGetArtifactProviderTests
                       "output": "artifacts/packages",
                                             "target": {
                                                 "source": "https://nuget.pkg.github.com/acme/index.json"
-                                            },
-                      "source": "https://api.nuget.org/v3/index.json"
+                                            }
                     }
                     """)!);
 

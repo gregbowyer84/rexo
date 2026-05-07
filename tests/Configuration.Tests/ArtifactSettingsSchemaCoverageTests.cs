@@ -83,10 +83,10 @@ public sealed class ArtifactSettingsSchemaCoverageTests
                     "project": "src/Core/Core.csproj",
                     "output": "artifacts/packages",
                     "target": {
-                      "source": "https://api.nuget.org/v3/index.json"
-                    },
-                    "source": "https://api.nuget.org/v3/index.json",
-                    "apiKeyEnv": "NUGET_API_KEY"
+                      "source": "https://api.nuget.org/v3/index.json",
+                      "sourceEnv": "NUGET_TARGET_SOURCE",
+                      "apiKeyEnv": "NUGET_API_KEY"
+                    }
                   }
                 }
               ]

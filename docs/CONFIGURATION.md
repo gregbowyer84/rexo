@@ -670,10 +670,9 @@ Supported keys:
 | --- | --- | --- |
 | `project` | `string` | Project path for `dotnet pack` |
 | `output` | `string` | Output directory |
-| `source` | `string` | NuGet source/feed URL or named source for push |
-| `target.source` | `string` | Structured target source/feed setting (Docker-style naming) |
-| `sourceEnv` | `string` | Legacy compatibility: env variable name containing source/feed |
-| `apiKeyEnv` | `string` | Environment variable containing API key (defaults to `NUGET_API_KEY`) |
+| `target.source` | `string` | NuGet source/feed URL or named source for push |
+| `target.sourceEnv` | `string` | Env var name containing source/feed (default env key: `NUGET_TARGET_SOURCE`) |
+| `target.apiKeyEnv` | `string` | Env var name containing API key/token (default env key: `NUGET_API_KEY`) |
 
 #### NuGet authentication
 
@@ -684,14 +683,14 @@ Scope note: NuGet environment variables are global for the process. Multiple `nu
 | Environment variable | Purpose |
 | --- | --- |
 | `NUGET_TARGET_SOURCE` | Docker-style env override for the NuGet target source/feed |
-| `NUGET_API_KEY` | API key for push (default; overridden by `settings.apiKeyEnv`) |
+| `NUGET_API_KEY` | API key for push (default; overridden by `settings.target.apiKeyEnv`) |
 | `NUGET_AUTH_TOKEN` | Alternative API key alias, used if `NUGET_API_KEY` is not set |
 | `GITHUB_TOKEN` | Auto-used for `nuget.pkg.github.com` when no explicit key is set |
 | `SYSTEM_ACCESSTOKEN` | Auto-used for Azure Artifacts feeds when no explicit key is set |
 
-NuGet source/feed resolution order: `NUGET_TARGET_SOURCE` → `settings.target.source` → `settings.source` → legacy `settings.sourceEnv` lookup → default `https://api.nuget.org/v3/index.json`.
+NuGet source/feed resolution order: env from `settings.target.sourceEnv` (or `NUGET_TARGET_SOURCE`) → `settings.target.source` → default `https://api.nuget.org/v3/index.json`.
 
-- **GHCR/GitHub Packages zero-config**: when `settings.source` contains `nuget.pkg.github.com` and no API key is configured, `GITHUB_TOKEN` is used automatically. Requires `permissions: packages: write` in the workflow.
+- **GHCR/GitHub Packages zero-config**: when resolved source contains `nuget.pkg.github.com` and no API key is configured, `GITHUB_TOKEN` is used automatically. Requires `permissions: packages: write` in the workflow.
 - **Azure Artifacts zero-config**: when the source is an Azure Artifacts feed and no key is configured, `SYSTEM_ACCESSTOKEN` is used automatically (must be enabled in the pipeline job).
 
 ### Helm OCI artifact settings (`type: "helm-oci"`)
@@ -703,17 +702,23 @@ Supported keys:
 | `chart` | `string` | Chart name used to resolve packaged archive names (defaults to artifact name) |
 | `chartPath` | `string` | Path to chart root containing `Chart.yaml` (default `chart`) |
 | `output` | `string` | Output directory for packaged `.tgz` files (default `artifacts/charts`) |
-| `oci` | `string` | Full OCI destination (`oci://registry/repository`) |
-| `registry` | `string` | OCI registry host (used with `repository` when `oci` is not set) |
-| `repository` | `string` | OCI repository path (used with `registry` when `oci` is not set) |
-| `loginRegistry` | `string` | Optional registry host override for `helm registry login` |
+| `target.oci` | `string` | Full OCI destination (`oci://registry/repository`) |
+| `target.ociEnv` | `string` | Env var name for full OCI destination (default env key: `HELM_OCI_TARGET`) |
+| `target.registry` | `string` | OCI registry host (used with `target.repository` when `target.oci` is not set) |
+| `target.registryEnv` | `string` | Env var name for OCI registry host (default env key: `HELM_OCI_TARGET_REGISTRY`) |
+| `target.repository` | `string` | OCI repository path (used with `target.registry` when `target.oci` is not set) |
+| `target.repositoryEnv` | `string` | Env var name for OCI repository path (default env key: `HELM_OCI_TARGET_REPOSITORY`) |
+| `target.loginRegistry` | `string` | Optional registry host override for `helm registry login` |
+| `target.loginRegistryEnv` | `string` | Env var name for login registry override (default env key: `HELM_OCI_LOGIN_REGISTRY`) |
+| `target.usernameEnv` | `string` | Env var name for registry username (default env key: `HELM_REGISTRY_USERNAME`) |
+| `target.passwordEnv` | `string` | Env var name for registry password/token (default env key: `HELM_REGISTRY_PASSWORD`) |
 | `useDocker` | `boolean` | Set to `false` to disable the Docker fallback when host `helm` CLI is unavailable (default `true`) |
 | `dockerImage` | `string` | Override the Helm container image used when host `helm` CLI is unavailable |
 
 Push destination resolution:
 
-- If `settings.oci` is set, it is used directly (with `oci://` normalized when omitted).
-- Otherwise destination is composed from `settings.registry` + `settings.repository`.
+- If resolved `target.oci` is set, it is used directly (with `oci://` normalized when omitted).
+- Otherwise destination is composed from resolved `target.registry` + resolved `target.repository`.
 
 #### Helm OCI authentication
 
@@ -723,9 +728,13 @@ Scope note: Helm OCI environment variables are global for the process. Multiple 
 
 | Environment variable | Purpose |
 | --- | --- |
+| `HELM_OCI_TARGET` | Full OCI destination override |
+| `HELM_OCI_TARGET_REGISTRY` | OCI target registry host |
+| `HELM_OCI_TARGET_REPOSITORY` | OCI target repository path |
+| `HELM_OCI_LOGIN_REGISTRY` | Registry override used for `helm registry login` |
 | `HELM_REGISTRY_USERNAME` | Registry login username |
 | `HELM_REGISTRY_PASSWORD` | Registry login password/token |
-| `HELM_REGISTRY` | Registry host for login (falls back to `settings.loginRegistry`, then `settings.registry`) |
+| `HELM_REGISTRY` | Backward-compatible fallback login registry key |
 
 - **GHCR zero-config (GitHub Actions)**: when no credentials are configured and the registry contains `ghcr.io`, `GITHUB_ACTOR` and `GITHUB_TOKEN` are used automatically. Requires `permissions: packages: write`.
 - Both `HELM_REGISTRY_USERNAME` and `HELM_REGISTRY_PASSWORD` must be set together; partial credentials are an error.

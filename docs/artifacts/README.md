@@ -34,4 +34,11 @@ The following settings are intentionally consistent across the tool-based provid
 - `settings.extra-build-args`: additional space-separated arguments for the provider build command
 - `settings.extra-push-args`: additional space-separated arguments for the provider push command
 
+Most providers also use a shared target pattern:
+
+- `settings.target.<value>`: explicit configured endpoint/source/registry/workspace
+- `settings.target.<value>Env`: env var name used to source that value at runtime
+
+Value precedence is consistent: env value from `settings.target.*Env` (or provider default env key) takes priority over `settings.target.*`.
+
 `docker-compose` does not expose `useDocker`/`dockerImage` because it runs through Docker directly.

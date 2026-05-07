@@ -70,8 +70,10 @@ public sealed class HelmOciArtifactProviderTests
                 {
                   "chartPath": "deploy/charts/orders",
                   "output": "artifacts/charts",
-                  "registry": "ghcr.io",
-                  "repository": "acme/charts"
+                                    "target": {
+                                        "registry": "ghcr.io",
+                                        "repository": "acme/charts"
+                                    }
                 }
                 """)!);
 

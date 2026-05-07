@@ -10,9 +10,10 @@
 | Key | Type | Notes |
 | --- | --- | --- |
 | `directory` | `string` | Directory containing `.tf` files (default `.`). |
-| `workspace` | `string` | Workspace selected before apply. |
-| `vars-file` | `string` | `.tfvars` file passed to plan. |
-| `var-file` | `string` | Alias for `vars-file`. |
+| `target.workspace` | `string` | Workspace selected before apply. |
+| `target.workspaceEnv` | `string` | Env var name containing workspace (default env key `TERRAFORM_TARGET_WORKSPACE`). |
+| `target.varFile` | `string` | `.tfvars` file passed to plan. |
+| `target.varFileEnv` | `string` | Env var name containing `.tfvars` path (default env key `TERRAFORM_TARGET_VAR_FILE`). |
 | `useDocker` | `boolean` | Docker fallback toggle (default `true`). |
 | `dockerImage` | `string` | Fallback image override (default `hashicorp/terraform:1.9`). |
 | `extra-build-args` | `string` | Additional args appended to `terraform plan`. |
@@ -22,6 +23,11 @@
 
 This provider does not have a dedicated feed auth resolver. Terraform backend/provider auth is expected to come from normal Terraform environment variables and credentials files used in your environment.
 
+Target value resolution order:
+
+1. Env value from `settings.target.workspaceEnv` / `settings.target.varFileEnv` (or defaults)
+2. `settings.target.workspace` / `settings.target.varFile`
+
 ## Example
 
 ```json
@@ -30,8 +36,12 @@ This provider does not have a dedicated feed auth resolver. Terraform backend/pr
   "name": "infra",
   "settings": {
     "directory": "infra",
-    "workspace": "prod",
-    "vars-file": "prod.tfvars",
+    "target": {
+      "workspace": "prod",
+      "workspaceEnv": "TERRAFORM_TARGET_WORKSPACE",
+      "varFile": "prod.tfvars",
+      "varFileEnv": "TERRAFORM_TARGET_VAR_FILE"
+    },
     "extra-build-args": "-lock-timeout=60s"
   }
 }

@@ -11,6 +11,8 @@
 | --- | --- | --- |
 | `project` | `string` | Path to `pom.xml` (default root `pom.xml`). |
 | `profiles` | `string` | Comma-separated Maven profiles (mapped to `-P...`). |
+| `target.usernameEnv` | `string` | Env var name containing repository username (default env key `MAVEN_REPO_USERNAME`). |
+| `target.passwordEnv` | `string` | Env var name containing repository password/token (default env key `MAVEN_REPO_PASSWORD`). |
 | `useDocker` | `boolean` | Docker fallback toggle (default `true`). |
 | `dockerImage` | `string` | Fallback image override (default `maven:3-eclipse-temurin-21`). |
 | `extra-build-args` | `string` | Additional args appended to `mvn package`. |
@@ -20,7 +22,7 @@
 
 Credential resolution order:
 
-1. `MAVEN_REPO_USERNAME` + `MAVEN_REPO_PASSWORD`
+1. Env values from `settings.target.usernameEnv` + `settings.target.passwordEnv` (defaults `MAVEN_REPO_USERNAME` + `MAVEN_REPO_PASSWORD`)
 2. `SYSTEM_ACCESSTOKEN` (Azure Artifacts CI fallback; username is `VssSessionToken`)
 
 Credentials are passed as process environment variables; reference them from `settings.xml` using `${env.MAVEN_REPO_USERNAME}` and `${env.MAVEN_REPO_PASSWORD}`.
@@ -34,6 +36,10 @@ Credentials are passed as process environment variables; reference them from `se
   "settings": {
     "project": "services/catalog/pom.xml",
     "profiles": "release",
+    "target": {
+      "usernameEnv": "MAVEN_REPO_USERNAME",
+      "passwordEnv": "MAVEN_REPO_PASSWORD"
+    },
     "extra-push-args": "-DaltDeploymentRepository=internal::default::https://repo.example.com/maven2"
   }
 }

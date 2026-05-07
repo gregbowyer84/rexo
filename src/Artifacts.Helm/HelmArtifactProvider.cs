@@ -63,7 +63,8 @@ public sealed class HelmArtifactProvider : IArtifactProvider
         var workDir = context.RepositoryRoot;
         var dockerImage = ResolveDockerImage(artifact);
         var outputDir = GetSetting(artifact, "output-directory") ?? workDir;
-        var repo = GetSetting(artifact, "repository");
+        var fileEnv = RepositoryEnvironmentFiles.Load(context.RepositoryRoot);
+        var repo = ResolveRepository(artifact, fileEnv);
 
         if (string.IsNullOrWhiteSpace(repo))
         {
@@ -85,8 +86,7 @@ public sealed class HelmArtifactProvider : IArtifactProvider
             return new ArtifactPushResult(artifact.Name, true, [repo]);
         }
 
-        var fileEnv = RepositoryEnvironmentFiles.Load(context.RepositoryRoot);
-        var auth = ResolveRepoAuth(repo, fileEnv);
+        var auth = ResolveRepoAuth(artifact, repo, fileEnv);
 
         var args = new List<string> { "cm-push", outputDir, repo };
         if (auth.HasCredentials)
@@ -113,21 +113,40 @@ public sealed class HelmArtifactProvider : IArtifactProvider
             ?? ToolRunner.GetSetting(artifact, "dockerImage")
             ?? DefaultContainerImage;
 
+    private static string? ResolveRepository(ArtifactConfig artifact, IReadOnlyDictionary<string, string> fileEnv) =>
+        FeedAuthResolver.ResolveTargetValue(
+            defaultEnvName: "HELM_TARGET_REPOSITORY",
+            configuredEnvName: GetSetting(artifact, "target.repositoryEnv"),
+            configuredValue: GetSetting(artifact, "target.repository"),
+            fileEnv: fileEnv);
+
     private static string? GetSetting(ArtifactConfig artifact, string key) =>
         ToolRunner.GetSetting(artifact, key);
 
     /// <summary>
-    /// Resolves Chart Museum repository credentials from HELM_REPO_USERNAME /
-    /// HELM_REPO_PASSWORD.  Credentials are passed as --username / --password args to
+    /// Resolves Chart Museum repository credentials from target.usernameEnv /
+    /// target.passwordEnv (defaults HELM_REPO_USERNAME/HELM_REPO_PASSWORD).
+    /// Credentials are passed as --username / --password args to
     /// helm cm-push; they are not injected as env vars.
     /// </summary>
     private static FeedAuthResolution ResolveRepoAuth(
+        ArtifactConfig artifact,
         string? configuredRepo,
         IReadOnlyDictionary<string, string> fileEnv)
     {
-        var username = FeedAuthResolver.GetEnv("HELM_REPO_USERNAME", fileEnv);
-        var password = FeedAuthResolver.GetEnv("HELM_REPO_PASSWORD", fileEnv);
-        var endpoint = FeedAuthResolver.GetEnv("HELM_REPO_URL", fileEnv) ?? configuredRepo;
+        var username = FeedAuthResolver.ResolveSecret(
+            defaultEnvName: "HELM_REPO_USERNAME",
+            configuredEnvName: GetSetting(artifact, "target.usernameEnv"),
+            fileEnv: fileEnv);
+        var password = FeedAuthResolver.ResolveSecret(
+            defaultEnvName: "HELM_REPO_PASSWORD",
+            configuredEnvName: GetSetting(artifact, "target.passwordEnv"),
+            fileEnv: fileEnv);
+        var endpoint = FeedAuthResolver.ResolveTargetValue(
+            defaultEnvName: "HELM_REPO_URL",
+            configuredEnvName: GetSetting(artifact, "target.repositoryEnv"),
+            configuredValue: configuredRepo,
+            fileEnv: fileEnv);
 
         if (string.IsNullOrWhiteSpace(username) && string.IsNullOrWhiteSpace(password))
         {

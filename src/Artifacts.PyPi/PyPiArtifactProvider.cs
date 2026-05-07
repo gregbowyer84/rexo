@@ -58,12 +58,12 @@ public sealed class PyPiArtifactProvider : IArtifactProvider
         CancellationToken cancellationToken)
     {
         var workDir = GetSetting(artifact, "directory") ?? context.RepositoryRoot;
-        var repositoryUrl = GetSetting(artifact, "repository-url");
         var distDir = GetSetting(artifact, "dist-dir") ?? "dist/*";
         var dockerImage = ResolveDockerImage(artifact);
 
         var fileEnv = RepositoryEnvironmentFiles.Load(context.RepositoryRoot);
-        var auth = ResolveAuth(repositoryUrl, fileEnv);
+        var repositoryUrl = ResolveRepositoryUrl(artifact, fileEnv);
+        var auth = ResolveAuth(artifact, repositoryUrl, fileEnv);
         IReadOnlyDictionary<string, string?>? envOverrides = auth.HasCredentials
             ? new Dictionary<string, string?>
             {
@@ -126,26 +126,44 @@ public sealed class PyPiArtifactProvider : IArtifactProvider
             ?? ToolRunner.GetSetting(artifact, "dockerImage")
             ?? DefaultContainerImage;
 
+    private static string? ResolveRepositoryUrl(ArtifactConfig artifact, IReadOnlyDictionary<string, string> fileEnv) =>
+        FeedAuthResolver.ResolveTargetValue(
+            defaultEnvName: "PYPI_TARGET_REPOSITORY_URL",
+            configuredEnvName: GetSetting(artifact, "target.repositoryUrlEnv"),
+            configuredValue: GetSetting(artifact, "target.repositoryUrl"),
+            fileEnv: fileEnv);
+
     private static string? GetSetting(ArtifactConfig artifact, string key) =>
         ToolRunner.GetSetting(artifact, key);
 
     /// <summary>
-    /// Resolves PyPI / twine credentials.  Order: TWINE_API_TOKEN (username=__token__) →
-    /// TWINE_USERNAME + TWINE_PASSWORD → SYSTEM_ACCESSTOKEN for Azure Artifacts feeds.
+    /// Resolves PyPI / twine credentials. Order: target.apiTokenEnv (or TWINE_API_TOKEN)
+    /// (username=__token__) → target.usernameEnv + target.passwordEnv
+    /// (defaults TWINE_USERNAME/TWINE_PASSWORD) → SYSTEM_ACCESSTOKEN for Azure Artifacts feeds.
     /// Credentials are injected as TWINE_USERNAME / TWINE_PASSWORD environment variables.
     /// </summary>
     private static FeedAuthResolution ResolveAuth(
+        ArtifactConfig artifact,
         string? repositoryUrl,
         IReadOnlyDictionary<string, string> fileEnv)
     {
-        var apiToken = FeedAuthResolver.GetEnv("TWINE_API_TOKEN", fileEnv);
+        var apiToken = FeedAuthResolver.ResolveSecret(
+            defaultEnvName: "TWINE_API_TOKEN",
+            configuredEnvName: GetSetting(artifact, "target.apiTokenEnv"),
+            fileEnv: fileEnv);
         if (!string.IsNullOrWhiteSpace(apiToken))
         {
             return new FeedAuthResolution(true, "__token__", apiToken, repositoryUrl, null, "env");
         }
 
-        var username = FeedAuthResolver.GetEnv("TWINE_USERNAME", fileEnv);
-        var password = FeedAuthResolver.GetEnv("TWINE_PASSWORD", fileEnv);
+        var username = FeedAuthResolver.ResolveSecret(
+            defaultEnvName: "TWINE_USERNAME",
+            configuredEnvName: GetSetting(artifact, "target.usernameEnv"),
+            fileEnv: fileEnv);
+        var password = FeedAuthResolver.ResolveSecret(
+            defaultEnvName: "TWINE_PASSWORD",
+            configuredEnvName: GetSetting(artifact, "target.passwordEnv"),
+            fileEnv: fileEnv);
 
         if (!string.IsNullOrWhiteSpace(username) && !string.IsNullOrWhiteSpace(password))
         {

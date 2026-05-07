@@ -68,10 +68,9 @@ public sealed class NuGetArtifactProvider : IArtifactProvider
         CancellationToken cancellationToken)
     {
         var output = GetSetting(artifact, "output") ?? "artifacts/packages";
-        var apiKeyEnvVar = GetSetting(artifact, "apiKeyEnv") ?? "NUGET_API_KEY";
         var fileEnv = RepositoryEnvironmentFiles.Load(context.RepositoryRoot);
         var source = ResolveSource(artifact, fileEnv);
-        var auth = ResolveAuth(source, apiKeyEnvVar, fileEnv);
+        var auth = ResolveAuth(source, GetSetting(artifact.Settings, "target.apiKeyEnv"), fileEnv);
         if (!auth.HasCredentials)
         {
             Console.Error.WriteLine("NuGet auth preflight failed: no API token resolved from env/CI identity.");
@@ -128,30 +127,12 @@ public sealed class NuGetArtifactProvider : IArtifactProvider
         ArtifactConfig artifact,
         IReadOnlyDictionary<string, string> fileEnv)
     {
-        var sourceFromDefaultEnv = FeedAuthResolver.GetEnv("NUGET_TARGET_SOURCE", fileEnv);
-        if (!string.IsNullOrWhiteSpace(sourceFromDefaultEnv))
-        {
-            return sourceFromDefaultEnv;
-        }
-
-        var sourceFromTarget = GetSetting(artifact.Settings, "target.source");
-        if (!string.IsNullOrWhiteSpace(sourceFromTarget))
-        {
-            return sourceFromTarget;
-        }
-
-        // Backward compatibility for earlier sourceEnv behavior.
-        var configuredSourceEnv = GetSetting(artifact.Settings, "sourceEnv");
-        if (!string.IsNullOrWhiteSpace(configuredSourceEnv))
-        {
-            var sourceFromConfiguredEnv = FeedAuthResolver.GetEnv(configuredSourceEnv, fileEnv);
-            if (!string.IsNullOrWhiteSpace(sourceFromConfiguredEnv))
-            {
-                return sourceFromConfiguredEnv;
-            }
-        }
-
-        return GetSetting(artifact.Settings, "source") ?? "https://api.nuget.org/v3/index.json";
+        return FeedAuthResolver.ResolveTargetValue(
+                   defaultEnvName: "NUGET_TARGET_SOURCE",
+                   configuredEnvName: GetSetting(artifact.Settings, "target.sourceEnv"),
+                   configuredValue: GetSetting(artifact.Settings, "target.source"),
+                   fileEnv: fileEnv)
+               ?? "https://api.nuget.org/v3/index.json";
     }
 
     private static string? GetSetting(ArtifactConfig artifact, string key) =>
@@ -202,7 +183,7 @@ public sealed class NuGetArtifactProvider : IArtifactProvider
         };
 
     /// <summary>
-    /// Resolves NuGet push credentials. Order: configured apiKeyEnv / NUGET_API_KEY /
+    /// Resolves NuGet push credentials. Order: target.apiKeyEnv (or NUGET_API_KEY) /
     /// NUGET_AUTH_TOKEN → GITHUB_TOKEN for nuget.pkg.github.com → SYSTEM_ACCESSTOKEN
     /// for Azure Artifacts.
     /// </summary>
@@ -211,9 +192,11 @@ public sealed class NuGetArtifactProvider : IArtifactProvider
         string? configuredApiKeyEnv,
         IReadOnlyDictionary<string, string> fileEnv)
     {
-        var envName = string.IsNullOrWhiteSpace(configuredApiKeyEnv) ? "NUGET_API_KEY" : configuredApiKeyEnv;
-        var secret = FeedAuthResolver.GetEnv(envName, fileEnv)
-                     ?? FeedAuthResolver.GetEnv("NUGET_AUTH_TOKEN", fileEnv);
+        var secret = FeedAuthResolver.ResolveSecret(
+            defaultEnvName: "NUGET_API_KEY",
+            configuredEnvName: configuredApiKeyEnv,
+            fileEnv: fileEnv,
+            "NUGET_AUTH_TOKEN");
 
         if (string.IsNullOrWhiteSpace(secret))
         {
