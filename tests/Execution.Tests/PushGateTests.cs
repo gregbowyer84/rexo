@@ -9,6 +9,7 @@ using Rexo.Execution;
 using Rexo.Templating;
 using Rexo.Versioning;
 
+[Collection("EnvVar Mutation Sequential")]
 public sealed class PushGateTests
 {
     [Fact]

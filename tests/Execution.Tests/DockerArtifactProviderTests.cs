@@ -4,6 +4,7 @@ using System.Text.Json;
 using Rexo.Artifacts.Docker;
 using Rexo.Core.Models;
 
+[Collection("EnvVar Mutation Sequential")]
 public sealed class DockerArtifactProviderTests
 {
     [Fact]

@@ -5,6 +5,7 @@ using Rexo.Core.Models;
 using Rexo.Execution;
 using Rexo.Templating;
 
+[Collection("EnvVar Mutation Sequential")]
 public sealed class TemplateRendererTests
 {
     private static ExecutionContext MakeContext(

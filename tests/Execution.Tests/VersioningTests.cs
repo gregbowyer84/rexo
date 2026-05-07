@@ -3,6 +3,7 @@ namespace Rexo.Execution.Tests;
 using Rexo.Core.Models;
 using Rexo.Versioning;
 
+[Collection("EnvVar Mutation Sequential")]
 public sealed class VersioningTests
 {
     private static ExecutionContext MakeContext() =>
