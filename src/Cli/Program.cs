@@ -552,44 +552,47 @@ public static class Program
         bool quiet,
         CancellationToken cancellationToken)
     {
-        if (invocation.Json)
+        // File output — always write if --json-file was given, independent of stdout
+        if (!string.IsNullOrWhiteSpace(invocation.JsonFile))
         {
             var payload = JsonSerializer.Serialize(result, JsonOptions);
-            if (!string.IsNullOrWhiteSpace(invocation.JsonFile))
+            var dir = Path.GetDirectoryName(invocation.JsonFile);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+            await File.WriteAllTextAsync(invocation.JsonFile!, payload, cancellationToken);
+        }
+
+        // Stdout — suppressed entirely by --quiet
+        if (!quiet)
+        {
+            if (invocation.Json)
             {
-                var dir = Path.GetDirectoryName(invocation.JsonFile);
-                if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-                await File.WriteAllTextAsync(invocation.JsonFile!, payload, cancellationToken);
+                Console.WriteLine(JsonSerializer.Serialize(result, JsonOptions));
             }
             else
             {
-                Console.WriteLine(payload);
-            }
-        }
-        else if (!quiet)
-        {
-            switch (result.Command)
-            {
-                case "version":
-                    ConsoleRenderer.RenderVersion(result.Message ?? "unknown");
-                    break;
-                case "doctor":
-                    ConsoleRenderer.RenderDoctorResult(result);
-                    break;
-                case "list":
-                    ConsoleRenderer.RenderList(result);
-                    break;
-                case "explain":
-                    ConsoleRenderer.RenderExplain(result);
-                    break;
-                default:
-                    ConsoleRenderer.RenderCommandResult(result);
-                    break;
-            }
+                switch (result.Command)
+                {
+                    case "version":
+                        ConsoleRenderer.RenderVersion(result.Message ?? "unknown");
+                        break;
+                    case "doctor":
+                        ConsoleRenderer.RenderDoctorResult(result);
+                        break;
+                    case "list":
+                        ConsoleRenderer.RenderList(result);
+                        break;
+                    case "explain":
+                        ConsoleRenderer.RenderExplain(result);
+                        break;
+                    default:
+                        ConsoleRenderer.RenderCommandResult(result);
+                        break;
+                }
 
-            if (verbose && result.Steps.Count > 0)
-            {
-                ConsoleRenderer.RenderStepResults(result.Steps);
+                if (verbose && result.Steps.Count > 0)
+                {
+                    ConsoleRenderer.RenderStepResults(result.Steps);
+                }
             }
         }
 
@@ -602,6 +605,7 @@ public static class Program
         CommandInvocation invocation,
         CancellationToken cancellationToken)
     {
+        // Suppress stdout/stderr during execution only when --json is set (JSON stdout mode)
         if (!invocation.Json)
         {
             return await executor.ExecuteAsync(command, invocation, cancellationToken);
@@ -730,7 +734,6 @@ public static class Program
                     break;
                 case "--json-file" when i + 1 < args.Length:
                     jsonFile = args[++i];
-                    json = true;
                     break;
                 case "--verbose" or "-v":
                     verbose = true;
