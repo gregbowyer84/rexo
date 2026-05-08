@@ -1,30 +1,43 @@
 # Runtime Configuration
 
-Configure runtime output, push policies, tests, and analysis behavior.
+Configure runtime output and push policies.
 
 ---
 
 ## `runtime.output`
 
-Controls filesystem artifact emission and the root output folder.
+Controls filesystem artifact emission, the root output folder, and per-category output paths.
 
 ```jsonc
 "runtime": {
   "output": {
     "emitRuntimeFiles": true,
-    "root": "artifacts"
+    "root": "artifacts",
+    "tests": {
+      "results": "artifacts/tests",
+      "coverage": "artifacts/coverage",
+      "reports": "artifacts/coverage/reports"
+    },
+    "analysis": {
+      "reports": "artifacts/analysis",
+      "sarif": "artifacts/analysis/sarif"
+    },
+    "packages": "artifacts/packages",
+    "manifests": "artifacts/manifests",
+    "logs": "artifacts/logs"
   }
 }
 ```
 
 - `emitRuntimeFiles` (default: `true`): when `false`, runtime-generated files (for example artifact manifest files) are not written.
 - `root` (default: `artifacts`): root folder used by runtime artifact outputs.
+- `tests` — overrides where test results, coverage data, and coverage reports are written. The policy overlay (e.g. `embedded:dotnet`) reads these paths when constructing test commands.
+- `analysis` — overrides where analysis reports and SARIF files are written. The policy overlay reads these paths when constructing analysis commands.
+- `packages` (default: `artifacts/packages`): NuGet and other package output directory.
+- `manifests` (default: `artifacts/manifests`): run manifest output directory.
+- `logs` (default: `artifacts/logs`): log output directory.
 
-Notes:
-
-- `builtin:clean` removes this folder.
-- Embedded test command overlays typically write results under `<runtime.output.root>/tests` when not explicitly set.
-- NuGet artifacts default `settings.output` to `<runtime.output.root>/packages` when not explicitly set.
+> **Note**: test and analysis *execution* (toolchain, arguments, triggers) is not configured here. It is provided by the active policy overlay — see [Embedded policies](../EMBEDDED.md).
 
 ---
 
@@ -52,42 +65,3 @@ overrides from `artifacts[].settings.push.*`.
 | `noPushInPullRequest` | Rejects push when the CI environment reports a PR build |
 | `requireCleanWorkingTree` | Rejects push when the git working tree has uncommitted changes |
 | `branches` | Allows push only when branch matches listed patterns |
-
----
-
-## `tests`
-
-```jsonc
-"tests": {
-  "enabled": true,
-  "projects": ["tests/**/*.Tests.csproj"],
-  "configuration": "Release",
-  "resultsOutput": "artifacts/tests",
-  "coverageOutput": "artifacts/coverage",
-  "coverageThreshold": 80         // fail if line coverage < 80%
-}
-```
-
-If `resultsOutput` is omitted, the default path is `<runtime.output.root>/tests`
-(or `artifacts/tests` when `runtime.output.root` is omitted).
-
-Coverage is parsed from Cobertura XML written by `XPlat Code Coverage`.
-
----
-
-## `analysis`
-
-```jsonc
-"analysis": {
-  "enabled": true,
-  "configuration": "Release"
-}
-```
-
-Runs `dotnet format --verify-no-changes` and a build-only pass.
-
-SARIF behavior:
-
-- If `analysis.configuration` is provided and ends with `.sarif` or `.sarif.json`, SARIF is written there.
-- If `analysis.configuration` is omitted, SARIF defaults to `<runtime.output.root>/analysis.sarif.json`
-  (fallback root: `artifacts`, so default file is `artifacts/analysis.sarif.json`).
