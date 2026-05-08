@@ -97,15 +97,38 @@ jobs:
       - name: Pack
         run: dotnet pack src/Cli/Cli.csproj -c Release -o artifacts/packages -p:Version=${{ steps.gitversion.outputs.semVer }} --no-build
 
+      - name: Import GPG key
+        if: ${{ secrets.GPG_PRIVATE_KEY != '' }}
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          KEY_ID=$(gpg --list-secret-keys --with-colons | awk -F: '/^sec/{print $5; exit}')
+          git config --global user.signingkey "$KEY_ID"
+          git config --global commit.gpgsign false
+          git config --global tag.gpgsign true
+          if [ -n "$GPG_PASSPHRASE" ]; then
+            echo "allow-loopback-pinentry" >> ~/.gnupg/gpg-agent.conf
+            echo "pinentry-mode loopback" >> ~/.gnupg/gpg.conf
+            gpgconf --kill gpg-agent
+          fi
+
       - name: Create and push release tag
         env:
           TAG_NAME: v${{ steps.gitversion.outputs.semVer }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
           git fetch --tags
           if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
             echo "Tag $TAG_NAME already exists; continuing."
           else
-            git tag "$TAG_NAME" "$GITHUB_SHA"
+            if [ -n "$GPG_PASSPHRASE" ]; then
+              echo "$GPG_PASSPHRASE" | git tag -s "$TAG_NAME" "$GITHUB_SHA" -m "Release $TAG_NAME"
+            else
+              git tag -s "$TAG_NAME" "$GITHUB_SHA" -m "Release $TAG_NAME" 2>/dev/null \
+                || git tag "$TAG_NAME" "$GITHUB_SHA"
+            fi
             git push origin "$TAG_NAME"
           fi
 
