@@ -69,9 +69,7 @@ public sealed class NuGetArtifactProvider : IArtifactProvider
     {
         var output = GetSetting(artifact, "output") ?? "artifacts/packages";
         var packageVersion = context.Version?.NuGetVersion ?? context.Version?.SemVer;
-        var packagePattern = string.IsNullOrWhiteSpace(packageVersion)
-            ? $"{output}/{artifact.Name}.[0-9]*.nupkg"
-            : $"{output}/{artifact.Name}.{packageVersion}.nupkg";
+        var packageTargets = ResolvePackageTargets(context.RepositoryRoot, output, artifact.Name, packageVersion);
         var symbolPattern = ResolveSymbolPattern(artifact, output, packageVersion);
         var fileEnv = RepositoryEnvironmentFiles.Load(context.RepositoryRoot);
         var source = ResolveSource(artifact, fileEnv);
@@ -82,19 +80,21 @@ public sealed class NuGetArtifactProvider : IArtifactProvider
             return new ArtifactPushResult(artifact.Name, false, Array.Empty<string>());
         }
 
-        var args = $"nuget push \"{packagePattern}\" --source {source} --skip-duplicate";
-        if (!string.IsNullOrEmpty(auth.Secret))
+        foreach (var packageTarget in packageTargets)
         {
-            args += $" --api-key {auth.Secret}";
-        }
+            var args = $"nuget push \"{packageTarget}\" --source {source} --skip-duplicate";
+            if (!string.IsNullOrEmpty(auth.Secret))
+            {
+                args += $" --api-key {auth.Secret}";
+            }
 
-        Console.WriteLine($"  > dotnet {args}");
+            Console.WriteLine($"  > dotnet {args}");
 
-        var result = await _runDotnetAsync(args, context.RepositoryRoot, cancellationToken);
-
-        if (result.ExitCode != 0)
-        {
-            return new ArtifactPushResult(artifact.Name, false, Array.Empty<string>());
+            var result = await _runDotnetAsync(args, context.RepositoryRoot, cancellationToken);
+            if (result.ExitCode != 0)
+            {
+                return new ArtifactPushResult(artifact.Name, false, Array.Empty<string>());
+            }
         }
 
         var published = new List<string> { $"{source}/{artifact.Name}" };
@@ -175,8 +175,77 @@ public sealed class NuGetArtifactProvider : IArtifactProvider
         }
 
         return string.IsNullOrWhiteSpace(packageVersion)
-            ? $"{output}/{artifact.Name}.[0-9]*.snupkg"
+            ? $"{output}/{artifact.Name}.*.snupkg"
             : $"{output}/{artifact.Name}.{packageVersion}.snupkg";
+    }
+
+    private static IReadOnlyList<string> ResolvePackageTargets(
+        string repositoryRoot,
+        string output,
+        string artifactName,
+        string? packageVersion)
+    {
+        if (!string.IsNullOrWhiteSpace(packageVersion))
+        {
+            return [$"{output}/{artifactName}.{packageVersion}.nupkg"];
+        }
+
+        var discovered = DiscoverArtifactPackageFiles(repositoryRoot, output, artifactName, ".nupkg", includeSymbols: false);
+        if (discovered.Count > 0)
+        {
+            return discovered;
+        }
+
+        // Backward-compatible fallback when no local files can be discovered.
+        return [$"{output}/{artifactName}.*.nupkg"];
+    }
+
+    private static IReadOnlyList<string> DiscoverArtifactPackageFiles(
+        string repositoryRoot,
+        string output,
+        string artifactName,
+        string extension,
+        bool includeSymbols)
+    {
+        var outputDirectory = Path.Combine(repositoryRoot, output.Replace('/', Path.DirectorySeparatorChar));
+        if (!Directory.Exists(outputDirectory))
+        {
+            return Array.Empty<string>();
+        }
+
+        var artifactPrefix = artifactName + ".";
+        var matches = new List<string>();
+
+        foreach (var filePath in Directory.EnumerateFiles(outputDirectory, "*" + extension, SearchOption.TopDirectoryOnly))
+        {
+            var fileName = Path.GetFileName(filePath);
+            if (!fileName.StartsWith(artifactPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var suffix = fileName[artifactPrefix.Length..];
+            if (suffix.Length == 0)
+            {
+                continue;
+            }
+
+            if (!includeSymbols && suffix.StartsWith("symbols.", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (!char.IsDigit(suffix[0]))
+            {
+                continue;
+            }
+
+            var relative = Path.GetRelativePath(repositoryRoot, filePath).Replace(Path.DirectorySeparatorChar, '/');
+            matches.Add(relative);
+        }
+
+        matches.Sort(StringComparer.OrdinalIgnoreCase);
+        return matches;
     }
 
     private static FeedAuthResolution ResolveSymbolAuth(

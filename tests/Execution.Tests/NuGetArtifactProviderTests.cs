@@ -1,6 +1,5 @@
 namespace Rexo.Execution.Tests;
 
-using System.Text.RegularExpressions;
 using System.Text.Json;
 using Rexo.Artifacts.NuGet;
 using Rexo.Core.Models;
@@ -66,7 +65,7 @@ public sealed class NuGetArtifactProviderTests
 
             Assert.True(result.Success);
             Assert.Single(invocations);
-            Assert.Contains("nuget push \"artifacts/packages/Rexo.Core.[0-9]*.nupkg\"", invocations[0], StringComparison.Ordinal);
+            Assert.Contains("nuget push \"artifacts/packages/Rexo.Core.*.nupkg\"", invocations[0], StringComparison.Ordinal);
             Assert.Contains("--source https://pkgs.dev.azure.com/acme/_packaging/shared/nuget/v3/index.json", invocations[0], StringComparison.Ordinal);
             Assert.Contains("--api-key test-key", invocations[0], StringComparison.Ordinal);
         }
@@ -115,7 +114,7 @@ public sealed class NuGetArtifactProviderTests
 
             Assert.True(result.Success);
             Assert.Single(invocations);
-            Assert.Contains("nuget push \"artifacts/packages/Rexo.Core.[0-9]*.nupkg\"", invocations[0], StringComparison.Ordinal);
+            Assert.Contains("nuget push \"artifacts/packages/Rexo.Core.*.nupkg\"", invocations[0], StringComparison.Ordinal);
             Assert.Contains("--source https://nuget.pkg.github.com/acme/index.json", invocations[0], StringComparison.Ordinal);
             Assert.DoesNotContain("--source https://api.nuget.org/v3/index.json", invocations[0], StringComparison.Ordinal);
         }
@@ -347,12 +346,17 @@ public sealed class NuGetArtifactProviderTests
         const string keyEnvName = "NUGET_API_KEY";
         var originalSource = Environment.GetEnvironmentVariable(sourceEnvName);
         var originalApiKey = Environment.GetEnvironmentVariable(keyEnvName);
+        var repositoryRoot = Path.Combine(Path.GetTempPath(), $"rexo-nuget-collision-{Guid.NewGuid():N}");
 
         Environment.SetEnvironmentVariable(sourceEnvName, "https://api.nuget.org/v3/index.json");
         Environment.SetEnvironmentVariable(keyEnvName, "test-key");
 
         try
         {
+            Directory.CreateDirectory(Path.Combine(repositoryRoot, "artifacts", "packages"));
+            File.WriteAllText(Path.Combine(repositoryRoot, "artifacts", "packages", "Common.RuntimeLicensing.1.2.3-alpha.4.nupkg"), "pkg");
+            File.WriteAllText(Path.Combine(repositoryRoot, "artifacts", "packages", "Common.RuntimeLicensing.AspNetCore.1.2.3-alpha.4.nupkg"), "pkg");
+
             var invocations = new List<string>();
             var provider = new NuGetArtifactProvider(
                 runDotnetAsync: (arguments, workingDirectory, cancellationToken) =>
@@ -371,17 +375,21 @@ public sealed class NuGetArtifactProviderTests
                     }
                     """)!);
 
-            var result = await provider.PushAsync(artifact, ExecutionContext.Empty(Path.GetTempPath()), CancellationToken.None);
+            var result = await provider.PushAsync(artifact, ExecutionContext.Empty(repositoryRoot), CancellationToken.None);
 
             Assert.True(result.Success);
             Assert.Single(invocations);
-            Assert.Contains("nuget push \"artifacts/packages/Common.RuntimeLicensing.[0-9]*.nupkg\"", invocations[0], StringComparison.Ordinal);
-            Assert.DoesNotContain("Common.RuntimeLicensing.*.nupkg", invocations[0], StringComparison.Ordinal);
+            Assert.Contains("nuget push \"artifacts/packages/Common.RuntimeLicensing.1.2.3-alpha.4.nupkg\"", invocations[0], StringComparison.Ordinal);
+            Assert.DoesNotContain("AspNetCore", invocations[0], StringComparison.Ordinal);
         }
         finally
         {
             Environment.SetEnvironmentVariable(sourceEnvName, originalSource);
             Environment.SetEnvironmentVariable(keyEnvName, originalApiKey);
+            if (Directory.Exists(repositoryRoot))
+            {
+                Directory.Delete(repositoryRoot, recursive: true);
+            }
         }
     }
 
@@ -392,6 +400,7 @@ public sealed class NuGetArtifactProviderTests
         const string keyEnvName = "NUGET_API_KEY";
         var originalSource = Environment.GetEnvironmentVariable(sourceEnvName);
         var originalApiKey = Environment.GetEnvironmentVariable(keyEnvName);
+        var repositoryRoot = Path.Combine(Path.GetTempPath(), $"rexo-nuget-diverse-{Guid.NewGuid():N}");
 
         Environment.SetEnvironmentVariable(sourceEnvName, "https://api.nuget.org/v3/index.json");
         Environment.SetEnvironmentVariable(keyEnvName, "test-key");
@@ -402,6 +411,19 @@ public sealed class NuGetArtifactProviderTests
                 .Select(name => $"artifacts/packages/{name}.1.2.3-alpha.4.nupkg")
                 .Concat(DiverseNonPackageFiles)
                 .ToArray();
+
+            Directory.CreateDirectory(Path.Combine(repositoryRoot, "artifacts", "packages"));
+            foreach (var candidate in candidateFiles)
+            {
+                var fullPath = Path.Combine(repositoryRoot, candidate.Replace('/', Path.DirectorySeparatorChar));
+                var fullDir = Path.GetDirectoryName(fullPath);
+                if (!string.IsNullOrWhiteSpace(fullDir))
+                {
+                    Directory.CreateDirectory(fullDir);
+                }
+
+                File.WriteAllText(fullPath, "content");
+            }
 
             foreach (var packageName in DiversePackageNames)
             {
@@ -423,71 +445,83 @@ public sealed class NuGetArtifactProviderTests
                         }
                         """)!);
 
-                var result = await provider.PushAsync(artifact, ExecutionContext.Empty(Path.GetTempPath()), CancellationToken.None);
+                var result = await provider.PushAsync(artifact, ExecutionContext.Empty(repositoryRoot), CancellationToken.None);
 
                 Assert.True(result.Success);
                 Assert.Single(invocations);
-
-                var expectedPattern = $"artifacts/packages/{packageName}.[0-9]*.nupkg";
-                Assert.Contains($"nuget push \"{expectedPattern}\"", invocations[0], StringComparison.Ordinal);
-
-                var matchingFiles = candidateFiles
-                    .Where(file => WildcardMatch(file, expectedPattern))
-                    .ToArray();
-
-                Assert.Single(matchingFiles);
-                Assert.Equal($"artifacts/packages/{packageName}.1.2.3-alpha.4.nupkg", matchingFiles[0]);
+                Assert.Contains($"nuget push \"artifacts/packages/{packageName}.1.2.3-alpha.4.nupkg\"", invocations[0], StringComparison.Ordinal);
             }
         }
         finally
         {
             Environment.SetEnvironmentVariable(sourceEnvName, originalSource);
             Environment.SetEnvironmentVariable(keyEnvName, originalApiKey);
-        }
-    }
-
-    private static bool WildcardMatch(string input, string wildcardPattern)
-    {
-        var regexPattern = "^" + GlobToRegex(wildcardPattern) + "$";
-        return Regex.IsMatch(input, regexPattern, RegexOptions.CultureInvariant);
-    }
-
-    private static string GlobToRegex(string pattern)
-    {
-        var builder = new System.Text.StringBuilder();
-
-        for (var i = 0; i < pattern.Length; i++)
-        {
-            var c = pattern[i];
-            switch (c)
+            if (Directory.Exists(repositoryRoot))
             {
-                case '*':
-                    builder.Append(".*");
-                    break;
-                case '?':
-                    builder.Append('.');
-                    break;
-                case '[':
-                    {
-                        var close = pattern.IndexOf(']', i + 1);
-                        if (close > i)
-                        {
-                            builder.Append(pattern.AsSpan(i, close - i + 1));
-                            i = close;
-                        }
-                        else
-                        {
-                            builder.Append("\\[");
-                        }
-
-                        break;
-                    }
-                default:
-                    builder.Append(Regex.Escape(c.ToString()));
-                    break;
+                Directory.Delete(repositoryRoot, recursive: true);
             }
         }
+    }
 
-        return builder.ToString();
+    [Fact]
+    public async Task PushAsyncDiscoversConcretePackageTargetsFromDiskAndPushesEachOnce()
+    {
+        const string sourceEnvName = "NUGET_TARGET_SOURCE";
+        const string keyEnvName = "NUGET_API_KEY";
+        var originalSource = Environment.GetEnvironmentVariable(sourceEnvName);
+        var originalApiKey = Environment.GetEnvironmentVariable(keyEnvName);
+        var repositoryRoot = Path.Combine(Path.GetTempPath(), $"rexo-nuget-discovery-{Guid.NewGuid():N}");
+
+        Environment.SetEnvironmentVariable(sourceEnvName, "https://api.nuget.org/v3/index.json");
+        Environment.SetEnvironmentVariable(keyEnvName, "test-key");
+
+        try
+        {
+            var packagesPath = Path.Combine(repositoryRoot, "artifacts", "packages");
+            Directory.CreateDirectory(packagesPath);
+
+            File.WriteAllText(Path.Combine(packagesPath, "Common.RuntimeLicensing.2.0.0.nupkg"), "pkg");
+            File.WriteAllText(Path.Combine(packagesPath, "Common.RuntimeLicensing.1.2.3-alpha.4.nupkg"), "pkg");
+            File.WriteAllText(Path.Combine(packagesPath, "Common.RuntimeLicensing.symbols.2.0.0.nupkg"), "symbols");
+            File.WriteAllText(Path.Combine(packagesPath, "Common.RuntimeLicensing.alpha.nupkg"), "not-a-version");
+            File.WriteAllText(Path.Combine(packagesPath, "Common.RuntimeLicensing.AspNetCore.1.2.3-alpha.4.nupkg"), "other-artifact");
+
+            var invocations = new List<string>();
+            var provider = new NuGetArtifactProvider(
+                runDotnetAsync: (arguments, workingDirectory, cancellationToken) =>
+                {
+                    invocations.Add(arguments);
+                    return Task.FromResult((0, string.Empty));
+                });
+
+            var artifact = new ArtifactConfig(
+                "nuget",
+                "Common.RuntimeLicensing",
+                JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
+                    """
+                    {
+                      "output": "artifacts/packages"
+                    }
+                    """)!);
+
+            var result = await provider.PushAsync(artifact, ExecutionContext.Empty(repositoryRoot), CancellationToken.None);
+
+            Assert.True(result.Success);
+            Assert.Equal(2, invocations.Count);
+            Assert.Contains("nuget push \"artifacts/packages/Common.RuntimeLicensing.1.2.3-alpha.4.nupkg\"", invocations[0], StringComparison.Ordinal);
+            Assert.Contains("nuget push \"artifacts/packages/Common.RuntimeLicensing.2.0.0.nupkg\"", invocations[1], StringComparison.Ordinal);
+            Assert.DoesNotContain(invocations, call => call.Contains("symbols", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(invocations, call => call.Contains("alpha.nupkg\"", StringComparison.Ordinal));
+            Assert.DoesNotContain(invocations, call => call.Contains("AspNetCore", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(sourceEnvName, originalSource);
+            Environment.SetEnvironmentVariable(keyEnvName, originalApiKey);
+            if (Directory.Exists(repositoryRoot))
+            {
+                Directory.Delete(repositoryRoot, recursive: true);
+            }
+        }
     }
 }
