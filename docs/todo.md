@@ -69,9 +69,9 @@ Legend:
 
 - [x] `builtin:validate`
 - [x] `builtin:resolve-version`
-- [x] `builtin:test`
-- [x] `builtin:analyze`
-- [x] `builtin:verify`
+- [x] `command:test`
+- [x] `command:analyze`
+- [x] `command:verify`
 - [x] `builtin:build-artifacts`
 - [x] `builtin:tag-artifacts`
 - [x] `builtin:push-artifacts`
@@ -272,3 +272,4 @@ Items expected in MVP (per scope section 56) and status:
 
 - [ ] Registry-credentials helper / shared auth provider abstraction (usable by any provider)
 - [ ] Package-index provider for GitHub Packages / Artifactory / Azure Artifacts
+

@@ -280,7 +280,7 @@
         },
         "uses": {
           "type": "string",
-          "description": "Invokes a built-in primitive (for example builtin:verify)."
+          "description": "Invokes a built-in primitive (for example builtin:push-artifacts)."
         },
         "run": {
           "type": "string",

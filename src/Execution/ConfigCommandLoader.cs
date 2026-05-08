@@ -116,7 +116,6 @@ public sealed class ConfigCommandLoader
             new VersionBuiltinModule(),
             new ArtifactBuiltinModule(),
             new DockerBuiltinModule(),
-            new VerificationBuiltinModule(),
             new UtilityBuiltinModule(),
             new ConfigBuiltinModule(),
         ];

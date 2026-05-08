@@ -23,7 +23,7 @@ Controls filesystem artifact emission and the root output folder.
 Notes:
 
 - `builtin:clean` removes this folder.
-- `builtin:test` defaults `resultsOutput` to `<runtime.output.root>/tests` when not explicitly set.
+- Embedded test command overlays typically write results under `<runtime.output.root>/tests` when not explicitly set.
 - NuGet artifacts default `settings.output` to `<runtime.output.root>/packages` when not explicitly set.
 
 ---

@@ -1,36 +1,24 @@
-# Embedded Policy: standard
+# embedded:standard
 
-Purpose:
+`embedded:standard` is the baseline lifecycle policy.
 
-- General lifecycle policy for most repositories.
-- Works well with artifact-only config when explicitly added via `extends`.
+It provides user-facing commands (`plan`, `validate`, `version`, `test`, `analyze`, `verify`, `build`, `tag`, `push`, `release`, `clean`) and composes toolchain-specific behavior through command overlays.
 
-## Commands
+## Command Model
 
 ### plan
 
-Description: Validate config and print a build/push plan.
-
-Options:
-
-- `--push` (`bool`, default `false`)
+Description: Validate and show what would be built/pushed.
 
 Steps:
 
 1. `builtin:validate`
 2. `builtin:resolve-version`
-3. `builtin:plan-artifacts` with `with.push = {{options.push}}`
-
-Behavior notes:
-
-- `rx plan` reports artifact build plan and push as "not requested".
-- `rx plan --push` reports push eligibility and skip reasons.
+3. `builtin:plan-artifacts`
 
 ### validate
 
 Description: Validate repository configuration.
-
-Options: none.
 
 Steps:
 
@@ -40,8 +28,6 @@ Steps:
 
 Description: Resolve repository version.
 
-Options: none.
-
 Steps:
 
 1. `builtin:resolve-version`
@@ -50,44 +36,38 @@ Steps:
 
 Description: Run configured tests.
 
-Options: none.
-
 Steps:
 
-1. `builtin:test`
+1. `command:test` (overlay contribution, when present)
 
 ### analyze
 
 Description: Run configured analysis.
 
-Options: none.
-
 Steps:
 
-1. `builtin:analyze`
+1. `command:analyze` (overlay contribution, when present)
 
 ### verify
 
-Description: Run validation, tests, and analysis.
-
-Options: none.
+Description: Run validation, then overlay-provided quality checks.
 
 Steps:
 
 1. `builtin:validate`
-2. `builtin:test`
-3. `builtin:analyze`
+2. `command:verify` (overlay contribution, when present)
+3. `command:test` (when present)
+4. `command:analyze` (when present)
+5. `command:security` (when present)
 
-Contract note:
+Notes:
 
-- User-facing `verify` command includes validate.
-- `builtin:verify` (used by `release`) runs test + analyze.
+- User-facing `verify` always includes `builtin:validate` first.
+- There is no dedicated core verify builtin; quality-gate behavior is policy-composed.
 
 ### build
 
 Description: Build and tag configured artifacts locally.
-
-Options: none.
 
 Steps:
 
@@ -99,8 +79,6 @@ Steps:
 ### tag
 
 Description: Tag configured artifacts.
-
-Options: none.
 
 Steps:
 
@@ -119,12 +97,6 @@ Steps:
 
 1. `builtin:push-artifacts` with `with.confirm = {{options.confirm}}`
 
-Behavior notes:
-
-- Push is opt-in everywhere (local and CI) — `--confirm` is always required.
-- `rx push` succeeds but skips push with clear guidance when `--confirm` is not passed.
-- `rx push --confirm` attempts actual push subject to policy/provider gates.
-
 ### release
 
 Description: Validate, verify, build, tag, and optionally push.
@@ -137,30 +109,18 @@ Steps:
 
 1. `builtin:validate`
 2. `builtin:resolve-version`
-3. `builtin:verify`
+3. `command:verify`
 4. `builtin:build-artifacts`
 5. `builtin:tag-artifacts`
 6. `builtin:push-artifacts` when `{{options.push}}`, with `with.confirm = {{options.push}}`
-
-Behavior notes:
-
-- `rx release` does not push.
-- `rx release --push` passes explicit push intent into builtin push logic.
 
 ### clean
 
 Description: Remove generated Rexo output.
 
-Options: none.
-
 Steps:
 
 1. `builtin:clean`
-
-Behavior notes:
-
-- Explicit utility command.
-- Not run automatically by release/build/verify.
 
 ## Aliases
 

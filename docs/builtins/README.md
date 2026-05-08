@@ -11,7 +11,7 @@ For embedded policy command flows, see [Embedded Policies Reference](../embedded
 
 ## Builtin Categories
 
-- [Lifecycle](lifecycle.md) — Resolve version, validate, test, analyze, verify, clean
+- [Lifecycle](lifecycle.md) — Resolve version, validate, clean
 - [Artifacts](artifacts.md) — Plan, build, tag, push artifacts
 - [Convenience](convenience.md) — Ship, all (composite wrappers)
 - [Docker](docker.md) — Docker-scoped builtins
@@ -37,7 +37,7 @@ Input channels available to all builtins:
 - Step metadata: `id`, `uses`, `when`, `with`, `outputPattern`, `outputFile`
 - Execution context: repo root, branch, commit, CI flags, version, completed steps
 - Command args/options: `ctx.Args`, `ctx.Options`
-- Repository config: artifacts, tests, analysis, versioning, push rules
+- Repository config: artifacts, outputs, versioning, push rules
 
 `with` mapping behavior:
 

@@ -107,7 +107,7 @@ Options: none.
 
 Steps:
 
-1. `builtin:test`
+1. `command:test` (overlay contribution, when present)
 
 #### analyze
 
@@ -117,7 +117,7 @@ Options: none.
 
 Steps:
 
-1. `builtin:analyze`
+1. `command:analyze` (overlay contribution, when present)
 
 #### verify
 
@@ -128,13 +128,15 @@ Options: none.
 Steps:
 
 1. `builtin:validate`
-2. `builtin:test`
-3. `builtin:analyze`
+2. `command:verify` (overlay contribution, when present)
+3. `command:test` (when present)
+4. `command:analyze` (when present)
+5. `command:security` (when present)
 
 Contract note:
 
 - User-facing `verify` command includes validate.
-- `builtin:verify` (used by `release`) runs test + analyze.
+- `verify` now composes command overlays; there is no dedicated core verify builtin.
 
 #### build
 
@@ -190,7 +192,7 @@ Steps:
 
 1. `builtin:validate`
 2. `builtin:resolve-version`
-3. `builtin:verify`
+3. `command:verify`
 4. `builtin:build-artifacts`
 5. `builtin:tag-artifacts`
 6. `builtin:push-artifacts` when `{{options.push}}`, with `with.confirm = {{options.push}}`
@@ -286,9 +288,9 @@ Core lifecycle builtins:
 
 - `builtin:validate`: Validate loaded configuration.
 - `builtin:resolve-version`: Resolve version and place it in execution context.
-- `builtin:test`: Execute configured tests.
-- `builtin:analyze`: Execute configured analysis.
-- `builtin:verify`: Execute test + analyze as quality gate primitive.
+- `command:test`: Overlay-provided test command.
+- `command:analyze`: Overlay-provided analysis command.
+- `command:verify`: Overlay-composed quality gate command.
 - `builtin:build-artifacts`: Build all matching artifacts.
 - `builtin:tag-artifacts`: Tag all matching artifacts.
 - `builtin:push-artifacts`: Push artifacts, apply push gates, write artifact manifest.

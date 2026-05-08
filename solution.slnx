@@ -1,6 +1,5 @@
 <Solution>
   <Folder Name="/src/">
-    <Project Path="src/Analysis/Analysis.csproj" />
     <Project Path="src/Artifacts.DockerCompose/Artifacts.DockerCompose.csproj" />
     <Project Path="src/Artifacts.Docker/Artifacts.Docker.csproj" />
     <Project Path="src/Artifacts.Generic/Artifacts.Generic.csproj" />
@@ -23,7 +22,6 @@
     <Project Path="src/Templating/Templating.csproj" />
     <Project Path="src/Tui/Tui.csproj" />
     <Project Path="src/Ui/Ui.csproj" />
-    <Project Path="src/Verification/Verification.csproj" />
     <Project Path="src/Versioning/Versioning.csproj" />
   </Folder>
   <Folder Name="/tests/">

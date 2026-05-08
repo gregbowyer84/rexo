@@ -49,7 +49,7 @@ Use `extends` to opt into an embedded lifecycle policy explicitly:
 
 Design intent:
 
-- Repo config says what this repo emits (artifacts, versioning, analysis/test details).
+- Repo config says what this repo emits (artifacts, versioning, outputs, vars).
 - Embedded policy says how this repo behaves (lifecycle command shape).
 - `embedded:standard` is the recommended lifecycle baseline when you want policy-provided commands.
 
@@ -78,14 +78,17 @@ Core lifecycle builtins:
 
 - `builtin:validate`: Validate loaded configuration.
 - `builtin:resolve-version`: Resolve version and place it in execution context.
-- `builtin:test`: Execute configured tests.
-- `builtin:analyze`: Execute configured analysis.
-- `builtin:verify`: Execute test + analyze as quality gate primitive.
 - `builtin:build-artifacts`: Build all matching artifacts.
 - `builtin:tag-artifacts`: Tag all matching artifacts.
 - `builtin:push-artifacts`: Push artifacts, apply push gates, write artifact manifest.
 - `builtin:plan-artifacts`: Print/emit plan model for build and push eligibility.
 - `builtin:clean`: Remove generated output (`artifacts/`).
+
+Policy-overlay lifecycle commands:
+
+- `test`: Provided by an overlay policy command implementation.
+- `analyze`: Provided by an overlay policy command implementation.
+- `verify`: Composes validate + overlay `test`/`analyze` (and optional `security`).
 
 Related utility builtins available for custom commands:
 

@@ -50,7 +50,6 @@ rexo.json                   # Example / self-describing config
 rexo.schema.json           # JSON Schema for rexo.json v1.0
 policy.schema.json         # JSON Schema for policy.json v1.0
 src/
-  Analysis/                 # dotnet format + build analysis runner
   Artifacts/                # IArtifactProvider abstraction + registry
   Artifacts.Docker/         # Docker build/tag/push provider
   Artifacts.Helm/           # Helm OCI chart build/tag/push provider
@@ -65,7 +64,6 @@ src/
   Templating/               # {{variable.path}} template engine with filters
   Tui/                      # Blazor/RazorConsole interactive TUI (`rx ui`)
   Ui/                       # ConsoleRenderer (Spectre.Console rich output)
-  Verification/             # dotnet test runner + result parsing
   Versioning/               # VersionProviderRegistry + built-in providers
 tests/
   Configuration.Tests/      # RepoConfigurationLoader tests
@@ -180,9 +178,9 @@ Given args `branch feature my-change`, the CLI tries longest prefix first:
 | ----------- | --------- |
 | `builtin:validate` | Config validation |
 | `builtin:resolve-version` | Run version provider, set `context.Version` |
-| `builtin:test` | `dotnet test` via `DotnetTestRunner` |
-| `builtin:analyze` | `dotnet format --verify-no-changes` |
-| `builtin:verify` | Run all verifiers |
+| `command:test` | Policy-provided test command (toolchain overlay) |
+| `command:analyze` | Policy-provided analysis command (toolchain overlay) |
+| `command:verify` | Policy-composed validation/test/analyze/security gate |
 | `builtin:build-artifacts` | Build all configured artifacts |
 | `builtin:tag-artifacts` | Tag artifacts with version tags |
 | `builtin:push-artifacts` | Push artifacts to registries |

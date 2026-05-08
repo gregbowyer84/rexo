@@ -297,10 +297,10 @@ This applies to:
       "uses": "builtin:validate"
     },
     "test": {
-      "uses": "builtin:test"
+      "uses": "command:test"
     },
     "analyze": {
-      "uses": "builtin:analyze"
+      "uses": "command:analyze"
     },
     "verify": {
       "steps": [
@@ -624,8 +624,8 @@ Example:
   "steps": [
     {
       "parallel": [
-        { "uses": "builtin:test" },
-        { "uses": "builtin:analyze" }
+        { "uses": "command:test" },
+        { "uses": "command:analyze" }
       ]
     }
   ]
@@ -639,8 +639,8 @@ Optional:
   "parallel": true,
   "maxParallel": 2,
   "steps": [
-    { "uses": "builtin:test" },
-    { "uses": "builtin:analyze" }
+    { "uses": "command:test" },
+    { "uses": "command:analyze" }
   ]
 }
 ```
@@ -820,9 +820,9 @@ Internal built-ins:
 ```text
 builtin:validate
 builtin:resolve-version
-builtin:test
-builtin:analyze
-builtin:verify
+command:test
+command:analyze
+command:verify
 builtin:build-artifacts
 builtin:tag-artifacts
 builtin:push-artifacts
@@ -2223,7 +2223,7 @@ Deliver:
 ```text
 builtin:validate
 builtin:resolve-version
-builtin:test
+command:test
 builtin:build-artifacts
 builtin:tag-artifacts
 builtin:push-artifacts
@@ -2578,3 +2578,4 @@ how a repository pushes artifacts
 how a repository exposes workflows
 how humans and CI interact with it
 ```
+

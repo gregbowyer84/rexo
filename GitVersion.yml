@@ -1,70 +1,265 @@
 workflow: GitHubFlow/v1
+
 mode: ContinuousDelivery
 tag-prefix: '[vV]?'
+
 assembly-versioning-scheme: MajorMinorPatch
 assembly-file-versioning-scheme: MajorMinorPatch
 assembly-informational-format: '{InformationalVersion}'
+
 commit-message-incrementing: Enabled
+
 major-version-bump-message: '\+semver:\s?(breaking|major)'
 minor-version-bump-message: '\+semver:\s?(feature|minor)'
 patch-version-bump-message: '\+semver:\s?(fix|patch)'
 no-bump-message: '\+semver:\s?(none|skip)'
+
 branches:
   main:
     regex: ^main$
+    label: ''
     increment: Patch
+    mode: ContinuousDelivery
     is-main-branch: true
+    source-branches:
+      - alpha
+      - beta
+      - edge
+      - main-lane
+      - support
+      - customer-support
+      - hotfix
+    prevent-increment:
+      of-merged-branch: true
+      when-current-commit-tagged: true
+
   main-lane:
-    regex: ^main-(?<BranchName>[A-Za-z0-9._-]+)$
-    label: '{BranchName}'
+    regex: ^main-(?<Lane>[A-Za-z0-9._-]+)$
+    label: main-{Lane}
     increment: Patch
-  edge:
-    regex: ^edge$
-    label: edge
-    increment: Patch
-  edge-lane:
-    regex: ^edge-(?<BranchName>[A-Za-z0-9._-]+)$
-    label: edge-{BranchName}
-    increment: Patch
+    mode: ContinuousDeployment
+    source-branches:
+      - main
+      - alpha
+      - beta
+      - edge
+      - support
+      - customer-support
+      - hotfix
+    prevent-increment:
+      when-current-commit-tagged: false
+
   alpha:
     regex: ^alpha$
     label: alpha
     increment: Patch
+    mode: ContinuousDelivery
+    source-branches:
+      - main
+      - feature
+      - hotfix
+    prevent-increment:
+      when-current-commit-tagged: false
+
   alpha-lane:
-    regex: ^alpha-(?<BranchName>[A-Za-z0-9._-]+)$
-    label: alpha-{BranchName}
+    regex: ^alpha-(?<Lane>[A-Za-z0-9._-]+)$
+    label: alpha-{Lane}
     increment: Patch
+    mode: ContinuousDelivery
+    source-branches:
+      - alpha
+      - main
+      - feature
+      - hotfix
+    prevent-increment:
+      when-current-commit-tagged: false
+
+  beta:
+    regex: ^beta$
+    label: beta
+    increment: Patch
+    mode: ContinuousDelivery
+    source-branches:
+      - alpha
+      - beta-lane
+      - main
+      - feature
+      - hotfix
+    prevent-increment:
+      when-current-commit-tagged: false
+
+  beta-lane:
+    regex: ^beta-(?<Lane>[A-Za-z0-9._-]+)$
+    label: beta-{Lane}
+    increment: Patch
+    mode: ContinuousDelivery
+    source-branches:
+      - beta
+      - alpha
+      - main
+      - feature
+      - hotfix
+    prevent-increment:
+      when-current-commit-tagged: false
+
+  edge:
+    regex: ^edge$
+    label: edge
+    increment: Patch
+    mode: ContinuousDelivery
+    source-branches:
+      - alpha
+      - edge-lane
+      - beta
+      - main
+      - feature
+      - hotfix
+    prevent-increment:
+      when-current-commit-tagged: false
+
+  edge-lane:
+    regex: ^edge-(?<Lane>[A-Za-z0-9._-]+)$
+    label: edge-{Lane}
+    increment: Patch
+    mode: ContinuousDelivery
+    source-branches:
+      - edge
+      - alpha
+      - beta
+      - main
+      - feature
+      - hotfix
+    prevent-increment:
+      when-current-commit-tagged: false
+
   support:
-    regex: ^support[/-].+$
+    regex: ^support[/-](?<Version>\d+\.\d+)$
+    label: ''
     increment: Patch
+    mode: ContinuousDelivery
     is-release-branch: true
+    source-branches:
+      - main
+      - support-lane
+      - hotfix
+    prevent-increment:
+      of-merged-branch: true
+      when-current-commit-tagged: true
+
   support-lane:
-    regex: ^support[/-].+-(?<BranchName>[A-Za-z0-9._-]+)$
-    label: '{BranchName}'
+    regex: ^support[/-](?<Version>\d+\.\d+)-(?<Lane>[A-Za-z0-9._-]+)$
+    label: support-{Version}-{Lane}
     increment: Patch
+    mode: ContinuousDeployment
     is-release-branch: true
+    source-branches:
+      - support
+      - main
+      - hotfix
+    prevent-increment:
+      when-current-commit-tagged: false
+
   customer-support:
-    regex: ^customer-support[/-].+$
+    regex: ^customer-support[/-](?<Customer>[A-Za-z0-9._-]+)[/-](?<Version>\d+\.\d+)$
+    label: customer-{Customer}
     increment: Patch
+    mode: ContinuousDeployment
     is-release-branch: true
+    source-branches:
+      - main
+      - support
+      - customer-support-lane
+      - hotfix
+    prevent-increment:
+      when-current-commit-tagged: false
+
   customer-support-lane:
-    regex: ^customer-support[/-].+-(?<BranchName>[A-Za-z0-9._-]+)$
-    label: '{BranchName}'
+    regex: ^customer-support[/-](?<Customer>[A-Za-z0-9._-]+)[/-](?<Version>\d+\.\d+)-(?<Lane>[A-Za-z0-9._-]+)$
+    label: customer-{Customer}-{Lane}
     increment: Patch
+    mode: ContinuousDeployment
     is-release-branch: true
+    source-branches:
+      - customer-support
+      - support
+      - main
+      - hotfix
+    prevent-increment:
+      when-current-commit-tagged: false
+
   feature:
     regex: ^features?[/-](?<BranchName>.+)$
     label: '{BranchName}'
     increment: Inherit
+    mode: ContinuousDelivery
+    source-branches:
+      - alpha
+      - alpha-lane
+      - beta
+      - beta-lane
+      - edge
+      - edge-lane
+      - main
+      - main-lane
+      - support
+      - support-lane
+      - customer-support
+      - customer-support-lane
+
   hotfix:
-    regex: ^hotfix(es)?[/-].+$
-    label: beta
+    regex: ^hotfix(es)?[/-](?<BranchName>.+)$
+    label: hotfix
     increment: Patch
+    mode: ContinuousDeployment
+    source-branches:
+      - main
+      - main-lane
+      - support
+      - support-lane
+      - customer-support
+      - customer-support-lane
+
   pull-request:
-    regex: ^(pull|pull-request|pr)[/-].+$
+    regex: ^(pull|pull-request|pr)[/-](?<Number>\d+)(?:[/-].+)?$
     label: PullRequest{Number}
     increment: Inherit
+    mode: ContinuousDelivery
+    source-branches:
+      - alpha
+      - alpha-lane
+      - beta
+      - beta-lane
+      - edge
+      - edge-lane
+      - main
+      - main-lane
+      - support
+      - support-lane
+      - customer-support
+      - customer-support-lane
+      - feature
+      - hotfix
+
   unknown:
     regex: ^(?:.+[/-])?(?<BranchName>[A-Za-z0-9._-]+)$
     label: '{BranchName}'
     increment: Inherit
+    mode: ContinuousDelivery
+    source-branches:
+      - alpha
+      - alpha-lane
+      - beta
+      - beta-lane
+      - edge
+      - edge-lane
+      - main
+      - main-lane
+      - support
+      - support-lane
+      - customer-support
+      - customer-support-lane
+      - feature
+      - hotfix
+
+ignore:
+  sha: []

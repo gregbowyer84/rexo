@@ -1,6 +1,8 @@
 # Lifecycle Builtins
 
-Core versioning, validation, testing, analysis, and verification builtins.
+Core lifecycle builtins currently registered by runtime.
+
+Toolchain-specific test/analyze/verify behavior is now delivered by embedded policy command overlays (for example `embedded:dotnet`, `embedded:node`), not core builtins.
 
 ## builtin:resolve-version
 
@@ -53,88 +55,6 @@ Outputs:
 Exit behavior:
 
 - Always success, exit code `0`
-
-## builtin:test
-
-Purpose:
-
-- Run repository tests and capture summary counts.
-
-Calls:
-
-- `DotnetTestRunner.RunAsync(...)`
-
-Inputs:
-
-- `config.Tests` values:
-  - `enabled`, `projects`, `configuration`, `resultsOutput`, `coverageOutput`, `coverageThreshold`
-
-Outputs:
-
-- `total`, `passed`, `failed`, `skipped`
-
-Exit behavior:
-
-- Success: exit code `0`
-- Failures: exit code `4`
-
-## builtin:analyze
-
-Purpose:
-
-- Run formatting/analysis checks and optional custom analysis tools.
-
-Calls:
-
-- `DotnetAnalysisRunner.RunFormatCheckAsync(...)`
-- optional `DotnetAnalysisRunner.RunCustomToolAsync(...)` for each configured tool
-- optional `DotnetAnalysisRunner.WriteSarifReportAsync(...)`
-
-Inputs:
-
-- `config.Analysis` values:
-  - `failOnIssues`, `tools[]`, `configuration` (SARIF path)
-
-SARIF path behavior:
-
-- When `analysis.configuration` is set to a `.sarif`/`.sarif.json` path, that path is used.
-- When omitted, SARIF defaults to `<runtime.output.root>/analysis.sarif.json`
-  (fallback root: `artifacts`).
-
-Outputs:
-
-- Success path: `message = "Analysis passed."`
-- Failure path: `error` with issue summary
-
-Exit behavior:
-
-- Success: exit code `0`
-- Failure: exit code `1`
-
-## builtin:verify
-
-Purpose:
-
-- Quality gate primitive for `test + analyze`.
-
-Calls:
-
-- builtin dispatch to `builtin:test`
-- builtin dispatch to `builtin:analyze`
-
-Inputs:
-
-- Same as test/analyze via delegated calls
-
-Outputs:
-
-- Success path: `message = "Verification passed."`
-- Delegated outputs on failure
-
-Exit behavior:
-
-- Success: exit code `0`
-- Failures propagate from delegated builtin
 
 ## builtin:clean
 

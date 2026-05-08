@@ -45,8 +45,6 @@ src/Git/               Branch/SHA/remote detector
 src/Ci/                CI provider detector
 src/Tui/               Blazor/RazorConsole interactive TUI (`rx ui`)
 src/Ui/                Spectre.Console rich renderer
-src/Verification/      dotnet test runner
-src/Analysis/          dotnet format + build analysis
 src/Policies/          Local file policy source
 ```
 

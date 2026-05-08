@@ -6,6 +6,8 @@ on:
       - main
       - alpha
       - alpha-*
+      - beta
+      - beta-*
       - edge
       - edge-*
   workflow_dispatch:
@@ -119,12 +121,8 @@ jobs:
         with:
           tag_name: v${{ steps.gitversion.outputs.semVer }}
           target_commitish: ${{ github.sha }}
-          prerelease: ${{ steps.gitversion.outputs.isPreRelease == 'true' || steps.gitversion.outputs.isPreRelease == 'True' }}
+          prerelease: ${{ steps.gitversion.outputs.preReleaseTag != '' }}
           generate_release_notes: true
-          files: |
-            artifacts/packages/*.nupkg
-            rexo.schema.json
-            policy.schema.json
 
       - name: Publish to GitHub Packages
         env:

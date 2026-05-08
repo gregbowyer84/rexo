@@ -49,13 +49,13 @@ See `docs/todo.md` for the complete checklist. Working today:
 - CLI routing (built-in + config commands, multi-word resolution, global flags)
 - Config loading with JSON Schema validation
 - Template engine with filters (`slug`, `upper`, `lower`, `default(...)`)
-- All built-in step primitives (validate, resolve-version, test, analyze, verify, artifacts lifecycle, config-resolved, config-materialize, etc.)
+- Core built-in step primitives (validate, resolve-version, artifacts lifecycle, config-resolved, config-materialize, etc.)
+- Policy-overlay commands for toolchains (`test`, `analyze`, `verify` via embedded overlays)
 - Version providers: `fixed`, `env`, `gitversion`, `minver`, `nbgv`, `git`
 - Artifact providers: `docker`, `nuget`, `helm-oci`
 - Git + CI environment detection
 - Spectre.Console rich output renderer + Blazor/RazorConsole interactive TUI (`rx ui`)
-- `dotnet test` verification runner with TRX + Cobertura coverage thresholds
-- `dotnet format` + build analysis runner
+- Dotnet and node policy overlays for test/analyze/verify flows
 - `extends` config merge, policy-provided commands, parallel step execution, output capture
 - `config resolved` / `config sources` / `config materialize` sub-commands
 - Artifact manifest file output, secret masking, structured error taxonomy

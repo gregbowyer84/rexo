@@ -56,9 +56,6 @@ These mappings are intentionally approximate.
 | --- | --- |
 | `builtin:resolve-version` | `gitversion /output json` or equivalent provider command, then map fields into execution context |
 | `builtin:validate` | Logical validation gate; no direct external command in current implementation |
-| `builtin:test` | `dotnet test` with options from `config.tests` |
-| `builtin:analyze` | `dotnet format --verify-no-changes` plus any configured custom analysis commands |
-| `builtin:verify` | Run `builtin:test` then `builtin:analyze` |
 | `builtin:clean` | Remove `<runtime.output.root>/` recursively (default `artifacts/`) |
 
 ### Artifact lifecycle builtins
@@ -98,20 +95,18 @@ These mappings are intentionally approximate.
 
 ## Concrete Examples
 
-### builtin:test
+### policy command:test
 
-Approximate:
+Approximate (dotnet overlay):
 
 ```bash
-dotnet test -c Release
+dotnet test -c Release --logger trx --collect "XPlat Code Coverage"
 ```
 
-### builtin:analyze
-
-Approximate:
+Approximate (node overlay):
 
 ```bash
-dotnet format --verify-no-changes
+npm test --if-present
 ```
 
 ### builtin:build-artifacts for docker artifact

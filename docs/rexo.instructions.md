@@ -70,9 +70,9 @@ Each step uses exactly one of:
 | --- | --- |
 | `builtin:validate` | Validate the loaded config |
 | `builtin:resolve-version` | Run the version provider; populate `context.Version` |
-| `builtin:test` | Run `dotnet test`; enforce coverage threshold |
-| `builtin:analyze` | Run `dotnet format --verify-no-changes` |
-| `builtin:verify` | Run test + analyze |
+| `command:test` | Run overlay-provided test workflow |
+| `command:analyze` | Run overlay-provided analysis workflow |
+| `command:verify` | Run overlay-composed quality gate workflow |
 | `builtin:build-artifacts` | Build all configured artifacts |
 | `builtin:tag-artifacts` | Tag artifacts with version tags |
 | `builtin:push-artifacts` | Push artifacts; write `artifacts/manifest.json` |
