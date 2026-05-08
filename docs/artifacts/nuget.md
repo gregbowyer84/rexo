@@ -14,6 +14,11 @@
 | `target.source` | `string` | Feed URL/name for push. |
 | `target.sourceEnv` | `string` | Env var name containing feed URL/name (default env key `NUGET_TARGET_SOURCE`). |
 | `target.apiKeyEnv` | `string` | Env var name containing API key/token (default env key `NUGET_API_KEY`). |
+| `symbols.enabled` | `boolean` | When `true`, also pushes matching `.snupkg` symbol packages for this artifact. |
+| `symbols.source` | `string` | Symbol feed URL/name. Defaults to `target.source` when omitted. |
+| `symbols.sourceEnv` | `string` | Env var containing symbol feed URL/name (default env key `NUGET_SYMBOL_TARGET_SOURCE`). |
+| `symbols.apiKeyEnv` | `string` | Env var containing symbol API key/token (default env key `NUGET_SYMBOL_API_KEY`, fallback `NUGET_API_KEY`). |
+| `symbols.pattern` | `string` | Glob for symbol packages to push (for example `artifacts/packages/*.symbols.nupkg`). Default is `<output>/<artifact>.<version>.snupkg`. |
 
 ## Auth resolution
 
@@ -30,6 +35,21 @@ Source resolution order:
 2. `settings.target.source`
 3. Default `https://api.nuget.org/v3/index.json`
 
+Symbol source resolution order (when `symbols.enabled = true`):
+
+1. Env value from `settings.symbols.sourceEnv` (or `NUGET_SYMBOL_TARGET_SOURCE`)
+2. `settings.symbols.source`
+3. `settings.target.source` (or its env override)
+
+Symbol credential resolution order (when `symbols.enabled = true`):
+
+1. `settings.symbols.apiKeyEnv` (or `NUGET_SYMBOL_API_KEY`)
+2. `NUGET_API_KEY`
+3. `NUGET_AUTH_TOKEN`
+4. Same token already resolved for primary package push
+5. `GITHUB_TOKEN` for `nuget.pkg.github.com`
+6. `SYSTEM_ACCESSTOKEN` for non-GitHub CI fallback
+
 ## Example
 
 ```json
@@ -43,6 +63,27 @@ Source resolution order:
       "source": "https://api.nuget.org/v3/index.json",
       "sourceEnv": "NUGET_TARGET_SOURCE",
       "apiKeyEnv": "NUGET_API_KEY"
+    },
+    "symbols": {
+      "enabled": true,
+      "sourceEnv": "NUGET_SYMBOL_TARGET_SOURCE",
+      "apiKeyEnv": "NUGET_SYMBOL_API_KEY"
+    }
+  }
+}
+```
+
+If your symbol package names are not `.snupkg` (for example `*.symbols.nupkg`), set a custom pattern:
+
+```json
+{
+  "type": "nuget",
+  "name": "Rexo.Core",
+  "settings": {
+    "output": "artifacts/packages",
+    "symbols": {
+      "enabled": true,
+      "pattern": "artifacts/packages/*.symbols.nupkg"
     }
   }
 }

@@ -68,6 +68,11 @@ public sealed class NuGetArtifactProvider : IArtifactProvider
         CancellationToken cancellationToken)
     {
         var output = GetSetting(artifact, "output") ?? "artifacts/packages";
+        var packageVersion = context.Version?.NuGetVersion ?? context.Version?.SemVer;
+        var packagePattern = string.IsNullOrWhiteSpace(packageVersion)
+            ? $"{output}/{artifact.Name}.*.nupkg"
+            : $"{output}/{artifact.Name}.{packageVersion}.nupkg";
+        var symbolPattern = ResolveSymbolPattern(artifact, output, packageVersion);
         var fileEnv = RepositoryEnvironmentFiles.Load(context.RepositoryRoot);
         var source = ResolveSource(artifact, fileEnv);
         var auth = ResolveAuth(source, GetSetting(artifact.Settings, "target.apiKeyEnv"), fileEnv);
@@ -77,7 +82,7 @@ public sealed class NuGetArtifactProvider : IArtifactProvider
             return new ArtifactPushResult(artifact.Name, false, Array.Empty<string>());
         }
 
-        var args = $"nuget push {output}/*.nupkg --source {source} --skip-duplicate";
+        var args = $"nuget push \"{packagePattern}\" --source {source} --skip-duplicate";
         if (!string.IsNullOrEmpty(auth.Secret))
         {
             args += $" --api-key {auth.Secret}";
@@ -86,12 +91,136 @@ public sealed class NuGetArtifactProvider : IArtifactProvider
         Console.WriteLine($"  > dotnet {args}");
 
         var result = await _runDotnetAsync(args, context.RepositoryRoot, cancellationToken);
-        var published = result.ExitCode == 0
-            ? new[] { $"{source}/{artifact.Name}" }
-            : Array.Empty<string>();
 
-        return new ArtifactPushResult(artifact.Name, result.ExitCode == 0, published);
+        if (result.ExitCode != 0)
+        {
+            return new ArtifactPushResult(artifact.Name, false, Array.Empty<string>());
+        }
+
+        var published = new List<string> { $"{source}/{artifact.Name}" };
+
+        var pushSymbols = IsTrue(GetSetting(artifact.Settings, "symbols.enabled"));
+        if (pushSymbols && HasMatchingFiles(context.RepositoryRoot, symbolPattern))
+        {
+            var symbolSource = ResolveSymbolSource(artifact, source, fileEnv);
+            var symbolAuth = ResolveSymbolAuth(
+                symbolSource,
+                GetSetting(artifact.Settings, "symbols.apiKeyEnv"),
+                fileEnv,
+                auth.Secret);
+
+            if (!symbolAuth.HasCredentials)
+            {
+                Console.Error.WriteLine("NuGet symbol auth preflight failed: no API token resolved from env/CI identity.");
+                return new ArtifactPushResult(artifact.Name, false, Array.Empty<string>());
+            }
+
+            var symbolArgs = $"nuget push \"{symbolPattern}\" --source {symbolSource} --skip-duplicate";
+            if (!string.IsNullOrEmpty(symbolAuth.Secret))
+            {
+                symbolArgs += $" --api-key {symbolAuth.Secret}";
+            }
+
+            Console.WriteLine($"  > dotnet {symbolArgs}");
+
+            var symbolResult = await _runDotnetAsync(symbolArgs, context.RepositoryRoot, cancellationToken);
+            if (symbolResult.ExitCode != 0)
+            {
+                return new ArtifactPushResult(artifact.Name, false, Array.Empty<string>());
+            }
+
+            published.Add($"{symbolSource}/{artifact.Name} (symbols)");
+        }
+
+        return new ArtifactPushResult(artifact.Name, true, published);
     }
+
+    private static bool HasMatchingFiles(string repositoryRoot, string pattern)
+    {
+        var normalized = pattern.Replace('/', Path.DirectorySeparatorChar);
+        var directory = Path.GetDirectoryName(normalized);
+        var searchPattern = Path.GetFileName(normalized);
+        if (string.IsNullOrWhiteSpace(searchPattern))
+        {
+            return false;
+        }
+
+        var absoluteDirectory = string.IsNullOrWhiteSpace(directory)
+            ? repositoryRoot
+            : Path.Combine(repositoryRoot, directory);
+
+        return Directory.Exists(absoluteDirectory)
+            && Directory.EnumerateFiles(absoluteDirectory, searchPattern, SearchOption.TopDirectoryOnly).Any();
+    }
+
+    private static string ResolveSymbolSource(
+        ArtifactConfig artifact,
+        string primarySource,
+        IReadOnlyDictionary<string, string> fileEnv)
+    {
+        return FeedAuthResolver.ResolveTargetValue(
+                   defaultEnvName: "NUGET_SYMBOL_TARGET_SOURCE",
+                   configuredEnvName: GetSetting(artifact.Settings, "symbols.sourceEnv"),
+                   configuredValue: GetSetting(artifact.Settings, "symbols.source"),
+                   fileEnv: fileEnv)
+               ?? primarySource;
+    }
+
+    private static string ResolveSymbolPattern(ArtifactConfig artifact, string output, string? packageVersion)
+    {
+        var configuredPattern = GetSetting(artifact.Settings, "symbols.pattern");
+        if (!string.IsNullOrWhiteSpace(configuredPattern))
+        {
+            return configuredPattern;
+        }
+
+        return string.IsNullOrWhiteSpace(packageVersion)
+            ? $"{output}/{artifact.Name}.*.snupkg"
+            : $"{output}/{artifact.Name}.{packageVersion}.snupkg";
+    }
+
+    private static FeedAuthResolution ResolveSymbolAuth(
+        string source,
+        string? configuredApiKeyEnv,
+        IReadOnlyDictionary<string, string> fileEnv,
+        string? primarySecret)
+    {
+        var secret = FeedAuthResolver.ResolveSecret(
+            defaultEnvName: "NUGET_SYMBOL_API_KEY",
+            configuredEnvName: configuredApiKeyEnv,
+            fileEnv: fileEnv,
+            "NUGET_API_KEY",
+            "NUGET_AUTH_TOKEN");
+
+        if (string.IsNullOrWhiteSpace(secret))
+        {
+            secret = primarySecret;
+        }
+
+        if (string.IsNullOrWhiteSpace(secret))
+        {
+            if (source.Contains("nuget.pkg.github.com", StringComparison.OrdinalIgnoreCase))
+            {
+                secret = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+            }
+            else
+            {
+                secret = Environment.GetEnvironmentVariable("SYSTEM_ACCESSTOKEN");
+            }
+
+            if (!string.IsNullOrWhiteSpace(secret))
+            {
+                return new FeedAuthResolution(true, null, secret, source, null, "ci-token");
+            }
+
+            return new FeedAuthResolution(false, null, null, source, null, "none");
+        }
+
+        return new FeedAuthResolution(true, null, secret, source, null, "env");
+    }
+
+    private static bool IsTrue(string? value) =>
+        bool.TryParse(value, out var parsed) && parsed;
 
     private static async Task<(int ExitCode, string Output)> RunDotnetAsync(
         string arguments,

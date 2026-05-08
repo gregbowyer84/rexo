@@ -1697,6 +1697,34 @@
               "description": "Environment variable name containing API key/token. Defaults to NUGET_API_KEY (fallback alias: NUGET_AUTH_TOKEN)."
             }
           }
+        },
+        "symbols": {
+          "type": "object",
+          "description": "Optional symbol package (.snupkg) push settings.",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "When true, pushes matching .snupkg files for this artifact.",
+              "default": false
+            },
+            "source": {
+              "type": "string",
+              "description": "Symbol server/feed URL or name used for symbol package push. Defaults to target.source when omitted."
+            },
+            "sourceEnv": {
+              "type": "string",
+              "description": "Environment variable name containing symbol target source/feed. Defaults to NUGET_SYMBOL_TARGET_SOURCE."
+            },
+            "apiKeyEnv": {
+              "type": "string",
+              "description": "Environment variable name containing symbol API key/token. Defaults to NUGET_SYMBOL_API_KEY (fallbacks: NUGET_API_KEY, NUGET_AUTH_TOKEN)."
+            },
+            "pattern": {
+              "type": "string",
+              "description": "Glob pattern for symbol package files to push (for example artifacts/packages/*.symbols.nupkg). Defaults to <output>/<artifact>.<version>.snupkg."
+            }
+          }
         }
       }
     },
