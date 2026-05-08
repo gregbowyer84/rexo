@@ -70,7 +70,7 @@ public sealed class NuGetArtifactProvider : IArtifactProvider
         var output = GetSetting(artifact, "output") ?? "artifacts/packages";
         var packageVersion = context.Version?.NuGetVersion ?? context.Version?.SemVer;
         var packagePattern = string.IsNullOrWhiteSpace(packageVersion)
-            ? $"{output}/{artifact.Name}.*.nupkg"
+            ? $"{output}/{artifact.Name}.[0-9]*.nupkg"
             : $"{output}/{artifact.Name}.{packageVersion}.nupkg";
         var symbolPattern = ResolveSymbolPattern(artifact, output, packageVersion);
         var fileEnv = RepositoryEnvironmentFiles.Load(context.RepositoryRoot);
@@ -175,7 +175,7 @@ public sealed class NuGetArtifactProvider : IArtifactProvider
         }
 
         return string.IsNullOrWhiteSpace(packageVersion)
-            ? $"{output}/{artifact.Name}.*.snupkg"
+            ? $"{output}/{artifact.Name}.[0-9]*.snupkg"
             : $"{output}/{artifact.Name}.{packageVersion}.snupkg";
     }
 
