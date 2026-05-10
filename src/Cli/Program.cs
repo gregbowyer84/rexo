@@ -298,8 +298,17 @@ public static class Program
         bool quiet,
         CancellationToken cancellationToken)
     {
+        var startedAt = DateTimeOffset.UtcNow;
         var result = await ExecuteCommandAsync(executor, command, invocation, cancellationToken);
-        return await WriteResultAsync(result, invocation, verbose, quiet, cancellationToken);
+        var completedAt = DateTimeOffset.UtcNow;
+        var exitCode = await WriteResultAsync(result, invocation, verbose, quiet, cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(invocation.JsonFile))
+        {
+            await WriteRunManifestAsync(result, command, invocation.WorkingDirectory, startedAt, completedAt, invocation.JsonFile!, cancellationToken);
+        }
+
+        return exitCode;
     }
 
     private static async Task<int> RunExplainAsync(
@@ -327,8 +336,17 @@ public static class Program
             jsonFile,
             workingDir);
 
+        var startedAt = DateTimeOffset.UtcNow;
         var result = await ExecuteCommandAsync(executor, "explain", invocation, cancellationToken);
-        return await WriteResultAsync(result, invocation, verbose, quiet, cancellationToken);
+        var completedAt = DateTimeOffset.UtcNow;
+        var exitCode = await WriteResultAsync(result, invocation, verbose, quiet, cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(invocation.JsonFile))
+        {
+            await WriteRunManifestAsync(result, "explain", workingDir, startedAt, completedAt, invocation.JsonFile!, cancellationToken);
+        }
+
+        return exitCode;
     }
 
     private static async Task<int> RunPoliciesSubcommandAsync(
@@ -359,8 +377,18 @@ public static class Program
         }
 
         var invocation = new CommandInvocation(parsedArgs, new Dictionary<string, string?>(), json, jsonFile, workingDir);
+
+        var startedAt = DateTimeOffset.UtcNow;
         var result = await ExecuteCommandAsync(executor, subCommand, invocation, cancellationToken);
-        return await WriteResultAsync(result, invocation, verbose, quiet, cancellationToken);
+        var completedAt = DateTimeOffset.UtcNow;
+        var exitCode = await WriteResultAsync(result, invocation, verbose, quiet, cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(invocation.JsonFile))
+        {
+            await WriteRunManifestAsync(result, subCommand, workingDir, startedAt, completedAt, invocation.JsonFile!, cancellationToken);
+        }
+
+        return exitCode;
     }
 
     private static async Task<int> RunConfigSubcommandAsync(
@@ -382,8 +410,18 @@ public static class Program
 
         var subCommand = $"config {args[1].ToLowerInvariant()}";
         var invocation = EmptyInvocation(workingDir, json, jsonFile);
+
+        var startedAt = DateTimeOffset.UtcNow;
         var result = await ExecuteCommandAsync(executor, subCommand, invocation, cancellationToken);
-        return await WriteResultAsync(result, invocation, verbose, quiet, cancellationToken);
+        var completedAt = DateTimeOffset.UtcNow;
+        var exitCode = await WriteResultAsync(result, invocation, verbose, quiet, cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(invocation.JsonFile))
+        {
+            await WriteRunManifestAsync(result, subCommand, workingDir, startedAt, completedAt, invocation.JsonFile!, cancellationToken);
+        }
+
+        return exitCode;
     }
 
     private static async Task<int> RunUiAsync(
@@ -492,8 +530,17 @@ public static class Program
 
         var invocation = new CommandInvocation(parsedArgs, parsedOptions, json, jsonFile, workingDir);
 
+        var startedAt = DateTimeOffset.UtcNow;
         var result = await ExecuteCommandAsync(executor, "init", invocation, cancellationToken);
-        return await WriteResultAsync(result, invocation, verbose, quiet, cancellationToken);
+        var completedAt = DateTimeOffset.UtcNow;
+        var exitCode = await WriteResultAsync(result, invocation, verbose, quiet, cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(invocation.JsonFile))
+        {
+            await WriteRunManifestAsync(result, "init", workingDir, startedAt, completedAt, invocation.JsonFile!, cancellationToken);
+        }
+
+        return exitCode;
     }
 
     private static async Task<int> RunDirectAsync(
@@ -537,8 +584,18 @@ public static class Program
             }
 
             var invocation = new CommandInvocation(parsedArgs, parsedOptions, json, jsonFile, workingDir);
+
+            var startedAt = DateTimeOffset.UtcNow;
             var result = await ExecuteCommandAsync(executor, candidateName, invocation, cancellationToken);
-            return await WriteResultAsync(result, invocation, verbose, quiet, cancellationToken);
+            var completedAt = DateTimeOffset.UtcNow;
+            var exitCode = await WriteResultAsync(result, invocation, verbose, quiet, cancellationToken);
+
+            if (!string.IsNullOrWhiteSpace(invocation.JsonFile))
+            {
+                await WriteRunManifestAsync(result, candidateName, workingDir, startedAt, completedAt, invocation.JsonFile!, cancellationToken);
+            }
+
+            return exitCode;
         }
 
         ConsoleRenderer.RenderError($"Command '{command}' not found. Run '{GetCliCommandName()} list' to see available commands.");

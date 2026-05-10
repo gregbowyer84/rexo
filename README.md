@@ -69,6 +69,7 @@ These two `rx init` concepts are distinct:
 - [Commands & Steps](docs/configuration/commands.md) — Commands, options, merge semantics
 - [Versioning](docs/configuration/versioning.md) — Version providers, auto-detection
 - [Runtime Settings](docs/configuration/runtime.md) — Output, push policy, tests, analysis
+- [Output Contract](docs/configuration/output-contract.md) — `--json`, `--json-file`, sidecar manifest fields
 - [Template Variables](docs/configuration/templates.md) — Variables, filters, expressions
 
 **Lifecycle & Execution:**

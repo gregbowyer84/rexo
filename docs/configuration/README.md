@@ -6,6 +6,9 @@ see [Embedded Policies Reference](../../embedded/README.md).
 For runtime builtin contracts (inputs, calls, outputs, exit behavior),
 see [Builtins Reference](../../builtins/README.md).
 
+For machine-readable CLI output and sidecar run-manifest fields,
+see [Output Contract](./output-contract.md).
+
 Default repository configuration file: **`rexo.json`**
 
 Supported config locations (first match wins):

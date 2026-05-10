@@ -41,6 +41,38 @@ public sealed class StepExecutorWhenConditionTests
         return registry;
     }
 
+    private sealed class StubCommandExecutor : Rexo.Core.Abstractions.ICommandExecutor
+    {
+        public Task<CommandResult> ExecuteAsync(string commandName, CommandInvocation invocation, CancellationToken cancellationToken)
+        {
+            if (string.Equals(commandName, "child", StringComparison.OrdinalIgnoreCase))
+            {
+                var version = new VersionResult(
+                    SemVer: "1.2.3",
+                    Major: 1,
+                    Minor: 2,
+                    Patch: 3,
+                    PreRelease: null,
+                    CommitSha: "abc",
+                    ShortSha: "abc",
+                    IsPreRelease: false,
+                    IsStable: true);
+
+                return Task.FromResult(new CommandResult(
+                    commandName,
+                    true,
+                    0,
+                    "ok",
+                    new Dictionary<string, object?>())
+                {
+                    Version = version,
+                });
+            }
+
+            return Task.FromResult(CommandResult.Fail(commandName, 8, "not found"));
+        }
+    }
+
     // ──────────────────────────────────────────────────────────────────────────
     // when = "true" / truthy values → step executes
     // ──────────────────────────────────────────────────────────────────────────
@@ -283,6 +315,29 @@ public sealed class StepExecutorWhenConditionTests
         Assert.False(result.Success);
         Assert.Equal(8, result.ExitCode);
         Assert.Contains("not found", result.Outputs["message"]?.ToString() ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task CommandStepPropagatesNestedVersionToOutputs()
+    {
+        var stepExecutor = new StepExecutor(
+            new StubCommandExecutor(),
+            new TemplateRenderer(),
+            new BuiltinRegistry());
+
+        var step = new StepDefinition(
+            Id: "call-child",
+            Run: null,
+            Uses: null,
+            Command: "child",
+            When: null);
+
+        var result = await stepExecutor.ExecuteAsync(step, EmptyContext(), CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal(0, result.ExitCode);
+        var version = Assert.IsType<VersionResult>(result.Outputs["__version"]);
+        Assert.Equal("1.2.3", version.SemVer);
     }
 
     // ──────────────────────────────────────────────────────────────────────────

@@ -137,6 +137,7 @@ Policy files are discovered in root, `.rexo/`, and legacy `.repo/` locations.
 - Use `rx` directly to run configured commands.
 - Use `rx run <command>` if you want explicit run semantics.
 - Use `--json` or `--json-file <path>` for machine-readable output.
+- Full JSON and manifest field semantics: [Output Contract](../../docs/configuration/output-contract.md).
 
 ## Documentation
 

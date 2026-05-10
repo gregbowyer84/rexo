@@ -3,6 +3,7 @@ namespace Rexo.Tui;
 using Microsoft.AspNetCore.Components.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using RazorConsole.Core;
 using Rexo.Configuration.Models;
 using Rexo.Execution;
@@ -17,9 +18,8 @@ public static class RexoTuiHost
     {
         TuiRuntimeContext.Initialize(executor, config, workingDirectory);
 
-        await AppHost.RunAsync<Routes>(
-            parameters: null,
-            configure: builder =>
+        var hostBuilder = Host.CreateDefaultBuilder([])
+            .UseRazorConsole<Routes>(configure: builder =>
             {
                 builder.ConfigureServices(services =>
                 {
@@ -32,7 +32,9 @@ public static class RexoTuiHost
                         services.AddSingleton(config);
                     }
                 });
-            },
-            cancellationToken: cancellationToken);
+            });
+
+        using var host = hostBuilder.Build();
+        await host.RunAsync(cancellationToken);
     }
 }

@@ -258,12 +258,28 @@ public sealed class StepExecutor : IStepExecutor
 
         sw.Stop();
 
+        var outputs = new Dictionary<string, object?> { ["message"] = result.Message };
+        if (result.Version is not null)
+        {
+            outputs["__version"] = result.Version;
+        }
+
+        if (result.Artifacts.Count > 0)
+        {
+            outputs["__artifacts"] = result.Artifacts.ToList();
+        }
+
+        if (result.PushDecisions.Count > 0)
+        {
+            outputs["__pushDecisions"] = result.PushDecisions.ToList();
+        }
+
         return new StepResult(
             stepId,
             result.Success,
             result.ExitCode,
             sw.Elapsed,
-            new Dictionary<string, object?> { ["message"] = result.Message });
+            outputs);
     }
 
     private static bool IsCommandMissingResult(CommandResult result) =>
