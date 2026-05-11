@@ -16,6 +16,13 @@ public sealed class HelmArtifactProvider : IArtifactProvider
         registry.Register("helm", new HelmArtifactProvider());
 
     private const string DefaultContainerImage = "alpine/helm:3.17.3";
+    private readonly Func<ArtifactConfig, IReadOnlyList<string>, string, string, CancellationToken, Task<(int ExitCode, string Output)>> _runHelmAsync;
+
+    public HelmArtifactProvider(
+        Func<ArtifactConfig, IReadOnlyList<string>, string, string, CancellationToken, Task<(int ExitCode, string Output)>>? runHelmAsync = null)
+    {
+        _runHelmAsync = runHelmAsync ?? RunHelmAsync;
+    }
 
     public string Type => "helm";
 
@@ -41,7 +48,20 @@ public sealed class HelmArtifactProvider : IArtifactProvider
         args.AddRange(ToolRunner.ParseExtraArgs(GetSetting(artifact, "extra-build-args")));
 
         Console.WriteLine($"  > helm {ToolRunner.FormatArgs(args)}");
-        var result = await ToolRunner.RunAsync("helm", args, workDir, artifact, dockerImage, cancellationToken);
+        var result = await _runHelmAsync(artifact, args, workDir, dockerImage, cancellationToken);
+        if (result.ExitCode != 0 && ShouldRetryWithDependencyUpdate(result.Output))
+        {
+            var dependencyArgs = new List<string> { "dependency", "update", chartDir };
+            Console.WriteLine($"  > helm {ToolRunner.FormatArgs(dependencyArgs)}");
+            var dependencyResult = await _runHelmAsync(artifact, dependencyArgs, workDir, dockerImage, cancellationToken);
+            if (dependencyResult.ExitCode != 0)
+            {
+                return new ArtifactBuildResult(artifact.Name, false, null);
+            }
+
+            Console.WriteLine($"  > helm {ToolRunner.FormatArgs(args)}");
+            result = await _runHelmAsync(artifact, args, workDir, dockerImage, cancellationToken);
+        }
 
         return new ArtifactBuildResult(artifact.Name, result.ExitCode == 0, result.ExitCode == 0 ? outputDir : null);
     }
@@ -122,6 +142,17 @@ public sealed class HelmArtifactProvider : IArtifactProvider
 
     private static string? GetSetting(ArtifactConfig artifact, string key) =>
         ToolRunner.GetSetting(artifact, key);
+
+    private static bool ShouldRetryWithDependencyUpdate(string output) =>
+        output.Contains("found in Chart.yaml, but missing in charts/ directory", StringComparison.OrdinalIgnoreCase);
+
+    private static Task<(int ExitCode, string Output)> RunHelmAsync(
+        ArtifactConfig artifact,
+        IReadOnlyList<string> args,
+        string workingDirectory,
+        string dockerImage,
+        CancellationToken cancellationToken) =>
+        ToolRunner.RunAsync("helm", args, workingDirectory, artifact, dockerImage, cancellationToken);
 
     /// <summary>
     /// Resolves Chart Museum repository credentials from target.usernameEnv /

@@ -52,6 +52,47 @@ public sealed class HelmOciArtifactProviderTests
     }
 
     [Fact]
+    public async Task BuildAsyncRunsDependencyBuildWhenEnabled()
+    {
+        var invocations = new List<HelmInvocation>();
+        var provider = new HelmOciArtifactProvider(
+            runHelmAsync: (artifact, args, workingDirectory, envOverrides, standardInput, cancellationToken) =>
+            {
+                invocations.Add(new HelmInvocation(args.ToArray(), envOverrides, standardInput));
+                if (invocations.Count == 1)
+                {
+                    return Task.FromResult((5, "Error: found in Chart.yaml, but missing in charts/ directory: ingress-nginx"));
+                }
+
+                return Task.FromResult((0, string.Empty));
+            });
+
+        var artifact = new ArtifactConfig(
+            "helm-oci",
+            "orders",
+            JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
+                """
+                {
+                  "chartPath": "deploy/charts/orders",
+                  "output": "artifacts/charts"
+                }
+                """)!);
+
+        var context = ExecutionContext.Empty(Path.GetTempPath()) with
+        {
+            Version = new VersionResult("1.2.3", 1, 2, 3, null, "abcdef123456", "abcdef", false, true),
+        };
+
+        var result = await provider.BuildAsync(artifact, context, CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal(3, invocations.Count);
+        Assert.Equal("package", invocations[0].Arguments[0]);
+        Assert.Equal(["dependency", "update", "deploy/charts/orders"], invocations[1].Arguments);
+        Assert.Equal("package", invocations[2].Arguments[0]);
+    }
+
+    [Fact]
     public async Task PushAsyncComposesOciDestinationFromRegistryAndRepository()
     {
         var invocations = new List<HelmInvocation>();

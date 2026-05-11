@@ -42,6 +42,14 @@ Legacy compatibility fallback: `HELM_REPO_URL` can still override an HTTP endpoi
 
 Credentials are passed on the command line as `--username` and `--password` for `helm cm-push`.
 
+## Dependency handling
+
+Rexo packages charts directly by default.
+
+- If `helm package` fails because dependencies declared in `Chart.yaml` are missing from `charts/`, Rexo runs `helm dependency update <chart-directory>` and retries packaging once.
+- This keeps the fast path unchanged for charts that already vendor dependencies, while still handling charts that expect Helm to materialize them during packaging.
+- `helm dependency update` is used for the retry because it can resolve repository-backed dependencies without requiring prior `helm repo add ...` state.
+
 ## Example
 
 ```json

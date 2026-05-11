@@ -59,6 +59,26 @@ public sealed class HelmOciArtifactProvider : IArtifactProvider
 
         Console.WriteLine($"  > helm {FormatArguments(args)}");
         var result = await _runHelmAsync(artifact, args, context.RepositoryRoot, null, null, cancellationToken);
+        if (result.ExitCode != 0 && ShouldRetryWithDependencyUpdate(result.Output))
+        {
+            var dependencyArgs = new List<string>
+            {
+                "dependency",
+                "update",
+                chartPath,
+            };
+
+            Console.WriteLine($"  > helm {FormatArguments(dependencyArgs)}");
+            var dependencyResult = await _runHelmAsync(artifact, dependencyArgs, context.RepositoryRoot, null, null, cancellationToken);
+            if (dependencyResult.ExitCode != 0)
+            {
+                return new ArtifactBuildResult(artifact.Name, false, null);
+            }
+
+            Console.WriteLine($"  > helm {FormatArguments(args)}");
+            result = await _runHelmAsync(artifact, args, context.RepositoryRoot, null, null, cancellationToken);
+        }
+
         if (result.ExitCode != 0)
         {
             return new ArtifactBuildResult(artifact.Name, false, null);
@@ -275,6 +295,9 @@ public sealed class HelmOciArtifactProvider : IArtifactProvider
             JsonValueKind.Number => value.GetRawText(),
             _ => value.ToString(),
         };
+
+    private static bool ShouldRetryWithDependencyUpdate(string output) =>
+        output.Contains("found in Chart.yaml, but missing in charts/ directory", StringComparison.OrdinalIgnoreCase);
 
     private static string FormatArguments(IReadOnlyList<string> args) =>
         string.Join(" ", args.Select(QuoteIfNeeded));

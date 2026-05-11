@@ -47,6 +47,14 @@ Registry endpoint resolution:
 3. `settings.target.loginRegistry`
 4. Resolved destination registry
 
+## Dependency handling
+
+Rexo packages charts directly by default.
+
+- If `helm package` fails because dependencies declared in `Chart.yaml` are missing from `charts/`, Rexo runs `helm dependency update <chartPath>` and retries packaging once.
+- This keeps the fast path unchanged for charts that already vendor dependencies, while still handling charts that expect Helm to materialize them during packaging.
+- `helm dependency update` is used for the retry because it can resolve repository-backed dependencies without requiring prior `helm repo add ...` state.
+
 ## Example
 
 ```json
