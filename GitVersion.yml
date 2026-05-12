@@ -19,7 +19,7 @@ branches:
     regex: ^main$
     label: ''
     increment: Patch
-    mode: ContinuousDelivery
+    mode: ContinuousDeployment
     is-main-branch: true
     source-branches:
       - alpha
@@ -35,7 +35,7 @@ branches:
 
   main-lane:
     regex: ^main-(?<Lane>[A-Za-z0-9._-]+)$
-    label: main-{Lane}
+    label: -{Lane}
     increment: Patch
     mode: ContinuousDeployment
     source-branches:
@@ -52,7 +52,7 @@ branches:
   alpha:
     regex: ^alpha$
     label: alpha
-    increment: Patch
+    increment: Minor
     mode: ContinuousDelivery
     source-branches:
       - main
@@ -64,7 +64,7 @@ branches:
   alpha-lane:
     regex: ^alpha-(?<Lane>[A-Za-z0-9._-]+)$
     label: alpha-{Lane}
-    increment: Patch
+    increment: Minor
     mode: ContinuousDelivery
     source-branches:
       - alpha
@@ -77,7 +77,7 @@ branches:
   beta:
     regex: ^beta$
     label: beta
-    increment: Patch
+    increment: Minor
     mode: ContinuousDelivery
     source-branches:
       - alpha
@@ -91,7 +91,7 @@ branches:
   beta-lane:
     regex: ^beta-(?<Lane>[A-Za-z0-9._-]+)$
     label: beta-{Lane}
-    increment: Patch
+    increment: Minor
     mode: ContinuousDelivery
     source-branches:
       - beta
@@ -105,7 +105,7 @@ branches:
   edge:
     regex: ^edge$
     label: edge
-    increment: Patch
+    increment: Minor
     mode: ContinuousDelivery
     source-branches:
       - alpha
@@ -120,7 +120,7 @@ branches:
   edge-lane:
     regex: ^edge-(?<Lane>[A-Za-z0-9._-]+)$
     label: edge-{Lane}
-    increment: Patch
+    increment: Minor
     mode: ContinuousDelivery
     source-branches:
       - edge
