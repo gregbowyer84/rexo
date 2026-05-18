@@ -117,7 +117,7 @@ jobs:
           echo "Updated schema branch $SCHEMA_BRANCH to $GITHUB_SHA"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ steps.gitversion.outputs.semVer }}
           target_commitish: ${{ github.sha }}
