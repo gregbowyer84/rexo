@@ -25,7 +25,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -58,7 +58,7 @@ jobs:
 
       - name: Publish test results to GitHub Checks
         if: always()
-        uses: dorny/test-reporter@v1
+        uses: dorny/test-reporter@v3
         with:
           name: .NET Test Results (Release)
           path: TestResults/**/*.trx
@@ -117,7 +117,7 @@ jobs:
           echo "Updated schema branch $SCHEMA_BRANCH to $GITHUB_SHA"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ steps.gitversion.outputs.semVer }}
           target_commitish: ${{ github.sha }}
